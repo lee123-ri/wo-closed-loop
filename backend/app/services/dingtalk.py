@@ -26,7 +26,9 @@ _API = "https://api.dingtalk.com"
 
 def _redis():
     try:
-        return redis.from_url(settings.redis_url)
+        r = redis.from_url(settings.redis_url, socket_connect_timeout=1)
+        r.ping()
+        return r
     except Exception:
         return None
 
