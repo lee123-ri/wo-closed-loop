@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>工单闭环机制 — 多方案对比面板</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --card: #fff;
+    --text: #1a1a2e;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --blue: #2563eb;
+    --blue-bg: #eff6ff;
+    --green: #059669;
+    --green-bg: #ecfdf5;
+    --amber: #d97706;
+    --amber-bg: #fffbeb;
+    --red: #dc2626;
+    --red-bg: #fef2f2;
+    --purple: #7c3aed;
+    --purple-bg: #f5f3ff;
+    --shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+    --shadow-lg: 0 4px 12px rgba(0,0,0,.08);
+    --radius: 10px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 32px 24px;
+  }
+  .container { max-width: 1200px; margin: 0 auto; }
+
+  /* Header */
+  .header {
+    background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
+    color: #fff;
+    border-radius: var(--radius);
+    padding: 36px 40px;
+    margin-bottom: 28px;
+    box-shadow: var(--shadow-lg);
+  }
+  .header h1 { font-size: 28px; font-weight: 700; margin-bottom: 6px; }
+  .header .meta { opacity: .85; font-size: 14px; }
+  .header .meta span { margin-right: 20px; }
+
+  /* Section */
+  .section { margin-bottom: 28px; }
+  .section-title {
+    font-size: 20px; font-weight: 700; margin-bottom: 16px;
+    padding-bottom: 10px; border-bottom: 2px solid var(--blue);
+  }
+
+  /* Cards */
+  .card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 28px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow);
+  }
+  .card h3 { font-size: 17px; margin-bottom: 14px; }
+
+  /* Status grid */
+  .status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .status-item {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    border-left: 4px solid var(--blue);
+    box-shadow: var(--shadow);
+  }
+  .status-item.done { border-left-color: var(--green); }
+  .status-item.warn { border-left-color: var(--amber); }
+  .status-item.bad  { border-left-color: var(--red); }
+  .status-item .label { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  .status-item .value { font-size: 15px; font-weight: 600; }
+
+  /* Quote */
+  .quote {
+    background: var(--blue-bg);
+    border-left: 4px solid var(--blue);
+    padding: 16px 20px;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    margin: 16px 0;
+    font-style: italic;
+    color: #1e40af;
+  }
+
+  /* Requirement pills */
+  .req-row {
+    display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0;
+  }
+  .req-pill {
+    background: var(--green-bg);
+    color: var(--green);
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  /* Comparison table */
+  .compare-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 14px;
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .compare-table th, .compare-table td {
+    padding: 14px 16px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+  .compare-table th {
+    background: #1e3a5f;
+    color: #fff;
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .compare-table th:first-child { text-align: left; }
+  .compare-table td:first-child {
+    text-align: left; font-weight: 600; background: #fafbfc;
+  }
+  .compare-table .col-a { background: #eff6ff; }
+  .compare-table .col-d { background: #f5f3ff; }
+  .compare-table .star { color: #f59e0b; letter-spacing: 1px; }
+  .compare-table tr:last-child td { border-bottom: none; }
+  .compare-table .best { background: #dbeafe; font-weight: 700; }
+
+  /* Scheme cards row */
+  .scheme-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  @media (max-width: 900px) { .scheme-row { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 500px) { .scheme-row { grid-template-columns: 1fr; } }
+
+  .scheme-card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 24px 20px;
+    box-shadow: var(--shadow);
+    border-top: 4px solid var(--border);
+    transition: transform .15s;
+  }
+  .scheme-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+  .scheme-card.recommend { border-top-color: var(--green); }
+  .scheme-card.a { border-top-color: var(--blue); }
+  .scheme-card.b { border-top-color: #0891b2; }
+  .scheme-card.c { border-top-color: var(--muted); }
+  .scheme-card.d { border-top-color: var(--purple); }
+  .scheme-card .tag {
+    display: inline-block; font-size: 11px; padding: 2px 10px;
+    border-radius: 10px; margin-bottom: 10px; font-weight: 600;
+  }
+  .scheme-card .tag.rec { background: #ecfdf5; color: #059669; }
+  .scheme-card .scheme-name { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .scheme-card .scheme-sub  { font-size: 13px; color: var(--muted); margin-bottom: 14px; }
+  .scheme-card .metric { margin-bottom: 8px; }
+  .scheme-card .metric .m-label { font-size: 12px; color: var(--muted); }
+  .scheme-card .metric .m-value { font-size: 14px; font-weight: 600; }
+  .scheme-card .score {
+    font-size: 32px; font-weight: 800; color: var(--green); text-align: center; margin-top: 8px;
+  }
+  .scheme-card.d .score { color: var(--purple); }
+  .scheme-card.c .score { color: var(--muted); }
+
+  /* Lifecycle flow */
+  .flow-row {
+    display: flex; align-items: center; gap: 0; flex-wrap: wrap;
+    background: #f8fafc; border-radius: var(--radius); padding: 20px;
+    margin: 16px 0; justify-content: center;
+  }
+  .flow-step {
+    background: var(--card); border-radius: 8px; padding: 12px 16px;
+    text-align: center; box-shadow: var(--shadow); min-width: 100px;
+  }
+  .flow-step .step-title { font-weight: 700; font-size: 14px; }
+  .flow-step .step-desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .flow-arrow { font-size: 20px; color: var(--blue); margin: 0 8px; font-weight: 700; }
+
+  /* Escalation */
+  .esc-row { display: flex; flex-direction: column; gap: 10px; margin: 16px 0; }
+  .esc-lvl {
+    display: flex; align-items: center; gap: 14px; padding: 12px 18px;
+    border-radius: 8px; font-size: 14px;
+  }
+  .esc-lvl.l1 { background: #fffbeb; }
+  .esc-lvl.l2 { background: #fff7ed; }
+  .esc-lvl.l3 { background: #fef2f2; }
+  .esc-badge {
+    padding: 4px 12px; border-radius: 12px; font-weight: 700; font-size: 12px;
+    white-space: nowrap;
+  }
+  .esc-badge.l1 { background: #fef3c7; color: #92400e; }
+  .esc-badge.l2 { background: #fed7aa; color: #9a3412; }
+  .esc-badge.l3 { background: #fecaca; color: #991b1b; }
+
+  /* Pro-con */
+  .procon-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .procon { border-radius: 8px; padding: 18px; }
+  .procon.pro { background: #ecfdf5; }
+  .procon.con { background: #fef2f2; }
+  .procon h4 { font-size: 14px; margin-bottom: 10px; }
+  .procon li { font-size: 13px; margin-bottom: 6px; list-style: none; }
+
+  /* Score table */
+  .score-table {
+    width: 100%; border-collapse: separate; border-spacing: 0;
+    border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow);
+  }
+  .score-table th, .score-table td {
+    padding: 14px 18px; text-align: center; border-bottom: 1px solid var(--border);
+  }
+  .score-table th { background: #1e3a5f; color: #fff; font-size: 13px; }
+  .score-table th:first-child { text-align: left; }
+  .score-table td:first-child { text-align: left; font-weight: 600; }
+  .score-table .hi { color: var(--green); font-weight: 700; }
+  .score-table .mid { color: var(--amber); }
+  .score-table .lo { color: var(--red); }
+  .score-table .total-row { background: #f0f9ff; font-weight: 700; }
+  .score-table .total-row td { font-size: 15px; }
+
+  /* Roadmap */
+  .roadmap { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 700px) { .roadmap { grid-template-columns: 1fr; } }
+  .road-step {
+    background: var(--card); border-radius: var(--radius); padding: 24px;
+    box-shadow: var(--shadow); text-align: center; position: relative;
+  }
+  .road-step .step-num {
+    width: 36px; height: 36px; border-radius: 50%; background: var(--blue);
+    color: #fff; font-weight: 800; font-size: 16px; line-height: 36px;
+    margin: 0 auto 12px;
+  }
+  .road-step .step-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .road-step .step-name { font-size: 16px; font-weight: 700; margin-bottom: 12px; }
+  .road-step .step-items { font-size: 13px; color: var(--muted); line-height: 1.8; }
+  .road-connector {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; color: var(--blue);
+  }
+
+  /* Action table */
+  .action-table {
+    width: 100%; border-collapse: separate; border-spacing: 0;
+    border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow);
+  }
+  .action-table th, .action-table td {
+    padding: 12px 18px; text-align: left; border-bottom: 1px solid var(--border);
+  }
+  .action-table th { background: #1e3a5f; color: #fff; font-size: 13px; }
+  .action-table tr:last-child td { border-bottom: none; }
+  .action-table .num { width: 40px; text-align: center; color: var(--muted); font-weight: 600; }
+
+  /* Architecture diagram */
+  .arch-box {
+    background: #f8fafc; border: 2px dashed var(--border); border-radius: var(--radius);
+    padding: 24px; text-align: center; margin: 16px 0;
+  }
+  .arch-row {
+    display: flex; justify-content: center; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  .arch-node {
+    background: var(--card); border: 2px solid var(--blue); border-radius: 8px;
+    padding: 10px 18px; font-weight: 600; font-size: 13px;
+  }
+  .arch-node.accent { border-color: var(--purple); }
+  .arch-node.green { border-color: var(--green); }
+  .arch-arrow { font-size: 18px; color: var(--muted); }
+  .arch-v-arrow { font-size: 18px; color: var(--muted); display: block; margin: 8px 0; }
+
+  /* Mobile */
+  @media (max-width: 768px) {
+    body { padding: 16px 12px; }
+    .header { padding: 24px 20px; }
+    .header h1 { font-size: 22px; }
+    .scheme-row { grid-template-columns: 1fr 1fr; }
+    .procon-row { grid-template-columns: 1fr; }
+    .roadmap { grid-template-columns: 1fr; }
+    .road-connector { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- ====== HEADER ====== -->
+<div class="header">
+  <h1>工单闭环机制 — 多方案对比面板</h1>
+  <div class="meta">
+    <span>📋 编制：李沛东</span>
+    <span>📅 2026-08-05</span>
+    <span>👤 汇报对象：贾兴威</span>
+  </div>
+</div>
+
+<!-- ====== 一、背景 ====== -->
+<div class="section">
+  <div class="section-title">一、背景与问题定义</div>
+
+  <div class="status-grid">
+    <div class="status-item done">
+      <div class="label">硬工单（EAM 覆盖）</div>
+      <div class="value">设备操作、采购验收、缺陷录入 → 已有系统支撑</div>
+    </div>
+    <div class="status-item bad">
+      <div class="label">软工单（EAM 未覆盖）</div>
+      <div class="value">客户沟通、关系维护、纠偏措施、非标任务 → 无系统承载</div>
+    </div>
+    <div class="status-item warn">
+      <div class="label">全链路状态</div>
+      <div class="value">新入场Agent ✅ → 年度计划 🔧 → 资产监视 🔧 → 工单闭环 ❌</div>
+    </div>
+  </div>
+
+  <div class="quote">
+    "事事有交代、有回音，可以监控、可以闭环" —— 贾兴威，08-04 听记
+  </div>
+
+  <div class="req-row">
+    <span class="req-pill">✅ 发到对应负责人</span>
+    <span class="req-pill">✅ 监控执行状态</span>
+    <span class="req-pill">✅ 闭环记录（审计追溯）</span>
+    <span class="req-pill">✅ 升级（提醒→警告→上报）</span>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h3>📌 前置基础：贾总已建原型</h3>
+    <p style="font-size:14px; color:var(--muted); margin-bottom:12px;">
+      贾总昨晚（08-04 20:57）分享的 <strong>《试运营判定会审批流自动化》</strong> 已验证可行：
+    </p>
+    <div class="flow-row" style="justify-content:flex-start;">
+      <div class="flow-step"><div class="step-title">审批模板</div><div class="step-desc">管理后台建</div></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><div class="step-title">API 发起</div><div class="step-desc">dws OA 调用</div></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><div class="step-title">状态监听</div><div class="step-desc">回调 webhook</div></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><div class="step-title">自动迁移</div><div class="step-desc">状态机驱动</div></div>
+    </div>
+    <p style="font-size:13px; color:var(--muted); margin-top:8px;">
+      审批流：刘冰(技术判定) → 贾兴威(最终批准) &nbsp;|&nbsp; 模板字段：项目名、产品系列、区域、AI听记、判定结果
+    </p>
+  </div>
+</div>
+
+<!-- ====== 二、方案总览 ====== -->
+<div class="section">
+  <div class="section-title">二、四方案总览对比</div>
+
+  <div class="scheme-row">
+    <!-- A -->
+    <div class="scheme-card a recommend">
+      <span class="tag rec">🏆 推荐</span>
+      <div class="scheme-name">方案A · 审批流</div>
+      <div class="scheme-sub">OA 审批单作为工单载体</div>
+      <div class="metric"><span class="m-label">开发量</span> <span class="m-value">1-2 天</span></div>
+      <div class="metric"><span class="m-label">正式度</span> <span class="m-value">⭐⭐⭐⭐⭐</span></div>
+      <div class="metric"><span class="m-label">复用贾总原型</span> <span class="m-value">✅ 直接复用</span></div>
+      <div class="score">14/15</div>
+    </div>
+    <!-- B -->
+    <div class="scheme-card b">
+      <div class="scheme-name">方案B · AI表格</div>
+      <div class="scheme-sub">AI表格看板 + 群机器人</div>
+      <div class="metric"><span class="m-label">开发量</span> <span class="m-value">0.5 天</span></div>
+      <div class="metric"><span class="m-label">正式度</span> <span class="m-value">⭐⭐⭐</span></div>
+      <div class="metric"><span class="m-label">复用贾总原型</span> <span class="m-value">❌</span></div>
+      <div class="score" style="color:#0891b2;">12/15</div>
+    </div>
+    <!-- C -->
+    <div class="scheme-card c">
+      <div class="scheme-name">方案C · 代办</div>
+      <div class="scheme-sub">钉钉内置代办 + 群消息</div>
+      <div class="metric"><span class="m-label">开发量</span> <span class="m-value">2 小时</span></div>
+      <div class="metric"><span class="m-label">正式度</span> <span class="m-value">⭐⭐</span></div>
+      <div class="metric"><span class="m-label">复用贾总原型</span> <span class="m-value">❌</span></div>
+      <div class="score" style="color:var(--muted);">7/15</div>
+    </div>
+    <!-- D -->
+    <div class="scheme-card d">
+      <div class="scheme-name">方案D · 混合</div>
+      <div class="scheme-sub">审批 + AI表格 + 群机器人</div>
+      <div class="metric"><span class="m-label">开发量</span> <span class="m-value">3-5 天</span></div>
+      <div class="metric"><span class="m-label">正式度</span> <span class="m-value">⭐⭐⭐⭐⭐</span></div>
+      <div class="metric"><span class="m-label">复用贾总原型</span> <span class="m-value">✅ 复用</span></div>
+      <div class="score" style="color:var(--purple);">15/15</div>
+    </div>
+  </div>
+
+  <!-- Detail comparison table -->
+  <table class="compare-table">
+    <thead>
+      <tr><th style="width:12%"></th><th class="col-a" style="width:22%">方案A 审批流</th><th style="width:22%">方案B AI表格</th><th style="width:22%">方案C 代办</th><th class="col-d" style="width:22%">方案D 混合</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>核心载体</td><td class="col-a">OA 审批单</td><td>AI 表格</td><td>钉钉代办</td><td class="col-d">审批 + 表格</td></tr>
+      <tr><td>指派方式</td><td class="col-a">审批节点</td><td>字段赋值</td><td>待办接收人</td><td class="col-d">审批节点</td></tr>
+      <tr><td>监控方式</td><td class="col-a">审批进度</td><td>看板视图</td><td>待办列表</td><td class="col-d">看板 + 进度</td></tr>
+      <tr><td>闭环方式</td><td class="col-a">审批通过</td><td>状态列变更</td><td>标记完成</td><td class="col-d">审批通过</td></tr>
+      <tr><td>升级机制</td><td class="col-a">三级自动催办</td><td>群提醒</td><td>待办提醒</td><td class="col-d">全链路</td></tr>
+      <tr><td>审计追溯</td><td class="col-a">完整记录</td><td>表格历史</td><td>有限</td><td class="col-d">完整记录</td></tr>
+      <tr><td>开发量</td><td class="col-a">1-2 天</td><td>0.5 天</td><td>2 小时</td><td class="col-d">3-5 天</td></tr>
+      <tr><td>正式度</td><td class="col-a"><span class="star">⭐⭐⭐⭐⭐</span></td><td><span class="star">⭐⭐⭐</span></td><td><span class="star">⭐⭐</span></td><td class="col-d"><span class="star">⭐⭐⭐⭐⭐</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ====== 三、方案详细 ====== -->
+<div class="section">
+  <div class="section-title">三、方案 A 详解：钉钉 OA 审批流（推荐）</div>
+
+  <!-- 生命周期 -->
+  <div class="card">
+    <h3>🔁 工单生命周期</h3>
+    <div class="flow-row">
+      <div class="flow-step"><div class="step-title">触发条件</div><div class="step-desc">偏差检测 / 定时</div></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><div class="step-title">创建工单</div><div class="step-desc">Agent 自动发起审批</div></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><div class="step-title">指派执行</div><div class="step-desc">责任人收到审批通知</div></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><div class="step-title">提交佐证</div><div class="step-desc">上传附件 / 填写结论</div></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><div class="step-title">审批闭环</div><div class="step-desc">审批人确认 → 归档</div></div>
+    </div>
+  </div>
+
+  <!-- 审批模板 -->
+  <div class="card">
+    <h3>📋 审批模板字段设计</h3>
+    <table class="score-table">
+      <thead><tr><th>字段</th><th>类型</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>项目名称</td><td>文本</td><td>关联项目</td></tr>
+        <tr><td>工单类型</td><td>单选</td><td>纠偏 / 客户沟通 / 关系维护 / 非标任务 / 其他</td></tr>
+        <tr><td>触发原因</td><td>多行文本</td><td>偏差描述或触发条件</td></tr>
+        <tr><td>行动要求</td><td>多行文本</td><td>具体要做什么</td></tr>
+        <tr><td>责任人</td><td>人员选择</td><td>执行人</td></tr>
+        <tr><td>截止时间</td><td>日期</td><td>完成时限</td></tr>
+        <tr><td>执行佐证</td><td>附件</td><td>照片 / 截图 / 文件</td></tr>
+        <tr><td>执行结论</td><td>多行文本</td><td>责任人填写</td></tr>
+        <tr><td>审批人</td><td>人员选择</td><td>确认闭环的人</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:12px; font-size:14px; text-align:center;">
+      <strong>审批流节点：</strong>责任人(执行) → 审批人(确认闭环) → 归档
+    </p>
+  </div>
+
+  <!-- 升级机制 -->
+  <div class="card">
+    <h3>🔔 三级自动升级机制</h3>
+    <div class="esc-row">
+      <div class="esc-lvl l1">
+        <span class="esc-badge l1">第 1 级</span>
+        <span><strong>截止前 24h</strong> → 钉钉工作通知提醒责任人</span>
+      </div>
+      <div class="esc-lvl l2">
+        <span class="esc-badge l2">第 2 级</span>
+        <span><strong>超期 24h</strong> → 群内 @责任人 + 抄送审批人</span>
+      </div>
+      <div class="esc-lvl l3">
+        <span class="esc-badge l3">第 3 级</span>
+        <span><strong>超期 72h</strong> → 升级至上级审批人 + 群公告</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 技术实现 -->
+  <div class="card">
+    <h3>🔧 技术实现</h3>
+    <table class="score-table">
+      <thead><tr><th>组件</th><th>实现方式</th><th>参考基础</th></tr></thead>
+      <tbody>
+        <tr><td>审批模板</td><td>钉钉管理后台创建</td><td>贾总"试运营判定会"模板</td></tr>
+        <tr><td>自动发起</td><td>dws OA API + 机器人</td><td>需申请自动审批权限</td></tr>
+        <tr><td>状态监听</td><td>审批回调 webhook</td><td>贾总文档已验证</td></tr>
+        <tr><td>监控面板</td><td>调用审批列表 API 聚合展示</td><td>新增开发</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 优劣势 -->
+  <div class="procon-row">
+    <div class="procon pro">
+      <h4>✅ 优势</h4>
+      <li>贾总已验证原型可行</li>
+      <li>正式性强，适合对外佐证</li>
+      <li>完整审计追溯</li>
+      <li>支持附件上传作为执行证据</li>
+      <li>天然支持多级升级</li>
+    </div>
+    <div class="procon con">
+      <h4>⚠️ 风险与应对</h4>
+      <li>机器人自动发起审批需申请权限 → 已列入 8/6 行动项</li>
+      <li>审批模板变更需管理后台 → 初期设计留扩展空间</li>
+      <li>高频工单可能审批疲劳 → 仅正式/紧急工单走审批，日常走表格</li>
+    </div>
+  </div>
+</div>
+
+<!-- ====== 方案 B ====== -->
+<div class="section">
+  <div class="section-title">三、方案 B 详解：钉钉 AI 表格 + 群机器人</div>
+
+  <div class="card">
+    <h3>🔁 工单生命周期</h3>
+    <div class="flow-row">
+      <div class="flow-step"><div class="step-title">触发条件</div><div class="step-desc">偏差检测 / 定时</div></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><div class="step-title">写入表格</div><div class="step-desc">Agent 写入 AI 表格</div></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><div class="step-title">群通知</div><div class="step-desc">机器人 @责任人</div></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><div class="step-title">执行</div><div class="step-desc">线下执行</div></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><div class="step-title">状态更新</div><div class="step-desc">责任人改状态</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>📋 AI 表格字段设计</h3>
+    <table class="score-table">
+      <thead><tr><th>列名</th><th>类型</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>工单ID</td><td>自动编号</td><td>唯一标识</td></tr>
+        <tr><td>项目</td><td>单选</td><td>关联项目</td></tr>
+        <tr><td>工单类型</td><td>单选</td><td>纠偏 / 沟通 / 维护 / 其他</td></tr>
+        <tr><td>触发原因</td><td>文本</td><td>偏差描述</td></tr>
+        <tr><td>行动要求</td><td>文本</td><td>具体任务</td></tr>
+        <tr><td>责任人</td><td>人员</td><td>@ 指定</td></tr>
+        <tr><td>截止日期</td><td>日期</td><td>时限</td></tr>
+        <tr><td>状态</td><td>单选</td><td>待处理 / 进行中 / 已完成 / 已逾期</td></tr>
+        <tr><td>佐证附件</td><td>附件</td><td>执行证据</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:12px; font-size:14px; text-align:center;">
+      <strong>视图：</strong>看板视图（按状态分列）+ 日历视图（按截止日期）&nbsp;|&nbsp;
+      <strong>监控：</strong>逾期红色标记 + 群周报汇总
+    </p>
+  </div>
+
+  <div class="procon-row">
+    <div class="procon pro">
+      <h4>✅ 优势</h4>
+      <li>可视化看板，适合领导监控</li>
+      <li>开发量低（0.5 天），无需审批权限</li>
+      <li>字段灵活可随时调整</li>
+      <li>支持多人协作查看</li>
+    </div>
+    <div class="procon con">
+      <h4>⚠️ 风险</h4>
+      <li>状态更新依赖人工，可能遗漏</li>
+      <li>缺少强制闭环机制</li>
+      <li>审计追溯不如审批流完整</li>
+      <li>表格可能被误编辑</li>
+    </div>
+  </div>
+</div>
+
+<!-- ====== 方案 C ====== -->
+<div class="section">
+  <div class="section-title">三、方案 C 详解：钉钉代办 + 群消息</div>
+
+  <div class="card">
+    <h3>🔁 工单生命周期</h3>
+    <div class="flow-row">
+      <div class="flow-step"><div class="step-title">触发条件</div><div class="step-desc">偏差检测 / 定时</div></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><div class="step-title">创建代办</div><div class="step-desc">Agent 创建代办任务</div></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><div class="step-title">群通知</div><div class="step-desc">群内 @责任人</div></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><div class="step-title">执行</div><div class="step-desc">线下执行</div></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step"><div class="step-title">标记完成</div><div class="step-desc">责任人标记完成</div></div>
+    </div>
+  </div>
+
+  <div class="procon-row">
+    <div class="procon pro">
+      <h4>✅ 优势</h4>
+      <li>极低开发量（2h）</li>
+      <li>内置提醒功能</li>
+      <li>无需任何权限申请</li>
+    </div>
+    <div class="procon con">
+      <h4>❌ 致命缺陷</h4>
+      <li>08-04 会议明确：代办使用习惯弱，用户关注度低</li>
+      <li>无附件佐证，无法审计</li>
+      <li>无升级机制</li>
+      <li>容易被忽略，不适合正式工单</li>
+    </div>
+  </div>
+
+  <div class="quote" style="background:#fef2f2; border-left-color:#dc2626; color:#991b1b;">
+    ⚠️ 此方案在 08-04 会议上已被讨论并基本排除，仅作为对比基准保留。
+  </div>
+</div>
+
+<!-- ====== 方案 D ====== -->
+<div class="section">
+  <div class="section-title">三、方案 D 详解：混合方案（审批流 + AI 表格 + 群机器人）</div>
+
+  <div class="card">
+    <h3>🏗️ 架构</h3>
+    <div class="arch-box">
+      <div style="background:var(--card); border-radius:8px; padding:14px; display:inline-block; margin-bottom:16px; border:2px solid var(--blue); font-weight:700;">
+        监视 Agent（偏差检测 / 定时触发）
+      </div>
+      <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-bottom:12px;">
+        <div class="arch-node">紧急/正式<br>→ 审批流</div>
+        <div class="arch-node green">日常任务<br>→ AI 表格</div>
+        <div class="arch-node accent">提醒通知<br>→ 群消息</div>
+      </div>
+      <div class="arch-v-arrow">▼</div>
+      <div style="background:var(--card); border-radius:8px; padding:14px; display:inline-block; border:2px solid var(--purple); font-weight:700;">
+        AI 表格 · 统一监控面板<br><span style="font-size:12px;color:var(--muted);">聚合审批流 + 表格工单 → 统一看板</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>📋 分工逻辑</h3>
+    <table class="score-table">
+      <thead><tr><th>工单类型</th><th>载体</th><th>触发条件</th></tr></thead>
+      <tbody>
+        <tr><td>合同偏差纠偏</td><td>审批流</td><td>指标偏离阈值</td></tr>
+        <tr><td>客户投诉处理</td><td>审批流</td><td>投诉事件</td></tr>
+        <tr><td>安全检查隐患</td><td>审批流</td><td>月度检查结果</td></tr>
+        <tr><td>日常巡检提醒</td><td>AI 表格</td><td>定时周期</td></tr>
+        <tr><td>报告提交催办</td><td>AI 表格</td><td>截止日期前</td></tr>
+        <tr><td>会议决议跟踪</td><td>AI 表格</td><td>判定会结束</td></tr>
+        <tr><td>所有工单通知</td><td>群机器人</td><td>实时推送</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="procon-row">
+    <div class="procon pro">
+      <h4>✅ 优势</h4>
+      <li>最完整，覆盖所有场景</li>
+      <li>正式工单有审批闭环</li>
+      <li>领导有可视化看板</li>
+      <li>灵活扩展</li>
+    </div>
+    <div class="procon con">
+      <h4>⚠️ 风险</h4>
+      <li>开发量最大（3-5 天）</li>
+      <li>多个系统协调，维护成本高</li>
+      <li>初期可能过度设计</li>
+    </div>
+  </div>
+</div>
+
+<!-- ====== 四、关键决策维度 ====== -->
+<div class="section">
+  <div class="section-title">四、关键决策维度对比</div>
+
+  <div class="card">
+    <h3>按贾总三大诉求打分</h3>
+    <table class="score-table">
+      <thead>
+        <tr><th>诉求</th><th>方案A 审批流</th><th>方案B AI表格</th><th>方案C 代办</th><th>方案D 混合</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>发到对应负责人</td>
+          <td class="hi">⭐⭐⭐⭐⭐</td>
+          <td>⭐⭐⭐⭐</td>
+          <td>⭐⭐⭐</td>
+          <td class="hi">⭐⭐⭐⭐⭐</td>
+        </tr>
+        <tr>
+          <td>能够监控</td>
+          <td>⭐⭐⭐⭐</td>
+          <td class="hi">⭐⭐⭐⭐⭐</td>
+          <td class="lo">⭐⭐</td>
+          <td class="hi">⭐⭐⭐⭐⭐</td>
+        </tr>
+        <tr>
+          <td>能够闭环记录</td>
+          <td class="hi">⭐⭐⭐⭐⭐</td>
+          <td>⭐⭐⭐</td>
+          <td class="lo">⭐⭐</td>
+          <td class="hi">⭐⭐⭐⭐⭐</td>
+        </tr>
+        <tr class="total-row">
+          <td>综合评分</td>
+          <td class="hi">14 / 15</td>
+          <td>12 / 15</td>
+          <td class="lo">7 / 15</td>
+          <td class="hi">15 / 15</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+    <div class="card">
+      <h3>按落地难度排序</h3>
+      <div style="font-size:14px; text-align:center; padding:16px 0;">
+        <span style="color:var(--muted);">方案C</span> &lt;
+        <span style="color:#0891b2;">方案B</span> &lt;
+        <span style="color:var(--blue);">方案A</span> &lt;
+        <span style="color:var(--purple);">方案D</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--muted);">
+        <span>2h</span><span>0.5天</span><span>1-2天</span><span>3-5天</span>
+      </div>
+    </div>
+    <div class="card">
+      <h3>与现有资产复用度</h3>
+      <table style="width:100%; font-size:13px; border-collapse:collapse;">
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:6px;"></td><td style="padding:6px; text-align:center;">复用贾总原型</td><td style="padding:6px; text-align:center;">复用EAM逻辑</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:6px;">A</td><td style="padding:6px; text-align:center; color:var(--green);">✅</td><td style="padding:6px; text-align:center; color:var(--green);">✅ 互补</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:6px;">B</td><td style="padding:6px; text-align:center;">❌</td><td style="padding:6px; text-align:center; color:var(--amber);">⚠️ 部分</td>
+        </tr>
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:6px;">C</td><td style="padding:6px; text-align:center;">❌</td><td style="padding:6px; text-align:center;">❌</td>
+        </tr>
+        <tr>
+          <td style="padding:6px;">D</td><td style="padding:6px; text-align:center; color:var(--green);">✅</td><td style="padding:6px; text-align:center; color:var(--green);">✅ 互补</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ====== 五、推荐路径 ====== -->
+<div class="section">
+  <div class="section-title">五、🏆 推荐路径：A → D 分步演进</div>
+
+  <div class="card">
+    <div style="display:grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items:center; gap:0;">
+      <div class="road-step">
+        <div class="step-num">1</div>
+        <div class="step-label">本周（8/6-8/8）</div>
+        <div class="step-name">方案A · 审批流 MVP</div>
+        <div class="step-items">
+          基于贾总原型<br>
+          建 1 个工单模板<br>
+          打通 1 条链路<br>
+          验证可行性
+        </div>
+        <div style="margin-top:10px; font-size:12px; color:var(--blue); font-weight:600;">开发量 1-2 天</div>
+      </div>
+      <div style="font-size:28px; text-align:center; color:var(--blue);">→</div>
+      <div class="road-step">
+        <div class="step-num">2</div>
+        <div class="step-label">下周（8/11-8/15）</div>
+        <div class="step-name">扩展审批模板</div>
+        <div class="step-items">
+          多类型工单模板<br>
+          升级机制上线<br>
+          覆盖 3-5 个项目
+        </div>
+        <div style="margin-top:10px; font-size:12px; color:var(--blue); font-weight:600;">开发量 +1 天</div>
+      </div>
+      <div style="font-size:28px; text-align:center; color:var(--purple);">→</div>
+      <div class="road-step">
+        <div class="step-num">3</div>
+        <div class="step-label">2 周后（8/18-8/22）</div>
+        <div class="step-name">方案D · 混合方案</div>
+        <div class="step-items">
+          + AI 表格监控面板<br>
+          + 群机器人通知<br>
+          统一监控视图
+        </div>
+        <div style="margin-top:10px; font-size:12px; color:var(--purple); font-weight:600;">开发量 +1-2 天</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>推荐理由</h3>
+    <table style="width:100%; font-size:14px; border-collapse:collapse;">
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:10px 0; width:40px; text-align:center; font-size:18px;">1</td>
+        <td><strong>与贾总思路一致</strong> — 直接复用"试运营判定会审批流"原型的架构和 API 经验</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:10px 0; text-align:center; font-size:18px;">2</td>
+        <td><strong>与 08-04 会议共识对齐</strong> — 会议明确倾向审批作为主要载体</td>
+      </tr>
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:10px 0; text-align:center; font-size:18px;">3</td>
+        <td><strong>与 08-03 判定会决议衔接</strong> — 金惠良要求"能纳入系统的必须生成工单，不能的推送线下工单"，审批流正是"线下工单"的系统化承载</td>
+      </tr>
+      <tr>
+        <td style="padding:10px 0; text-align:center; font-size:18px;">4</td>
+        <td><strong>分步降低风险</strong> — 贾总原话："哪怕做五个，把路打通"，先单项目验证再扩展</td>
+      </tr>
+    </table>
+  </div>
+</div>
+
+<!-- ====== 六、下一步行动 ====== -->
+<div class="section">
+  <div class="section-title">六、下一步行动清单</div>
+
+  <table class="action-table">
+    <thead>
+      <tr><th class="num">#</th><th>行动项</th><th>负责人</th><th>时限</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="num">1</td><td>申请钉钉机器人自动发起审批权限</td><td>李沛东</td><td>8/6</td>
+      </tr>
+      <tr>
+        <td class="num">2</td><td>在管理后台创建"软工单闭环"审批模板</td><td>李沛东</td><td>8/6</td>
+      </tr>
+      <tr>
+        <td class="num">3</td><td>选择 1 个试点项目（建议通辽永兴）</td><td>贾总确认</td><td>8/6</td>
+      </tr>
+      <tr>
+        <td class="num">4</td><td>开发 Agent 自动发起审批 + 状态监听</td><td>李沛东</td><td>8/7-8/8</td>
+      </tr>
+      <tr>
+        <td class="num">5</td><td>试点跑通 1 条工单全链路</td><td>李沛东 + 项目组</td><td>8/11 前</td>
+      </tr>
+      <tr>
+        <td class="num">6</td><td>汇报试点结果，决定是否扩展</td><td>贾总</td><td>8/12</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ====== 附录 ====== -->
+<div class="section">
+  <div class="section-title">附录：信息来源</div>
+
+  <table class="score-table">
+    <thead><tr><th>来源</th><th>内容</th><th>时间</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>📝 听记</td><td>08-04 智能体驱动的项目管理闭环</td><td>2026-08-04 18:51</td>
+      </tr>
+      <tr>
+        <td>📝 听记</td><td>08-03 中节能通辽永兴项目年度运营计划判定会</td><td>2026-08-03 09:58</td>
+      </tr>
+      <tr>
+        <td>💬 贾总消息</td><td>试运营判定会审批流自动化 — 实现思路分享</td><td>2026-08-04 20:57</td>
+      </tr>
+      <tr>
+        <td>💬 贾总消息</td><td>新入场项目管理 × 年度运营计划 — 管理逻辑架构图</td><td>2026-08-04 20:44</td>
+      </tr>
+      <tr>
+        <td>💬 贾总消息</td><td>"好的 抓紧看看"</td><td>2026-08-04 21:12</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+</div>
+</body>
+</html>

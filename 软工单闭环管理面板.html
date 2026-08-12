@@ -1,0 +1,1469 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>软工单闭环管理面板</title>
+<style>
+:root {
+  --bg:#f5f6f8; --card:#fff; --text:#1a1a2e; --muted:#6b7280; --border:#e5e7eb;
+  --blue:#2563eb; --blue-bg:#eff6ff; --green:#059669; --green-bg:#ecfdf5;
+  --amber:#d97706; --amber-bg:#fffbeb; --red:#dc2626; --red-bg:#fef2f2;
+  --purple:#7c3aed; --shadow:0 1px 3px rgba(0,0,0,.06); --radius:10px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6}
+.app{display:flex;height:100vh;overflow:hidden}
+
+/* Sidebar */
+.sidebar{width:200px;background:#1e293b;color:#fff;display:flex;flex-direction:column;flex-shrink:0}
+.sidebar .logo{padding:20px 18px;font-size:16px;font-weight:800;border-bottom:1px solid rgba(255,255,255,.1);letter-spacing:.5px}
+.sidebar .logo span{color:#60a5fa}
+.sidebar nav{flex:1;padding:12px 0}
+.sidebar .nav-item{display:flex;align-items:center;gap:10px;padding:10px 18px;cursor:pointer;font-size:13px;color:#94a3b8;transition:all .15s;border-left:3px solid transparent;margin:1px 0}
+.sidebar .nav-item:hover{background:rgba(255,255,255,.05);color:#e2e8f0}
+.sidebar .nav-item.active{background:rgba(37,99,235,.2);color:#fff;border-left-color:#3b82f6;font-weight:600}
+.sidebar .nav-item .icon{width:20px;text-align:center;font-size:14px}
+.sidebar .nav-item .badge{background:#dc2626;color:#fff;font-size:10px;padding:1px 7px;border-radius:10px;margin-left:auto;font-weight:700}
+
+/* Main */
+.main{flex:1;min-height:0;overflow-y:auto;padding:24px}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+.header h1{font-size:22px;font-weight:700}
+.header .meta{font-size:12px;color:var(--muted)}
+
+/* Stats */
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px}
+.stat{background:var(--card);border-radius:var(--radius);padding:16px 20px;box-shadow:var(--shadow);border-left:4px solid var(--blue);cursor:pointer;transition:all .15s}.stat:hover{transform:translateY(-2px);box-shadow:0 4px 8px rgba(0,0,0,.1)}
+.stat.green{border-left-color:var(--green)}
+.stat.amber{border-left-color:var(--amber)}
+.stat.red{border-left-color:var(--red)}
+.stat.purple{border-left-color:var(--purple)}
+.stat .num{font-size:28px;font-weight:800;line-height:1}
+.stat .lbl{font-size:11px;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:.3px}
+
+/* Overdue alert */
+.alert-bar{background:var(--red-bg);border:1px solid #fecaca;border-radius:var(--radius);padding:14px 20px;margin-bottom:20px;display:flex;align-items:center;gap:12px}
+.alert-bar .alert-icon{font-size:20px}
+.alert-bar .alert-text{flex:1;font-size:13px;font-weight:600;color:#991b1b}
+.alert-bar .alert-items{display:flex;gap:8px;flex-wrap:wrap}
+.alert-bar .alert-item{background:#fff;border:1px solid #fecaca;border-radius:6px;padding:4px 10px;font-size:12px;color:#991b1b;cursor:pointer;white-space:nowrap}
+.alert-bar .alert-item:hover{background:#fef2f2}
+
+/* Grid layout */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px}
+@media(max-width:900px){.grid2,.grid3{grid-template-columns:1fr}}
+
+/* Card */
+.card{background:var(--card);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);margin-bottom:16px}
+.card-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.card-hd h3{font-size:15px;font-weight:700}
+.card-hd .count{font-size:12px;color:var(--muted)}
+
+/* Table */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:#f8fafc;padding:10px 12px;text-align:left;font-weight:600;border-bottom:2px solid var(--border);font-size:11px;color:var(--muted);white-space:nowrap}
+td{padding:9px 12px;border-bottom:1px solid var(--border)}
+tr:hover td{background:#f8fafc}
+.clickable{cursor:pointer;color:var(--blue);font-weight:600}
+.clickable:hover{text-decoration:underline}
+
+/* Tags */
+.tag{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;white-space:nowrap}
+.tag-blue{background:var(--blue-bg);color:var(--blue)}
+.tag-green{background:var(--green-bg);color:var(--green)}
+.tag-amber{background:var(--amber-bg);color:var(--amber)}
+.tag-red{background:var(--red-bg);color:var(--red)}
+.tag-gray{background:#f3f4f6;color:#6b7280}
+.tag-purple{background:#f5f3ff;color:var(--purple)}
+
+/* Source tags */
+.src-tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.3px;white-space:nowrap}
+.src-plan{background:#dbeafe;color:#1e40af}
+.src-alert{background:#fee2e2;color:#991b1b}
+.src-meeting{background:#fef3c7;color:#92400e}
+.src-manual{background:#e0e7ff;color:#3730a3}
+
+/* Progress */
+.progress{height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden}
+.progress-bar{height:100%;border-radius:3px;transition:width .3s}
+.progress-bar.blue{background:var(--blue)}
+.progress-bar.green{background:var(--green)}
+.progress-bar.amber{background:var(--amber)}
+.progress-bar.red{background:var(--red)}
+
+/* Flow */
+.flow{display:flex;align-items:center;gap:0;padding:16px 0;flex-wrap:wrap}
+.flow-step{display:flex;flex-direction:column;align-items:center;min-width:80px}
+.flow-step .circle{width:28px;height:28px;border-radius:50%;border:2px solid #d1d5db;background:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;margin-bottom:4px}
+.flow-step.done .circle{background:var(--green);border-color:var(--green);color:#fff}
+.flow-step.active .circle{background:var(--blue);border-color:var(--blue);color:#fff}
+.flow-step.warn .circle{background:var(--amber);border-color:var(--amber);color:#fff}
+.flow-step .label{font-size:10px;text-align:center;color:var(--muted);max-width:70px}
+.flow-arrow{width:24px;height:2px;background:#d1d5db;margin:0 0 20px}
+.flow-arrow.done{background:var(--green)}
+
+/* Timeline */
+.timeline{position:relative;padding-left:24px}
+.timeline::before{content:'';position:absolute;left:8px;top:4px;bottom:4px;width:2px;background:#e5e7eb}
+.tl-item{position:relative;margin-bottom:14px}
+.tl-item::before{content:'';position:absolute;left:-20px;top:4px;width:10px;height:10px;border-radius:50%;border:2px solid #d1d5db;background:#fff}
+.tl-item.done::before{background:var(--green);border-color:var(--green)}
+.tl-item.active::before{background:var(--blue);border-color:var(--blue)}
+.tl-item.warn::before{background:var(--amber);border-color:var(--amber)}
+.tl-item .tl-title{font-weight:600;font-size:13px}
+.tl-item .tl-time{font-size:11px;color:var(--muted)}
+
+/* Info grid */
+.info-grid{display:grid;grid-template-columns:100px 1fr 100px 1fr;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.info-grid .lbl{background:#f8fafc;padding:8px 12px;font-size:11px;font-weight:600;color:var(--muted)}
+.info-grid .val{background:#fff;padding:8px 12px;font-size:13px}
+
+/* Form */
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.form-full{grid-column:1/-1}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:12px;font-weight:600;color:#4b5563;margin-bottom:4px}
+.form-group label .req{color:var(--red)}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;transition:border .15s}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+.form-group textarea{resize:vertical;min-height:70px}
+
+/* Buttons */
+.btn{padding:8px 16px;border-radius:6px;border:none;cursor:pointer;font-size:13px;font-weight:600;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.btn-pri{background:var(--blue);color:#fff}.btn-pri:hover{background:#1d4ed8}
+.btn-out{background:#fff;color:#4b5563;border:1px solid var(--border)}.btn-out:hover{background:#f9fafb}
+.btn-red{background:var(--red);color:#fff}.btn-red:hover{background:#b91c1c}
+.btn-sm{padding:4px 10px;font-size:11px}
+.btn-icon{width:32px;height:32px;border-radius:6px;border:1px solid var(--border);background:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:16px}
+.btn-icon:hover{background:#f8fafc;border-color:var(--blue)}
+
+/* Tabs */
+.tabs{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px}
+.tab{padding:10px 20px;cursor:pointer;font-size:13px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--blue);border-bottom-color:var(--blue)}
+
+/* Import panels */
+.import-panel{display:none}
+.import-panel.active{display:block}
+.import-area{min-height:200px;border:2px dashed #d1d5db;border-radius:10px;padding:20px;text-align:center;transition:border-color .15s;cursor:pointer}
+.import-area:hover{border-color:var(--blue);background:#f8fafc}
+.import-area.has-content{border-style:solid;border-color:var(--blue);text-align:left;cursor:default}
+.import-area textarea{width:100%;min-height:160px;border:none;resize:vertical;font-size:13px;font-family:inherit;line-height:1.7;outline:none}
+.import-area textarea:focus{outline:none}
+
+/* Parse results */
+.parse-card{border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px;background:#fafcfd}
+.parse-card .parse-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.parse-card .parse-score{font-size:12px;padding:3px 10px;border-radius:10px;font-weight:600}
+.parse-card .parse-score.high{background:var(--green-bg);color:var(--green)}
+.parse-card .parse-score.medium{background:var(--amber-bg);color:var(--amber)}
+.parse-card .parse-score.low{background:var(--red-bg);color:var(--red)}
+
+/* Rule editor */
+.rule-item{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:#fff}
+.rule-item .rule-field{font-weight:600;font-size:13px;min-width:100px}
+.rule-item .rule-op{font-size:12px;color:var(--muted);min-width:60px}
+.rule-item .rule-value{flex:1;font-size:13px}
+.rule-item .rule-actions{display:flex;gap:6px}
+.rule-item.disabled{opacity:.4;background:#f9fafb}
+
+/* Responsive */
+@media(max-width:900px){.sidebar{width:60px}.sidebar .logo{font-size:0;padding:16px 8px}.sidebar .nav-item{justify-content:center;padding:12px}.sidebar .nav-item .icon{font-size:18px;margin:0}.sidebar .nav-item span:not(.icon):not(.badge){display:none}.sidebar .nav-item .badge{position:absolute;margin:0;top:4px;right:4px;font-size:8px}.main{margin-left:0}}
+
+/* Filter bar */
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;padding:14px;background:#f8fafc;border-radius:8px}
+.filters .form-group{margin-bottom:0;min-width:130px}
+.filters .form-group input,.filters .form-group select{padding:6px 8px;font-size:12px}
+
+/* Escalation indicators */
+.esc-indicator{display:flex;align-items:center;gap:6px;font-size:11px}
+.esc-dot{width:8px;height:8px;border-radius:50%}
+.esc-dot.l1{background:var(--amber)}
+.esc-dot.l2{background:#ea580c}
+.esc-dot.l3{background:var(--red)}
+
+/* Punish stats */
+.punish-bar{display:flex;gap:12px;margin-top:12px;flex-wrap:wrap}
+.punish-item{background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 14px;font-size:12px;display:flex;align-items:center;gap:8px}
+.punish-item .name{font-weight:700;color:#991b1b}
+.punish-item .detail{color:#7f1d1d}
+
+/* Toast */
+.toast{position:fixed;top:20px;right:20px;background:#1e293b;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none}
+.toast.show{opacity:1}
+.toast.ok{background:var(--green)}
+
+/* Page visibility */
+.page{display:none}
+.page.active{display:block}
+
+/* Overdue section */
+.overdue-section{background:var(--red-bg);border:1px solid #fecaca;border-radius:var(--radius);padding:16px;margin-bottom:16px}
+.overdue-section h4{color:#991b1b;font-size:14px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.overdue-section .overdue-count{background:#dc2626;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px}
+
+/* SLA gauge */
+.sla-gauge{display:flex;flex-direction:column;align-items:center;padding:8px 0}
+.sla-gauge .gauge-ring{position:relative;width:64px;height:64px}
+.sla-gauge .gauge-ring svg{transform:rotate(-90deg)}
+.sla-gauge .gauge-ring .bg{fill:none;stroke:#e5e7eb;stroke-width:6}
+.sla-gauge .gauge-ring .fill{fill:none;stroke-width:6;stroke-linecap:round;transition:stroke-dashoffset .6s}
+.sla-gauge .gauge-val{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800}
+.sla-gauge .gauge-label{font-size:10px;color:var(--muted);margin-top:4px;text-align:center}
+
+/* SLA health indicators */
+.sla-health{display:flex;gap:16px;flex-wrap:wrap;margin:8px 0}
+.sla-health .metric{text-align:center;min-width:80px}
+.sla-health .metric .m-val{font-size:20px;font-weight:800}
+.sla-health .metric .m-lbl{font-size:10px;color:var(--muted);text-transform:uppercase}
+.sla-health .metric .m-trend{font-size:10px;margin-top:2px}
+
+/* Incident timeline */
+.incident-tl{max-height:300px;overflow-y:auto}
+.incident-tl .inc-item{display:flex;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px}
+.incident-tl .inc-sev{flex-shrink:0;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;text-align:center;min-width:56px}
+.incident-tl .inc-sev.sev1{background:#fee2e2;color:#991b1b}
+.incident-tl .inc-sev.sev2{background:#fed7aa;color:#9a3412}
+.incident-tl .inc-sev.sev3{background:#fef3c7;color:#92400e}
+.incident-tl .inc-sev.sev4{background:#dbeafe;color:#1e40af}
+.incident-tl .inc-body{flex:1}
+.incident-tl .inc-title{font-weight:600}
+.incident-tl .inc-meta{font-size:10px;color:var(--muted)}
+
+/* Aging buckets */
+.aging-bar{display:flex;height:24px;border-radius:6px;overflow:hidden;margin:8px 0}
+.aging-bar .aging-seg{display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;transition:flex .3s}
+.aging-bar .aging-seg.green{background:var(--green)}
+.aging-bar .aging-seg.amber{background:var(--amber)}
+.aging-bar .aging-seg.orange{background:#ea580c}
+.aging-bar .aging-seg.red{background:var(--red)}
+
+/* Approval flow designer */
+.af-card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;overflow:hidden}
+.af-card.p1{border-top:3px solid var(--red)}
+.af-card.p2{border-top:3px solid var(--amber)}
+.af-card.p3{border-top:3px solid var(--blue)}
+.af-card .af-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.af-card .af-header h4{font-size:14px}
+.af-card .af-header .af-badge{font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700}
+.af-card.p1 .af-badge{background:var(--red-bg);color:var(--red)}
+.af-card.p2 .af-badge{background:var(--amber-bg);color:var(--amber)}
+.af-card.p3 .af-badge{background:var(--blue-bg);color:var(--blue)}
+.af-flow{display:flex;flex-direction:column;align-items:center;gap:0}
+.af-node{background:#f8fafc;border:2px solid var(--border);border-radius:8px;padding:10px 14px;text-align:center;min-width:140px;cursor:pointer;transition:all .15s;position:relative}
+.af-node:hover{border-color:var(--blue);box-shadow:0 2px 6px rgba(37,99,235,.1)}
+.af-node .node-title{font-weight:700;font-size:13px}
+.af-node .node-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.af-node .node-type{font-size:10px;margin-top:4px;padding:2px 8px;border-radius:6px;display:inline-block;font-weight:600}
+.af-node .node-type.start{background:var(--green-bg);color:var(--green)}
+.af-node .node-type.approval{background:var(--blue-bg);color:var(--blue)}
+.af-node .node-type.exec{background:var(--amber-bg);color:var(--amber)}
+.af-node .node-type.end{background:#f3f4f6;color:#6b7280}
+.af-connector{display:flex;flex-direction:column;align-items:center;padding:2px 0}
+.af-connector .line{width:2px;height:20px;background:var(--border)}
+.af-connector .arrow{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid var(--border)}
+.af-connector .label{font-size:10px;color:var(--muted);margin:2px 0}
+.af-add-btn{width:100%;border:2px dashed #d1d5db;border-radius:8px;padding:8px;text-align:center;cursor:pointer;font-size:12px;color:var(--muted);margin-top:4px;transition:all .15s}
+.af-add-btn:hover{border-color:var(--blue);color:var(--blue);background:#f8fafc}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div class="logo"><span>◆</span> 软工单管理</div>
+  <nav>
+    <div class="nav-item active" data-page="dashboard"><span class="icon">▣</span>工作台<span class="badge" id="overdueBadge">3</span></div>
+    <div class="nav-item" data-page="list"><span class="icon">☰</span>工单列表</div>
+    <div class="nav-item" data-page="create"><span class="icon">＋</span>新建工单</div>
+    <div class="nav-item" data-page="closed"><span class="icon">☑</span>闭环记录</div>
+    <div class="nav-item" data-page="config"><span class="icon">⚙</span>规则配置</div>
+  </nav>
+  <div style="padding:16px 18px;font-size:11px;color:#64748b;border-top:1px solid rgba(255,255,255,.1)">
+    数据源：钉钉OA审批同步<br>更新：实时
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main" id="main">
+
+<!-- ====== DASHBOARD ====== -->
+<div class="page active" id="page-dashboard">
+  <div class="header">
+    <div><h1>工作台</h1><div class="meta">软工单闭环管理面板 · 实时监控</div></div>
+    <div><button class="btn btn-pri" onclick="nav('create')">＋ 新建工单</button></div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat" onclick="navToList({})"><div class="num" id="statTotal">15</div><div class="lbl">工单总数</div></div>
+    <div class="stat amber" onclick="navToList({status:'执行中'})"><div class="num" id="statExec">5</div><div class="lbl">执行中</div></div>
+    <div class="stat red" onclick="navToList({status:'已逾期'})"><div class="num" id="statOverdue">3</div><div class="lbl">SLA 已违约</div></div>
+    <div class="stat blue" onclick="navToList({status:'待验收'})"><div class="num" id="statPending">3</div><div class="lbl">待验收</div></div>
+    <div class="stat green" onclick="navToList({status:'已闭环'})"><div class="num" id="statClosed">7</div><div class="lbl">已闭环</div></div>
+  </div>
+
+  <!-- SLA KPI Row -->
+  <div class="card" style="padding:16px 20px">
+    <div class="sla-health">
+      <div class="metric">
+        <div class="sla-gauge"><div class="gauge-ring"><svg viewBox="0 0 64 64"><circle class="bg" cx="32" cy="32" r="28"/><circle class="fill" id="slaRing" cx="32" cy="32" r="28" stroke="#059669" stroke-dasharray="175.9" stroke-dashoffset="35.2"/></svg><div class="gauge-val" id="slaPct">80%</div></div><div class="gauge-label">SLA 合规率</div></div>
+      </div>
+      <div class="metric"><div class="m-val" id="mttr">4.2</div><div class="m-lbl">MTTR (天)</div><div class="m-trend" style="color:var(--amber)">↑ 0.3 vs 上月</div></div>
+      <div class="metric"><div class="m-val" id="mtta">0.8</div><div class="m-lbl">MTTA (天)</div><div class="m-trend" style="color:var(--green)">↓ 0.2 vs 上月</div></div>
+      <div class="metric"><div class="m-val" style="color:var(--red)" id="slaBreach">3</div><div class="m-lbl">SLA 违约数</div><div class="m-trend" style="color:var(--red)">⚠ 2条超72h</div></div>
+      <div class="metric"><div class="m-val" id="closedRate">64%</div><div class="m-lbl">闭环率</div><div class="m-trend" style="color:var(--green)">↑ 5% vs 上月</div></div>
+    </div>
+    <div style="margin-top:12px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px">
+        <span>工单时效分布（从创建到闭环）</span>
+        <span>目标：7天</span>
+      </div>
+      <div class="aging-bar" id="agingBar"></div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:4px">
+        <span>≤3天</span><span>3-7天</span><span>7-14天</span><span>&gt;14天</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🚫 Incident Alert -->
+  <div class="alert-bar" id="alertBar">
+    <div class="alert-icon">🚨</div>
+    <div class="alert-text">SLA 违约告警：以下 3 条工单已超期，P1 级事件 1 起已触发三级升级</div>
+    <div class="alert-items" id="alertItems"></div>
+  </div>
+
+  <div class="grid2">
+    <!-- 待办列表 -->
+    <div class="card">
+      <div class="card-hd"><h3>📋 待办工单</h3><span class="count" id="todoCount">共 8 条</span></div>
+      <div id="todoList"></div>
+    </div>
+    <!-- 来源分布 + SLA 摘要 -->
+    <div class="card">
+      <div class="card-hd"><h3>📊 来源分布</h3></div>
+      <div id="sourceDist"></div>
+    </div>
+  </div>
+
+  <!-- SLA 违约与升级记录 -->
+  <div class="card">
+    <div class="card-hd"><h3>🚨 SLA 违约与升级记录</h3><span class="count">本月</span></div>
+    <div class="incident-tl" id="incidentTimeline"></div>
+  </div>
+</div>
+
+<!-- ====== LIST ====== -->
+<div class="page" id="page-list">
+  <div class="header">
+    <div><h1>工单列表</h1><div class="meta">全部工单 · 筛选查询</div></div>
+    <div><button class="btn btn-out btn-sm" onclick="toast('导出成功','ok')">导出</button></div>
+  </div>
+
+  <div class="card">
+    <div class="filters">
+      <div class="form-group"><label>项目</label><select id="fProject" onchange="renderList()"><option value="">全部</option></select></div>
+      <div class="form-group"><label>来源</label><select id="fSource" onchange="renderList()"><option value="">全部</option><option>年度计划</option><option>监视告警</option><option>判定会</option><option>手动</option></select></div>
+      <div class="form-group"><label>状态</label><select id="fStatus" onchange="renderList()"><option value="">全部</option><option>待派发</option><option>审批中</option><option>已派发</option><option>执行中</option><option>待验收</option><option>已闭环</option><option>已逾期</option></select></div>
+      <div class="form-group"><label>责任人</label><input placeholder="搜索..." id="fPerson" oninput="renderList()"></div>
+      <button class="btn btn-out btn-sm" onclick="resetFilters()">重置</button>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>编号</th><th>来源</th><th>项目</th><th>标题</th><th>类型</th><th>优先级</th><th>责任人</th><th>审批人</th><th>截止日期</th><th>状态</th><th>告警级别</th></tr></thead>
+        <tbody id="listBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ====== DETAIL ====== -->
+<div class="page" id="page-detail">
+  <div class="header">
+    <div><h1 id="detailTitle">工单详情</h1><div class="meta"><a class="clickable" onclick="nav('list')">← 返回列表</a></div></div>
+    <div id="detailActions"></div>
+  </div>
+  <div id="detailContent"></div>
+</div>
+
+<!-- ====== CREATE ====== -->
+<div class="page" id="page-create">
+  <div class="header">
+    <div><h1>新建工单</h1><div class="meta">三种创建方式：手动填写 · 导入听记 · 导入表格</div></div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchCreateTab('manual')">✏️ 手动填写</div>
+    <div class="tab" onclick="switchCreateTab('minutes')">🎙️ 导入听记</div>
+    <div class="tab" onclick="switchCreateTab('table')">📊 导入表格</div>
+  </div>
+
+  <!-- 手动填写 -->
+  <div class="import-panel active" id="create-manual">
+    <div class="card">
+      <div class="form-row">
+        <div class="form-group"><label><span class="req">*</span>项目名称</label><select id="cfProject"><option>通辽永兴风电场</option><option>瓮安建中HS300风电场</option><option>瓜州二期风电场</option><option>城投太旗光伏电站</option></select></div>
+        <div class="form-group"><label><span class="req">*</span>工单类型</label><select id="cfType"><option>纠偏</option><option>客户沟通</option><option>关系维护</option><option>隐患整改</option><option>非标任务</option><option>其他</option></select></div>
+        <div class="form-group"><label><span class="req">*</span>来源</label><select id="cfSource"><option>年度计划</option><option>监视告警</option><option>判定会</option><option>手动</option></select></div>
+        <div class="form-group"><label><span class="req">*</span>优先级</label><select id="cfPriority"><option>普通</option><option>紧急</option></select></div>
+        <div class="form-group form-full"><label><span class="req">*</span>标题</label><input id="cfTitle" placeholder="一句话概括工单内容"></div>
+        <div class="form-group form-full"><label>触发原因</label><textarea id="cfReason" placeholder="偏差描述或触发条件"></textarea></div>
+        <div class="form-group form-full"><label><span class="req">*</span>行动要求</label><textarea id="cfAction" placeholder="具体要做什么、达到什么标准"></textarea></div>
+        <div class="form-group"><label><span class="req">*</span>责任人</label><select id="cfPerson"><option>王小宁</option><option>于鸿飞</option><option>高志强</option><option>明南辉</option><option>张雷雷</option><option>塔拉</option></select></div>
+        <div class="form-group"><label><span class="req">*</span>审批人</label><select id="cfApprover"><option>金惠良</option><option>陈亮</option><option>贾兴威</option></select></div>
+        <div class="form-group"><label><span class="req">*</span>截止日期</label><input type="date" id="cfDeadline"></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
+        <button class="btn btn-out" onclick="nav('list')">取消</button>
+        <button class="btn btn-pri" onclick="submitWO()">提交 → 发起钉钉OA审批</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 导入听记 -->
+  <div class="import-panel" id="create-minutes">
+    <div class="card">
+      <div class="card-hd"><h3>📋 粘贴听记内容</h3><span class="count">支持听记摘要 / 转写原文 / AI摘要</span></div>
+      <div class="import-area" id="minutesArea" onclick="clickMinutesArea()">
+        <textarea id="minutesInput" placeholder="在此粘贴听记内容...&#10;&#10;例如：&#10;08-04 智能体驱动的项目管理闭环&#10;参与人：李沛东、贾兴威&#10;&#10;待办事项：&#10;1. 将新入场Agent与年度运营计划Agent部署上线，并与舒和沟通确认部署方案&#10;2. 设计工单闭环机制，包括提醒、警告、升级流程及反馈验证方式&#10;3. 申请创建钉钉审批权限&#10;&#10;或者直接粘贴 AI 听记的 transcription 或 summary 输出..." oninput="onMinutesInput()"></textarea>
+        <div id="minutesPlaceholder" style="color:#9ca3af;font-size:14px;padding-top:60px">点击此处粘贴听记内容，或拖拽文本文件</div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button class="btn btn-pri" onclick="parseMinutes()" id="btnParseMinutes" disabled>🔍 智能解析</button>
+        <span style="font-size:12px;color:var(--muted);align-self:center" id="parseHint"></span>
+      </div>
+    </div>
+    <div id="parseResults"></div>
+  </div>
+
+  <!-- 导入表格 -->
+  <div class="import-panel" id="create-table">
+    <div class="card">
+      <div class="card-hd"><h3>📊 从AI表格导入</h3><span class="count">选择钉钉AI表格，自动映射字段</span></div>
+      <div class="form-row">
+        <div class="form-group"><label>AI表格名称 / ID</label><input id="tableId" placeholder="输入表格名称或粘贴表格链接"></div>
+        <div class="form-group"><label>工作表</label><select id="tableSheet"><option>Sheet1</option></select></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn btn-pri" onclick="loadTable()">📥 加载表格</button>
+        <button class="btn btn-out" onclick="loadDemoTable()">📋 加载示例数据</button>
+      </div>
+    </div>
+    <div id="tablePreview"></div>
+  </div>
+</div>
+
+<!-- ====== CONFIG ====== -->
+<div class="page" id="page-config">
+  <div class="header">
+    <div><h1>规则配置</h1><div class="meta">工单判断规则 · 知识库维护</div></div>
+    <div><button class="btn btn-pri btn-sm" onclick="addRule()">＋ 新增规则</button></div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><h3>🧠 工单判断规则</h3><span class="count">决定一段内容是否应该被创建为工单</span></div>
+    <div style="margin-bottom:12px;font-size:12px;color:var(--muted);padding:8px 12px;background:#f8fafc;border-radius:6px">
+      💡 <b>规则逻辑</b>：每条规则独立评分，总分 ≥ 阈值的条目自动识别为工单。调整规则或阈值即可改变判断标准。
+    </div>
+    <div id="rulesList"></div>
+    <div style="margin-top:16px;display:flex;align-items:center;gap:12px;padding:12px;background:#f8fafc;border-radius:8px">
+      <span style="font-weight:600;font-size:13px">工单判定阈值：</span>
+      <input type="range" min="1" max="10" value="5" id="ruleThreshold" oninput="document.getElementById('thresholdVal').textContent=this.value" style="flex:1;max-width:200px">
+      <span style="font-weight:700;font-size:16px;color:var(--blue)" id="thresholdVal">5</span>
+      <span style="font-size:12px;color:var(--muted)">分（≥ 此分数自动识别为工单）</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><h3>📚 工单类型知识库</h3><span class="count">定义工单分类和默认审批人</span></div>
+    <div id="typeKB"></div>
+    <button class="btn btn-out btn-sm" style="margin-top:8px" onclick="addTypeKB()">＋ 新增类型</button>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><h3>👥 人员映射表</h3><span class="count">项目→责任人的默认映射</span></div>
+    <div id="personMap"></div>
+    <button class="btn btn-out btn-sm" style="margin-top:8px" onclick="addPersonMap()">＋ 新增映射</button>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><h3>🎯 优先级判定规则</h3><span class="count">工单创建时自动匹配 P1/P2/P3</span></div>
+    <div style="margin-bottom:12px;font-size:12px;color:var(--muted);padding:8px 12px;background:#f8fafc;border-radius:6px">
+      💡 <b>判定逻辑</b>：规则按顺序匹配，命中即停。可增删改。
+    </div>
+    <div style="overflow-x:auto">
+    <table>
+      <thead><tr><th style="width:40px">顺序</th><th>匹配条件</th><th style="width:80px">判定为</th><th>示例</th></tr></thead>
+      <tbody id="priorityRulesBody"></tbody>
+    </table>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-out btn-sm" onclick="addPriorityRule()">＋ 新增规则</button>
+      <button class="btn btn-out btn-sm" onclick="resetPriorityRules()">恢复默认</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><h3>🔄 审批流设计器</h3><span class="count">可视化配置 · 按优先级路由</span></div>
+    <div style="margin-bottom:12px;font-size:12px;color:var(--muted);padding:8px 12px;background:#f8fafc;border-radius:6px">
+      💡 工单提交后按优先级自动匹配审批流。节点可增删，双击编辑。
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px" id="approvalFlows"></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-out btn-sm" onclick="resetApprovalFlows()">恢复默认审批流</button>
+      <button class="btn btn-pri btn-sm" onclick="saveApprovalFlows()">💾 保存审批流</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><h3>📢 通知策略配置</h3><span class="count">多通道递进式提醒</span></div>
+    <div style="overflow-x:auto">
+    <table>
+      <thead><tr><th>优先级</th><th>T+0 派发通知</th><th>T+24h 未读</th><th>SLA到期前24h</th><th>SLA违约</th><th>SLA违约+72h</th></tr></thead>
+      <tbody>
+        <tr><td><span class="tag tag-red">P1 紧急</span></td><td>📞 电话DING + 工作通知 + 群@</td><td>📞 再次电话DING + 短信</td><td>📞 电话DING + 群公告</td><td>📞 电话DING上级 + 群@所有人</td><td>📞 电话DING贾总 + 群公告</td></tr>
+        <tr><td><span class="tag tag-amber">P2 普通</span></td><td>📱 应用DING + 工作通知 + 群@</td><td>📱 应用DING + 短信</td><td>📱 应用DING + 群公告</td><td>📞 电话DING + 群@审批人</td><td>📞 电话DING上级 + 群公告</td></tr>
+        <tr><td><span class="tag tag-blue">P3 低优先</span></td><td>🔔 工作通知 + 群@</td><td>🔔 工作通知再次提醒</td><td>📱 应用DING</td><td>📱 应用DING + 群@审批人</td><td>📞 电话DING上级</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><h3>🤖 群机器人配置</h3><span class="count">@机器人 创建工单 · 群内交互</span></div>
+    <div style="margin-bottom:12px;font-size:12px;color:var(--muted);padding:8px 12px;background:#f8fafc;border-radius:6px">
+      💡 在配置的钉钉群中 <b>@机器人 创建工单：xxx</b>，机器人自动回复工单链接。<br>
+      💡 <b>技术实现</b>：<code>dws chat +send-to-group</code> 发送链接卡片 → 用户点击 → 表单提交 → 面板刷新。
+    </div>
+    <div id="botGroups"></div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-out btn-sm" onclick="addBotGroup()">＋ 新增群</button>
+      <button class="btn btn-out btn-sm" onclick="showBotDemo()">📋 查看交互示例</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== CLOSED ====== -->
+<div class="page" id="page-closed">
+  <div class="header">
+    <div><h1>闭环记录</h1><div class="meta">已闭环工单归档 · 可追溯</div></div>
+  </div>
+  <div class="card">
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>编号</th><th>来源</th><th>项目</th><th>标题</th><th>责任人</th><th>创建时间</th><th>闭环时间</th><th>耗时</th><th>是否逾期</th></tr></thead>
+        <tbody id="closedBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+</div><!-- /main -->
+</div><!-- /app -->
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ====== DATA ======
+const now = new Date();
+const d = (offset) => { const dt = new Date(now); dt.setDate(dt.getDate()+offset); return dt.toISOString().slice(0,10); };
+
+const workOrders = [
+  {id:'RW-2026-0001',priority:'P2 普通',source:'年度计划',project:'通辽永兴风电场',title:'变桨系统技改跟踪',type:'纠偏',reason:'业主技改方案流标，进度滞后',action:'跟进招投标进度，每周汇报',person:'王小宁',approver:'金惠良',deadline:d(-2),status:'已逾期',oaId:'OA-20260804-001',created:'2026-07-25',completed:'',evidence:'',conclusion:'',escalation:3,overdueDays:2},
+  {id:'RW-2026-0002',priority:'P1 紧急',source:'监视告警',project:'通辽永兴风电场',title:'AGC双细则考核超标纠偏',type:'纠偏',reason:'7月双细则考核扣分超标15%',action:'排查AGC响应延迟原因，协调厂家修模',person:'明南辉',approver:'金惠良',deadline:d(5),status:'执行中',oaId:'OA-20260805-001',created:'2026-08-03',completed:'',evidence:'',conclusion:'',escalation:0,overdueDays:0},
+  {id:'RW-2026-0003',priority:'P3 低优先',source:'判定会',project:'通辽永兴风电场',title:'沉降观测检测补充',type:'非标任务',reason:'08-03判定会发现漏项',action:'联系检测单位，11月前完成',person:'于鸿飞',approver:'陈亮',deadline:d(90),status:'待派发',oaId:'',created:'2026-08-03',completed:'',evidence:'',conclusion:'',escalation:0,overdueDays:0},
+  {id:'RW-2026-0004',priority:'P2 普通',source:'年度计划',project:'瓮安建中HS300风电场',title:'客户月度汇报满意度偏低整改',type:'客户沟通',reason:'上月客户满意度评分仅72分',action:'本月增加一次现场拜访，解决客户反馈的3个问题',person:'于鸿飞',approver:'贾兴威',deadline:d(-1),status:'已逾期',oaId:'OA-20260804-002',created:'2026-08-01',completed:'',evidence:'',conclusion:'',escalation:2,overdueDays:1},
+  {id:'RW-2026-0005',priority:'P1 紧急',source:'手动',project:'瓜州二期风电场',title:'新员工安全培训交底',type:'隐患整改',reason:'新入场人员未完成三级安全教育',action:'组织安全培训，完成考试并归档',person:'高志强',approver:'金惠良',deadline:d(-4),status:'已逾期',oaId:'OA-20260801-001',created:'2026-07-28',completed:'',evidence:'',conclusion:'',escalation:3,overdueDays:4},
+  {id:'RW-2026-0006',priority:'P2 普通',source:'监视告警',project:'城投太旗光伏电站',title:'组件清洗质量不达标',type:'纠偏',reason:'上月清洗后PR值未提升',action:'要求清洗单位返工，重新验收',person:'张雷雷',approver:'陈亮',deadline:d(3),status:'待验收',oaId:'OA-20260805-002',created:'2026-08-02',completed:'2026-08-05',evidence:'返工验收报告.pdf',conclusion:'已完成返工，PR值恢复至82%',escalation:0,overdueDays:0},
+  {id:'RW-2026-0007',priority:'P3 低优先',source:'年度计划',project:'通辽永兴风电场',title:'预防性试验准备-停电协调',type:'非标任务',reason:'年度计划8月停电窗口',action:'协调调度确认8/19-20停电时间',person:'于鸿飞',approver:'金惠良',deadline:d(0),status:'执行中',oaId:'OA-20260805-003',created:'2026-08-04',completed:'',evidence:'',conclusion:'',escalation:0,overdueDays:0},
+  {id:'RW-2026-0008',priority:'P3 低优先',source:'判定会',project:'通辽永兴风电场',title:'安全培训交底确认',type:'客户沟通',reason:'判定会确认已完成但无记录',action:'补录安全培训交底记录并上传',person:'王小宁',approver:'金惠良',deadline:d(-7),status:'已闭环',oaId:'OA-20260729-001',created:'2026-07-25',completed:'2026-07-28',evidence:'安全培训记录.pdf',conclusion:'已补录完成',escalation:0,overdueDays:0},
+  {id:'RW-2026-0009',priority:'P2 普通',source:'年度计划',project:'通辽永兴风电场',title:'风机定检第一批旁站监督',type:'非标任务',reason:'定检队伍进场不稳定',action:'协调定检单位稳定出勤，做好旁站记录',person:'高志强',approver:'陈亮',deadline:d(-10),status:'已闭环',oaId:'OA-20260720-001',created:'2026-07-15',completed:'2026-07-22',evidence:'旁站记录.pdf',conclusion:'第一批已完成',escalation:0,overdueDays:0},
+  {id:'RW-2026-0010',priority:'P3 低优先',source:'手动',project:'瓜州二期风电场',title:'备品备件库房盘点',type:'其他',reason:'季度例行盘点',action:'完成盘点并更新台账',person:'高志强',approver:'金惠良',deadline:d(-15),status:'已闭环',oaId:'OA-20260715-001',created:'2026-07-10',completed:'2026-07-18',evidence:'盘点台账.xlsx',conclusion:'盘点完成，差异已处理',escalation:0,overdueDays:0},
+  {id:'RW-2026-0011',priority:'P3 低优先',source:'年度计划',project:'瓮安建中HS300风电场',title:'月度运营分析报告',type:'其他',reason:'7月月度报告提交',action:'按模板完成7月运营分析报告',person:'塔拉',approver:'贾兴威',deadline:d(-3),status:'已闭环',oaId:'OA-20260730-001',created:'2026-07-28',completed:'2026-07-31',evidence:'7月运营分析报告.pdf',conclusion:'已完成',escalation:0,overdueDays:0},
+  {id:'RW-2026-0012',priority:'P1 紧急',source:'监视告警',project:'城投太旗光伏电站',title:'逆变器效率异常排查',type:'纠偏',reason:'3号逆变器效率连续3天低于95%',action:'现场排查逆变器，必要时更换',person:'张雷雷',approver:'陈亮',deadline:d(1),status:'审批中',oaId:'OA-20260806-001',created:'2026-08-06',completed:'',evidence:'',conclusion:'',escalation:0,overdueDays:0},
+  {id:'RW-2026-0013',priority:'P2 普通',source:'判定会',project:'通辽永兴风电场',title:'涉网试验-1号SVG未完成',type:'非标任务',reason:'判定会发现1号SVG未完成涉网试验',action:'8月内完成1号SVG涉网试验',person:'明南辉',approver:'金惠良',deadline:d(25),status:'已派发',oaId:'OA-20260805-004',created:'2026-08-05',completed:'',evidence:'',conclusion:'',escalation:0,overdueDays:0},
+  {id:'RW-2026-0014',priority:'P3 低优先',source:'年度计划',project:'瓮安建中HS300风电场',title:'消防设施月度检查',type:'隐患整改',reason:'8月消防检查',action:'完成灭火器、消防栓检查并记录',person:'塔拉',approver:'金惠良',deadline:d(-5),status:'已闭环',oaId:'OA-20260728-001',created:'2026-07-25',completed:'2026-07-30',evidence:'消防检查记录.pdf',conclusion:'检查完成，无异常',escalation:0,overdueDays:0},
+  {id:'RW-2026-0015',priority:'P2 普通',source:'手动',project:'城投太旗光伏电站',title:'双细则日报数据核对',type:'纠偏',reason:'本周功率预测准确率偏低',action:'联系功率预测厂家修模',person:'明南辉',approver:'陈亮',deadline:d(2),status:'待验收',oaId:'OA-20260806-002',created:'2026-08-05',completed:'2026-08-06',evidence:'修模确认函.pdf',conclusion:'厂家已修模，准确率恢复',escalation:0,overdueDays:0},
+];
+
+const statusMap = {
+  '待派发':['待派发','tag-gray'],
+  '审批中':['审批中','tag-blue'],
+  '已派发':['已派发','tag-amber'],
+  '执行中':['执行中','tag-blue'],
+  '待验收':['待验收','tag-amber'],
+  '已闭环':['已闭环','tag-green'],
+  '已逾期':['已逾期','tag-red'],
+};
+const srcMap = {
+  '年度计划':'src-plan',
+  '监视告警':'src-alert',
+  '判定会':'src-meeting',
+  '手动':'src-manual',
+};
+const escalationLabel = {0:'',1:'P3 预警',2:'P2 升级',3:'P1 严重'};
+const escalationColor = {0:'',1:'tag-amber',2:'tag-amber',3:'tag-red'};
+
+// ====== NAV ======
+function nav(page) {
+  document.querySelectorAll('.nav-item').forEach(i=>i.classList.remove('active'));
+  const target=document.querySelector(`[data-page="${page}"]`);
+  if(target) target.classList.add('active');
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+page).classList.add('active');
+  if (page==='dashboard') renderDashboard();
+  if (page==='list') renderList();
+  if (page==='closed') renderClosed();
+  if (page==='config') renderConfig();
+}
+function navToList(filters){
+  // Navigate to list page with pre-set filters
+  document.querySelectorAll('.nav-item').forEach(i=>i.classList.remove('active'));
+  document.querySelector('[data-page="list"]').classList.add('active');
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-list').classList.add('active');
+  // Apply filters
+  if(filters.status) document.getElementById('fStatus').value=filters.status;
+  else document.getElementById('fStatus').value='';
+  if(filters.source) document.getElementById('fSource').value=filters.source;
+  else document.getElementById('fSource').value='';
+  document.getElementById('fProject').value='';
+  document.getElementById('fPerson').value='';
+  renderList();
+}
+
+document.querySelectorAll('.nav-item').forEach(item=>{
+  item.addEventListener('click',()=>nav(item.dataset.page));
+});
+
+// ====== TOAST ======
+function toast(msg,type=''){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='toast show '+type;
+  setTimeout(()=>t.className='toast',2500);
+}
+
+// ====== DASHBOARD ======
+function renderDashboard(){
+  const total=workOrders.length;
+  const exec=workOrders.filter(w=>w.status==='执行中').length;
+  const pending=workOrders.filter(w=>w.status==='待验收').length;
+  const overdue=workOrders.filter(w=>w.status==='已逾期').length;
+  const closed=workOrders.filter(w=>w.status==='已闭环').length;
+
+  document.getElementById('statTotal').textContent=total;
+  document.getElementById('statExec').textContent=exec;
+  document.getElementById('statPending').textContent=pending;
+  document.getElementById('statOverdue').textContent=overdue;
+  document.getElementById('statClosed').textContent=closed;
+  document.getElementById('overdueBadge').textContent=overdue;
+
+  // SLA metrics
+  const closedWOs=workOrders.filter(w=>w.status==='已闭环');
+  const breachWOs=workOrders.filter(w=>w.status==='已逾期');
+  const slaCompliance=Math.round((total-breachWOs.length)/total*100);
+  const mttrVal=closedWOs.length>0?(closedWOs.reduce((s,w)=>s+(w.overdueDays||0)+(w.completed?Math.round((new Date(w.completed)-new Date(w.created))/86400000):0),0)/closedWOs.length).toFixed(1):'-';
+  document.getElementById('slaPct').textContent=slaCompliance+'%';
+  document.getElementById('mttr').textContent=mttrVal;
+  document.getElementById('slaBreach').textContent=breachWOs.length;
+  document.getElementById('closedRate').textContent=Math.round(closed/total*100)+'%';
+  const ring=document.getElementById('slaRing');
+  const circum=175.9;
+  ring.setAttribute('stroke-dashoffset',circum*(1-slaCompliance/100));
+  ring.setAttribute('stroke',slaCompliance>=90?'#059669':slaCompliance>=70?'#d97706':'#dc2626');
+  // Aging buckets
+  const aging={d3:0,d7:0,d14:0,o14:0};
+  closedWOs.forEach(w=>{
+    const days=Math.round((new Date(w.completed)-new Date(w.created))/86400000);
+    if(days<=3) aging.d3++; else if(days<=7) aging.d7++; else if(days<=14) aging.d14++; else aging.o14++;
+  });
+  const at=closedWOs.length||1;
+  document.getElementById('agingBar').innerHTML=`
+    <div class="aging-seg green" style="flex:${aging.d3/at}">${aging.d3||''}</div>
+    <div class="aging-seg amber" style="flex:${aging.d7/at}">${aging.d7||''}</div>
+    <div class="aging-seg orange" style="flex:${aging.d14/at}">${aging.d14||''}</div>
+    <div class="aging-seg red" style="flex:${aging.o14/at}">${aging.o14||''}</div>`;
+
+  // Overdue alert bar
+  const overdueItems=workOrders.filter(w=>w.status==='已逾期');
+  const alertBar=document.getElementById('alertBar');
+  const alertItems=document.getElementById('alertItems');
+  if(overdueItems.length===0){
+    alertBar.style.display='none';
+  } else {
+    alertBar.style.display='flex';
+    const p1=overdueItems.filter(w=>w.escalation>=3).length;
+    document.querySelector('#alertBar .alert-text').textContent=
+      `SLA 违约告警：以下 ${overdueItems.length} 条工单已超期，P1 级事件 ${p1} 起已触发三级升级`;
+    alertItems.innerHTML=overdueItems.map(w=>
+      `<div class="alert-item" onclick="viewDetail('${w.id}')">${w.escalation>=3?'🔴':w.escalation>=2?'🟠':'🟡'} ${w.id} · ${w.person} · 超${w.overdueDays}天 · ${w.escalation>=3?'已升级至上级':w.escalation>=2?'已抄送审批人':'已预警'}</div>`
+    ).join('');
+  }
+
+  // Todo list
+  const todos=workOrders.filter(w=>w.status!=='已闭环').sort((a,b)=>{
+    if(a.status==='已逾期' && b.status!=='已逾期') return -1;
+    if(b.status==='已逾期' && a.status!=='已逾期') return 1;
+    return a.deadline.localeCompare(b.deadline);
+  });
+  document.getElementById('todoList').innerHTML=todos.map(w=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid ${w.status==='已逾期'?'#fecaca':'var(--border)'};border-radius:8px;margin-bottom:6px;cursor:pointer;background:${w.status==='已逾期'?'#fef2f2':'#fff'}" onclick="viewDetail('${w.id}')">
+      <span class="tag ${statusMap[w.status][1]}">${statusMap[w.status][0]}</span>
+      <span style="flex:1;font-size:13px;font-weight:500">${w.title}</span>
+      <span style="font-size:11px;color:var(--muted)">${w.person}</span>
+      <span style="font-size:11px;color:${w.status==='已逾期'?'var(--red)':'var(--muted)'}">${w.deadline}</span>
+      ${w.escalation>0?`<span class="tag ${escalationColor[w.escalation]}">${escalationLabel[w.escalation]}</span>`:''}
+    </div>
+  `).join('');
+
+  // Source distribution
+  const sources={};
+  workOrders.forEach(w=>{sources[w.source]=(sources[w.source]||0)+1});
+  const srcColors={'年度计划':'#2563eb','监视告警':'#dc2626','判定会':'#d97706','手动':'#7c3aed'};
+  document.getElementById('sourceDist').innerHTML=`
+    <div style="display:flex;flex-direction:column;gap:12px;padding:8px 0">
+      ${Object.entries(sources).map(([k,v])=>`
+        <div style="cursor:pointer;padding:6px 8px;border-radius:8px;transition:background .15s" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''" onclick="navToList({source:'${k}'})">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px">
+            <span class="src-tag ${srcMap[k]}">${k}</span>
+            <span style="font-weight:700">${v} 条</span>
+          </div>
+          <div class="progress"><div class="progress-bar blue" style="width:${v/workOrders.length*100}%"></div></div>
+        </div>
+      `).join('')}
+    </div>`;
+
+  // Incident timeline
+  const incidents=[
+    {sev:1,title:'P1 · RW-2026-0005 新员工安全培训交底',meta:'SLA 违约 4天 · 已触发三级升级 · 抄送贾兴威 · 08-06 09:00',woId:'RW-2026-0005'},
+    {sev:1,title:'P1 · RW-2026-0001 变桨系统技改跟踪',meta:'SLA 违约 2天 · 已触发二级升级 · 抄送金惠良 · 08-06 08:00',woId:'RW-2026-0001'},
+    {sev:2,title:'P2 · RW-2026-0004 客户满意度整改',meta:'SLA 违约 1天 · 一级预警 · 08-05 18:00',woId:'RW-2026-0004'},
+    {sev:3,title:'P3 · RW-2026-0008 安全培训交底已闭环',meta:'SLA 曾违约 3天 · 记录留存 · 08-04 10:00',woId:'RW-2026-0008'},
+    {sev:4,title:'INFO · RW-2026-0003 沉降观测新建',meta:'来源：判定会 · 待派发 · 08-03 16:00',woId:'RW-2026-0003'},
+    {sev:4,title:'INFO · RW-2026-0006 组件清洗已提交验收',meta:'待验收 · MTTA 0.5天 · 08-05 14:00',woId:'RW-2026-0006'},
+    {sev:4,title:'INFO · RW-2026-0015 双细则日报修模完成',meta:'待验收 · 08-06 10:00',woId:'RW-2026-0015'},
+  ];
+  document.getElementById('incidentTimeline').innerHTML=incidents.map(inc=>`
+    <div class="inc-item" style="cursor:pointer" onclick="viewDetail('${inc.woId}')">
+      <span class="inc-sev sev${inc.sev}">${['','P1 严重','P2 警告','P3 关注','INFO'][inc.sev]}</span>
+      <div class="inc-body">
+        <div class="inc-title">${inc.title}</div>
+        <div class="inc-meta">${inc.meta}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ====== LIST ======
+function renderList(){
+  const fProject=document.getElementById('fProject').value;
+  const fSource=document.getElementById('fSource').value;
+  const fStatus=document.getElementById('fStatus').value;
+  const fPerson=document.getElementById('fPerson').value.toLowerCase();
+
+  // Populate project filter
+  const projects=[...new Set(workOrders.map(w=>w.project))];
+  const projSel=document.getElementById('fProject');
+  if(projSel.options.length<=1){
+    projSel.innerHTML='<option value="">全部</option>'+projects.map(p=>`<option>${p}</option>`).join('');
+  }
+
+  let filtered=workOrders;
+  if(fProject) filtered=filtered.filter(w=>w.project===fProject);
+  if(fSource) filtered=filtered.filter(w=>w.source===fSource);
+  if(fStatus) filtered=filtered.filter(w=>w.status===fStatus);
+  if(fPerson) filtered=filtered.filter(w=>w.person.toLowerCase().includes(fPerson));
+
+  document.getElementById('listBody').innerHTML=filtered.map(w=>`
+    <tr>
+      <td><span class="clickable" onclick="viewDetail('${w.id}')">${w.id}</span></td>
+      <td><span class="src-tag ${srcMap[w.source]}">${w.source}</span></td>
+      <td>${w.project}</td>
+      <td>${w.title}</td>
+      <td>${w.type}</td>
+      <td><span class="tag ${(w.priority||'').includes('P1')?'tag-red':(w.priority||'').includes('P2')?'tag-amber':'tag-blue'}">${w.priority||'P3 低优先'}</span></td>
+      <td><b>${w.person}</b></td>
+      <td>${w.approver}</td>
+      <td style="color:${w.status==='已逾期'?'var(--red)':'var(--text)'}">${w.deadline}</td>
+      <td><span class="tag ${statusMap[w.status][1]}">${statusMap[w.status][0]}</span></td>
+      <td>${w.escalation>0?`<span class="tag ${escalationColor[w.escalation]}">${escalationLabel[w.escalation]}</span>`:'—'}</td>
+    </tr>
+  `).join('');
+}
+
+function resetFilters(){
+  document.getElementById('fProject').value='';
+  document.getElementById('fSource').value='';
+  document.getElementById('fStatus').value='';
+  document.getElementById('fPerson').value='';
+  renderList();
+}
+
+// ====== DETAIL ======
+function viewDetail(id){
+  const w=workOrders.find(o=>o.id===id);
+  if(!w) return;
+
+  // Determine flow step
+  const steps=['待派发','审批中','已派发','执行中','待验收','已闭环'];
+  let activeIdx=steps.indexOf(w.status);
+  if(activeIdx===-1) activeIdx=w.status==='已逾期'?3:0;
+
+  document.getElementById('detailTitle').textContent=w.id+' — '+w.title;
+  document.getElementById('detailActions').innerHTML=`
+    ${w.status==='待派发'?`<button class="btn btn-pri btn-sm" onclick="dispatchWO('${w.id}')">派发 → 发起OA审批</button>`:''}
+    ${w.status==='已派发'?`<button class="btn btn-pri btn-sm" onclick="startExec('${w.id}')">开始执行</button>`:''}
+    ${w.status==='执行中'?`<button class="btn btn-pri btn-sm" onclick="submitEvidence('${w.id}')">提交佐证 → 验收</button>`:''}
+    <button class="btn btn-out btn-sm" onclick="nav('list')">返回列表</button>
+  `;
+
+  document.getElementById('detailContent').innerHTML=`
+    <div class="card">
+      <div class="card-hd"><h3>审批流转</h3></div>
+      <div class="flow">
+        ${steps.map((s,i)=>{
+          let cls='';
+          if(i<activeIdx) cls='done';
+          else if(i===activeIdx) cls=w.status==='已逾期'?'warn':'active';
+          const icon=i<activeIdx?'✓':(i===activeIdx?(w.status==='已逾期'?'⚠':'●'):'○');
+          return (i>0?`<div class="flow-arrow ${i<=activeIdx?'done':''}"></div>`:'')+
+            `<div class="flow-step ${cls}"><div class="circle">${icon}</div><div class="label">${s}</div></div>`;
+        }).join('')}
+      </div>
+      ${w.oaId?`<div style="text-align:center;font-size:12px;color:var(--muted);margin-top:4px">关联OA审批单：<span class="clickable">${w.oaId}</span></div>`:''}
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="card-hd"><h3>基本信息</h3></div>
+        <div class="info-grid">
+          <div class="lbl">来源</div><div class="val"><span class="src-tag ${srcMap[w.source]}">${w.source}</span></div>
+          <div class="lbl">优先级</div><div class="val"><span class="tag ${(w.priority||'').includes('P1')?'tag-red':(w.priority||'').includes('P2')?'tag-amber':'tag-blue'}">${w.priority||'P3 低优先'}</span></div>
+          <div class="lbl">状态</div><div class="val"><span class="tag ${statusMap[w.status][1]}">${statusMap[w.status][0]}</span>${w.escalation>0?` <span class="tag ${escalationColor[w.escalation]}">${escalationLabel[w.escalation]}</span>`:''}</div>
+          <div class="lbl">项目</div><div class="val">${w.project}</div>
+          <div class="lbl">工单类型</div><div class="val">${w.type}</div>
+          <div class="lbl">责任人</div><div class="val"><b>${w.person}</b></div>
+          <div class="lbl">审批人</div><div class="val">${w.approver}</div>
+          <div class="lbl">截止日期</div><div class="val" style="color:${w.status==='已逾期'?'var(--red)':'var(--text)'}">${w.deadline}${w.status==='已逾期'?` <span class="tag tag-red">超期${w.overdueDays}天</span>`:''}</div>
+          <div class="lbl">创建时间</div><div class="val">${w.created}</div>
+          <div class="lbl">OA单号</div><div class="val">${w.oaId||'—'}</div>
+          <div class="lbl">完成时间</div><div class="val">${w.completed||'—'}</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-hd"><h3>时间线</h3></div>
+        <div class="timeline">
+          <div class="tl-item done"><div class="tl-title">工单创建</div><div class="tl-time">${w.created} · 来源：${w.source}</div></div>
+          ${w.oaId?`<div class="tl-item done"><div class="tl-title">OA审批发起</div><div class="tl-time">审批单号：${w.oaId}</div></div>`:''}
+          ${w.status==='已派发'||w.status==='执行中'||w.status==='待验收'||w.status==='已逾期'||w.status==='已闭环'?`<div class="tl-item done"><div class="tl-title">审批通过·已派发</div><div class="tl-time">责任人：${w.person}</div></div>`:''}
+          ${w.status==='执行中'||w.status==='待验收'||w.status==='已逾期'||w.status==='已闭环'?`<div class="tl-item ${w.status==='已逾期'?'warn':'done'}"><div class="tl-title">执行中</div><div class="tl-time">${w.status==='已逾期'?`<span style="color:var(--red)">已超期 ${w.overdueDays} 天！</span>`:'进行中'}</div></div>`:''}
+          ${w.status==='待验收'?`<div class="tl-item active"><div class="tl-title">待验收</div><div class="tl-time">等待审批人确认闭环</div></div>`:''}
+          ${w.status==='已闭环'?`<div class="tl-item done"><div class="tl-title">已闭环</div><div class="tl-time">${w.completed} · ${w.conclusion}</div></div>`:''}
+          ${w.escalation>=1?`<div class="tl-item warn"><div class="tl-title" style="color:var(--red)">${escalationLabel[w.escalation]}告警触发</div><div class="tl-time" style="color:var(--red)">超期${w.overdueDays}天自动升级</div></div>`:''}
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd"><h3>工单详情</h3></div>
+      <div class="form-row">
+        <div class="form-group form-full"><label>触发原因</label><div style="padding:8px;background:#f8fafc;border-radius:6px;font-size:13px">${w.reason||'—'}</div></div>
+        <div class="form-group form-full"><label>行动要求</label><div style="padding:8px;background:#f8fafc;border-radius:6px;font-size:13px">${w.action||'—'}</div></div>
+        ${w.conclusion?`<div class="form-group form-full"><label>执行结论</label><div style="padding:8px;background:#ecfdf5;border-radius:6px;font-size:13px">${w.conclusion}</div></div>`:''}
+        ${w.evidence?`<div class="form-group form-full"><label>执行佐证</label><div style="padding:8px;background:#f8fafc;border-radius:6px;font-size:13px">📎 ${w.evidence}</div></div>`:''}
+      </div>
+    </div>
+  `;
+
+  nav('detail');
+}
+
+// ====== ACTIONS ======
+function dispatchWO(id){
+  const w=workOrders.find(o=>o.id===id);
+  w.status='审批中';
+  w.oaId='OA-'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'-'+Math.floor(Math.random()*900+100);
+  toast('已发起钉钉OA审批 → 审批人：'+w.approver,'ok');
+  setTimeout(()=>viewDetail(id),500);
+}
+
+function startExec(id){
+  const w=workOrders.find(o=>o.id===id);
+  w.status='执行中';
+  toast('工单已开始执行，责任人：'+w.person,'ok');
+  setTimeout(()=>viewDetail(id),500);
+}
+
+function submitEvidence(id){
+  const w=workOrders.find(o=>o.id===id);
+  w.status='待验收';
+  w.completed=new Date().toISOString().slice(0,10);
+  toast('佐证已提交，等待审批人 '+w.approver+' 确认闭环','ok');
+  setTimeout(()=>viewDetail(id),500);
+}
+
+// ====== CREATE ======
+function submitWO(){
+  const project=document.getElementById('cfProject').value;
+  const type=document.getElementById('cfType').value;
+  const source=document.getElementById('cfSource').value;
+  const priority=document.getElementById('cfPriority').value;
+  const title=document.getElementById('cfTitle').value;
+  const reason=document.getElementById('cfReason').value;
+  const action=document.getElementById('cfAction').value;
+  const person=document.getElementById('cfPerson').value;
+  const approver=document.getElementById('cfApprover').value;
+  const deadline=document.getElementById('cfDeadline').value;
+
+  if(!title||!action||!deadline){toast('请填写必填字段','err');return;}
+
+  const newWO={
+    id:'RW-2026-'+String(workOrders.length+1).padStart(4,'0'),
+    source,project,title,type,reason,action,person,approver,deadline,
+    status:priority==='紧急'?'审批中':'待派发',
+    oaId:priority==='紧急'?'OA-'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'-'+Math.floor(Math.random()*900+100):'',
+    created:new Date().toISOString().slice(0,10),
+    completed:'',evidence:'',conclusion:'',
+    escalation:0,overdueDays:0
+  };
+  workOrders.unshift(newWO);
+  toast('工单已创建！'+(priority==='紧急'?' 已自动发起OA审批':''),'ok');
+  setTimeout(()=>nav('list'),800);
+}
+
+// ====== CLOSED ======
+function renderClosed(){
+  const closed=workOrders.filter(w=>w.status==='已闭环');
+  document.getElementById('closedBody').innerHTML=closed.map(w=>{
+    const created=new Date(w.created);
+    const completed=new Date(w.completed);
+    const days=Math.round((completed-created)/86400000);
+    return `
+    <tr>
+      <td><span class="clickable" onclick="viewDetail('${w.id}')">${w.id}</span></td>
+      <td><span class="src-tag ${srcMap[w.source]}">${w.source}</span></td>
+      <td>${w.project}</td>
+      <td>${w.title}</td>
+      <td>${w.person}</td>
+      <td>${w.created}</td>
+      <td>${w.completed}</td>
+      <td>${days} 天</td>
+      <td>${w.overdueDays>0?`<span class="tag tag-red">是 · 超${w.overdueDays}天</span>`:'<span class="tag tag-green">否</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ====== CREATE TABS ======
+function switchCreateTab(tab){
+  document.querySelectorAll('#page-create .tab').forEach(t=>t.classList.remove('active'));
+  event.target.classList.add('active');
+  document.querySelectorAll('#page-create .import-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('create-'+tab).classList.add('active');
+}
+
+// ====== MINUTES IMPORT ======
+function clickMinutesArea(){
+  const ta=document.getElementById('minutesInput');
+  const ph=document.getElementById('minutesPlaceholder');
+  const area=document.getElementById('minutesArea');
+  ta.focus();
+  if(ta.value) return;
+  ph.style.display='none';
+  area.classList.add('has-content');
+}
+function onMinutesInput(){
+  const ta=document.getElementById('minutesInput');
+  const ph=document.getElementById('minutesPlaceholder');
+  const area=document.getElementById('minutesArea');
+  const btn=document.getElementById('btnParseMinutes');
+  if(ta.value.trim()){
+    ph.style.display='none';
+    area.classList.add('has-content');
+    btn.disabled=false;
+    document.getElementById('parseHint').textContent='已输入 '+(ta.value.length>500?'500+':ta.value.length)+' 字符';
+  } else {
+    ph.style.display='';
+    area.classList.remove('has-content');
+    btn.disabled=true;
+    document.getElementById('parseHint').textContent='';
+  }
+}
+
+const defaultLLMSystemPrompt='[STAGE:workorder-extract] 你是新能源电站运维工单分析助手。从以下内容提取所有需要跟进的事项，输出为 JSON 数组。对每个工单返回：title(标题), type(纠偏|客户沟通|关系维护|隐患整改|非标任务|其他), priority(P1 紧急|P2 普通|P3 低优先), person(责任人), project(项目名称), deadline(YYYY-MM-DD), reason(触发原因), action(行动要求)。\n\n优先级规则：P1=安全/扣款/停运, P2=投诉/告警/决议/隐患, P3=计划/例行/培训/汇报。\n项目：通辽永兴风电场、瓮安建中HS300风电场、瓜州二期风电场、城投太旗光伏电站。\n责任人：王小宁、于鸿飞、高志强、明南辉、张雷雷、塔拉、明丹辉、郭宝记、陈立超、周涛。\n\n严格返回 JSON 数组：\n[{"title":"...","type":"...","priority":"...","person":"...","project":"...","deadline":"...","reason":"...","action":"..."}]';
+
+const defaultLLMPriorityKB=[
+  {priority:'P1 紧急',desc:'涉及人身安全、设备停运、合同扣款/罚款'},
+  {priority:'P2 普通',desc:'客户投诉、监视告警、判定会决议、安全隐患'},
+  {priority:'P3 低优先',desc:'年度计划、例行任务、培训汇报、文档盘点'},
+];
+const defaultLLMTypeKB=[
+  {type:'纠偏',desc:'指标偏差、考核超标、质量不达标'},
+  {type:'客户沟通',desc:'客户满意度、月度汇报、关系维护'},
+  {type:'关系维护',desc:'与业主、调度、供应商等外部关系维护'},
+  {type:'隐患整改',desc:'安全检查发现的隐患、缺陷整改'},
+  {type:'非标任务',desc:'年度计划内的非标准化任务'},
+  {type:'其他',desc:'其他无法归类的工单'},
+];
+
+function loadConfig(){
+  if(!localStorage.getItem('woRules')) localStorage.setItem('woRules',JSON.stringify(defaultRules));
+  if(!localStorage.getItem('woThreshold')) localStorage.setItem('woThreshold','5');
+  if(!localStorage.getItem('woTypeKB')) localStorage.setItem('woTypeKB',JSON.stringify(defaultTypeKB));
+  if(!localStorage.getItem('woPersonMap')) localStorage.setItem('woPersonMap',JSON.stringify(defaultPersonMap));
+  if(!localStorage.getItem('woPriorityRules')) localStorage.setItem('woPriorityRules',JSON.stringify(defaultPriorityRules));
+  if(!localStorage.getItem('woApprovalFlows')) localStorage.setItem('woApprovalFlows',JSON.stringify(defaultApprovalFlows));
+}
+loadConfig();
+
+// === Regex-based parseMinutes ===
+function parseMinutes(){
+  const text=document.getElementById('minutesInput').value.trim();
+  if(!text) return;
+
+  const rules=JSON.parse(localStorage.getItem('woRules')||JSON.stringify(defaultRules));
+  const threshold=parseInt(localStorage.getItem('woThreshold')||'5');
+
+  const lines=text.split('\n').filter(l=>l.trim());
+  const candidates=[];
+  let current=null;
+
+  for(const line of lines){
+    const trimmed=line.trim();
+    const match=trimmed.match(/^(\d+)[\.\、\)]\s*(.+)/)||trimmed.match(/^[-•]\s*(.+)/);
+    if(match){
+      if(current) candidates.push(current);
+      current={text:match[2]||match[1],score:0,reasons:[]};
+    }else if(current){
+      current.text+=' '+trimmed;
+    }
+  }
+  if(current) candidates.push(current);
+  if(candidates.length===0){
+    candidates.push(...lines.filter(l=>l.length>10).map(l=>({text:l,score:0,reasons:[]})));
+  }
+
+  for(const c of candidates){
+    for(const rule of rules){
+      if(!rule.enabled) continue;
+      const re=new RegExp(rule.pattern,'i');
+      if(re.test(c.text)){c.score+=rule.weight;c.reasons.push(rule.name);}
+    }
+  }
+  candidates.sort((a,b)=>b.score-a.score);
+
+  const container=document.getElementById('parseResults');
+  const highConf=candidates.filter(c=>c.score>=threshold);
+  const medConf=candidates.filter(c=>c.score>=Math.floor(threshold/2)&&c.score<threshold);
+
+  if(candidates.length===0){
+    container.innerHTML='<div class="card"><div style="text-align:center;padding:20px;color:var(--muted)">未识别到可创建工单的内容</div></div>';
+    return;
+  }
+
+  container.innerHTML=`
+    <div class="card">
+      <div class="card-hd"><h3>🔍 解析结果</h3><span class="count">识别 ${candidates.length} 条，高置信 ${highConf.length} 条</span></div>
+      <div style="margin-bottom:12px;font-size:12px;color:var(--muted);padding:8px 12px;background:#f8fafc;border-radius:6px">
+        判定阈值：<b>${threshold} 分</b> | 匹配规则：${rules.filter(r=>r.enabled).map(r=>r.name).join('、')}
+      </div>
+      ${highConf.length>0?`
+        <div style="margin-bottom:12px;font-weight:600;font-size:14px;color:var(--green)">✅ 高置信度（≥${threshold}分）— 建议创建工单</div>
+        ${highConf.map((c,i)=>renderParseCard(c,i,true)).join('')}
+      `:''}
+      ${medConf.length>0?`
+        <div style="margin:12px 0;font-weight:600;font-size:14px;color:var(--amber)">⚠️ 中置信度（${Math.floor(threshold/2)}-${threshold-1}分）— 需人工确认</div>
+        ${medConf.map((c,i)=>renderParseCard(c,i,false)).join('')}
+      `:''}
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-pri" onclick="batchCreateFromParse('high')">✅ 批量创建高置信度工单（${highConf.length}条）</button>
+        <button class="btn btn-out" onclick="document.getElementById('parseResults').innerHTML='';document.getElementById('minutesInput').value='';onMinutesInput()">清空重来</button>
+      </div>
+    </div>`;
+}
+
+function renderParseCard(c,idx,isHigh){
+  const personMatch=c.text.match(/(王小宁|于鸿飞|高志强|明南辉|张雷雷|塔拉|明丹辉|郭宝记|陈立超|周涛)/);
+  const projectMatch=c.text.match(/(通辽永兴|瓮安建中|瓜州二期|城投太旗|金水口|黑茨河|盐锅峡)/);
+  const scoreClass=c.score>=5?'high':(c.score>=3?'medium':'low');
+  const autoPriority=matchPriority(c.text,'','');
+  const priClass=autoPriority.includes('P1')?'tag-red':autoPriority.includes('P2')?'tag-amber':'tag-blue';
+  const autoDeadline=autoPriority==='P1 紧急'?d(1):(autoPriority==='P2 普通'?d(3):d(7));
+
+  return `
+    <div class="parse-card" id="parse-${idx}">
+      <div class="parse-header">
+        <span class="parse-score ${scoreClass}">${c.score} 分</span>
+        <span class="tag ${priClass}">${autoPriority}</span>
+        <span style="font-size:11px;color:var(--muted)">匹配：${c.reasons.join('、')||'无'}</span>
+      </div>
+      <div style="font-size:13px;margin-bottom:8px;line-height:1.6">${c.text}</div>
+      <div class="form-row">
+        <div class="form-group"><label>标题</label><input value="${c.text.slice(0,40)}${c.text.length>40?'...':''}" id="parse-title-${idx}"></div>
+        <div class="form-group"><label>项目</label><select id="parse-project-${idx}"><option>通辽永兴风电场</option><option>瓮安建中HS300风电场</option><option>瓜州二期风电场</option><option>城投太旗光伏电站</option></select></div>
+        <div class="form-group"><label>责任人</label><select id="parse-person-${idx}"><option>${personMatch?personMatch[1]:'王小宁'}</option><option>于鸿飞</option><option>高志强</option><option>明南辉</option><option>张雷雷</option><option>塔拉</option></select></div>
+        <div class="form-group"><label>截止日期</label><input type="date" id="parse-deadline-${idx}" value="${autoDeadline}"></div>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button class="btn btn-pri btn-sm" onclick="createFromParse(${idx})">创建此工单</button>
+        <button class="btn btn-out btn-sm" onclick="document.getElementById('parse-'+${idx}).style.display='none'">忽略</button>
+      </div>
+    </div>`;
+}
+
+function createFromParse(idx){
+  const title=document.getElementById('parse-title-'+idx).value;
+  const project=document.getElementById('parse-project-'+idx).value;
+  const person=document.getElementById('parse-person-'+idx).value;
+  const deadline=document.getElementById('parse-deadline-'+idx).value;
+  createWOFromImport({title,project,person,deadline,source:'听记导入'});
+  document.getElementById('parse-'+idx).style.opacity='.3';
+  toast('工单已创建：'+title,'ok');
+}
+
+function batchCreateFromParse(level){
+  const container=document.getElementById('parseResults');
+  const cards=container.querySelectorAll('.parse-card');
+  let count=0;
+  cards.forEach((card,i)=>{
+    if(card.style.display==='none') return;
+    const titleEl=document.getElementById('parse-title-'+i);
+    if(!titleEl) return;
+    createWOFromImport({title:titleEl.value,project:document.getElementById('parse-project-'+i).value,person:document.getElementById('parse-person-'+i).value,deadline:document.getElementById('parse-deadline-'+i).value,source:'听记导入'});
+    card.style.opacity='.3';count++;
+  });
+  toast(`批量创建 ${count} 条工单`,'ok');
+}
+
+// === Regex matchPriority ===
+function matchPriority(text,source,type){
+  const rules=JSON.parse(localStorage.getItem('woPriorityRules')||JSON.stringify(defaultPriorityRules));
+  const combined=(text||'')+' '+(source||'')+' '+(type||'');
+  for(const rule of rules){
+    const re=new RegExp(rule.pattern,'i');
+    if(re.test(combined)) return rule.priority;
+  }
+  return 'P3 低优先';
+}
+
+// === Regex renderConfig ===
+function renderConfig(){
+  const rules=JSON.parse(localStorage.getItem('woRules')||'[]');
+  const typeKB=JSON.parse(localStorage.getItem('woTypeKB')||'[]');
+  const personMap=JSON.parse(localStorage.getItem('woPersonMap')||'[]');
+  const threshold=parseInt(localStorage.getItem('woThreshold')||'5');
+
+  document.getElementById('ruleThreshold').value=threshold;
+  document.getElementById('thresholdVal').textContent=threshold;
+
+  document.getElementById('rulesList').innerHTML=rules.map((r,i)=>`
+    <div class="rule-item ${r.enabled?'':'disabled'}">
+      <span style="font-size:16px">${r.enabled?'✅':'⏸️'}</span>
+      <span class="rule-field">${r.name}</span>
+      <span class="rule-op">匹配正则</span>
+      <code class="rule-value" style="font-size:11px;background:#f0f4ff;padding:2px 6px;border-radius:4px">${r.pattern}</code>
+      <span class="rule-op">权重</span>
+      <input type="number" value="${r.weight}" min="1" max="5" style="width:50px;padding:4px;border:1px solid var(--border);border-radius:4px;text-align:center" onchange="updateRule(${i},'weight',parseInt(this.value))">
+      <div class="rule-actions">
+        <button class="btn btn-sm ${r.enabled?'btn-out':'btn-pri'}" onclick="toggleRule(${i})">${r.enabled?'停用':'启用'}</button>
+        <button class="btn btn-sm btn-out" onclick="editRule(${i})">编辑</button>
+        <button class="btn btn-sm btn-out" style="color:var(--red)" onclick="deleteRule(${i})">删除</button>
+      </div>
+    </div>
+  `).join('');
+
+  document.getElementById('typeKB').innerHTML=`
+    <table><thead><tr><th>类型</th><th>说明</th><th>默认审批人</th><th>默认优先级</th><th>操作</th></tr></thead>
+    <tbody>${typeKB.map((t,i)=>`
+      <tr><td><b>${t.type}</b></td><td>${t.desc}</td><td>${t.defaultApprover}</td><td>${t.defaultPriority}</td>
+        <td><button class="btn btn-out btn-sm" onclick="editTypeKB(${i})">编辑</button>
+            <button class="btn btn-out btn-sm" style="color:var(--red)" onclick="deleteTypeKB(${i})">删除</button></td></tr>`).join('')}</tbody></table>`;
+
+  document.getElementById('personMap').innerHTML=`
+    <table><thead><tr><th>项目</th><th>可选责任人</th><th>操作</th></tr></thead>
+    <tbody>${personMap.map((p,i)=>`
+      <tr><td><b>${p.project}</b></td><td>${p.persons.join('、')}</td>
+        <td><button class="btn btn-out btn-sm" onclick="editPersonMap(${i})">编辑</button>
+            <button class="btn btn-out btn-sm" style="color:var(--red)" onclick="deletePersonMap(${i})">删除</button></td></tr>`).join('')}</tbody></table>`;
+
+  const prRules=JSON.parse(localStorage.getItem('woPriorityRules')||'[]');
+  document.getElementById('priorityRulesBody').innerHTML=prRules.map((r,i)=>`
+    <tr><td class="text-center">${i+1}</td>
+      <td><code style="font-size:11px;background:#f0f4ff;padding:2px 6px;border-radius:4px">${r.pattern}</code>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${r.label}</div></td>
+      <td><span class="tag ${r.priority.includes('P1')?'tag-red':r.priority.includes('P2')?'tag-amber':'tag-blue'}">${r.priority}</span></td>
+      <td style="font-size:12px;color:var(--muted)">匹配到"${r.label}"时自动判定</td></tr>`).join('');
+
+  renderApprovalFlows();
+  renderBotGroups();
+}
+
+// === Regex rule management ===
+function updateRule(idx,key,value){
+  const rules=JSON.parse(localStorage.getItem('woRules'));rules[idx][key]=value;
+  localStorage.setItem('woRules',JSON.stringify(rules));renderConfig();
+}
+function toggleRule(idx){
+  const rules=JSON.parse(localStorage.getItem('woRules'));rules[idx].enabled=!rules[idx].enabled;
+  localStorage.setItem('woRules',JSON.stringify(rules));renderConfig();
+}
+function editRule(idx){
+  const rules=JSON.parse(localStorage.getItem('woRules'));const r=rules[idx];
+  const name=prompt('规则名称',r.name);if(!name) return;
+  const pattern=prompt('匹配正则',r.pattern);if(!pattern) return;
+  const weight=parseInt(prompt('权重(1-5)',r.weight));if(!weight) return;
+  rules[idx]={name,pattern,weight,enabled:r.enabled};
+  localStorage.setItem('woRules',JSON.stringify(rules));renderConfig();
+}
+function deleteRule(idx){
+  if(!confirm('确认删除？')) return;
+  const rules=JSON.parse(localStorage.getItem('woRules'));rules.splice(idx,1);
+  localStorage.setItem('woRules',JSON.stringify(rules));renderConfig();
+}
+function addRule(){
+  const name=prompt('规则名称','新规则');if(!name) return;
+  const pattern=prompt('匹配正则','');if(!pattern) return;
+  const rules=JSON.parse(localStorage.getItem('woRules'));
+  rules.push({name,pattern,weight:1,enabled:true});
+  localStorage.setItem('woRules',JSON.stringify(rules));renderConfig();toast('规则已添加','ok');
+}
+function addTypeKB(){
+  const type=prompt('类型名称','');if(!type) return;
+  const desc=prompt('说明','');const approver=prompt('默认审批人','金惠良');
+  const priority=prompt('默认优先级(普通/紧急)','普通');
+  const kb=JSON.parse(localStorage.getItem('woTypeKB'));
+  kb.push({type,desc:desc||'',defaultApprover:approver||'金惠良',defaultPriority:priority||'普通'});
+  localStorage.setItem('woTypeKB',JSON.stringify(kb));renderConfig();toast('类型已添加','ok');
+}
+function editTypeKB(idx){
+  const kb=JSON.parse(localStorage.getItem('woTypeKB'));const t=kb[idx];
+  const desc=prompt('说明',t.desc);const approver=prompt('默认审批人',t.defaultApprover);
+  const priority=prompt('默认优先级',t.defaultPriority);
+  if(desc!==null) t.desc=desc;if(approver) t.defaultApprover=approver;if(priority) t.defaultPriority=priority;
+  localStorage.setItem('woTypeKB',JSON.stringify(kb));renderConfig();
+}
+function deleteTypeKB(idx){
+  if(!confirm('确认删除？')) return;
+  const kb=JSON.parse(localStorage.getItem('woTypeKB'));kb.splice(idx,1);
+  localStorage.setItem('woTypeKB',JSON.stringify(kb));renderConfig();
+}
+function addPriorityRule(){
+  const pattern=prompt('匹配正则表达式','');if(!pattern) return;
+  const label=prompt('规则说明','');if(!label) return;
+  const priority=prompt('优先级(P1 紧急/P2 普通/P3 低优先)','P2 普通');
+  const rules=JSON.parse(localStorage.getItem('woPriorityRules'));
+  rules.push({id:Date.now(),pattern,label,priority:priority||'P2 普通'});
+  localStorage.setItem('woPriorityRules',JSON.stringify(rules));renderConfig();toast('优先级规则已添加','ok');
+}
+function resetPriorityRules(){
+  if(!confirm('恢复默认优先级规则？')) return;
+  localStorage.setItem('woPriorityRules',JSON.stringify(defaultPriorityRules));renderConfig();toast('已恢复默认','ok');
+}
+function saveConfig(){
+  const threshold=parseInt(document.getElementById('ruleThreshold').value);
+  localStorage.setItem('woThreshold',threshold);toast('配置已保存','ok');renderConfig();
+}
+function resetConfig(){
+  if(!confirm('恢复全部默认配置？')) return;
+  localStorage.setItem('woRules',JSON.stringify(defaultRules));
+  localStorage.setItem('woThreshold','5');
+  localStorage.setItem('woTypeKB',JSON.stringify(defaultTypeKB));
+  localStorage.setItem('woPersonMap',JSON.stringify(defaultPersonMap));
+  localStorage.setItem('woPriorityRules',JSON.stringify(defaultPriorityRules));
+  localStorage.setItem('woApprovalFlows',JSON.stringify(defaultApprovalFlows));
+  renderConfig();toast('已恢复默认配置','ok');
+}
+
+function loadDemoTable(){
+  const demoData=[
+    {title:'变桨系统备件采购跟踪',project:'通辽永兴风电场',person:'高志强',deadline:d(5),type:'非标任务',reason:'备件采购困难，需跟踪'},
+    {title:'2号SVG涉网试验完成',project:'通辽永兴风电场',person:'明南辉',deadline:d(10),type:'非标任务',reason:'判定会要求8月完成'},
+    {title:'功率预测月度修模',project:'城投太旗光伏电站',person:'明南辉',deadline:d(3),type:'纠偏',reason:'准确率不达标'},
+    {title:'客户月度汇报材料准备',project:'瓮安建中HS300风电场',person:'于鸿飞',deadline:d(7),type:'客户沟通',reason:'月度例行'},
+  ];
+  renderTablePreview(demoData);
+}
+
+function renderTablePreview(data){
+  document.getElementById('tablePreview').innerHTML=`
+    <div class="card">
+      <div class="card-hd"><h3>📋 表格预览</h3><span class="count">${data.length} 条记录</span></div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>标题</th><th>项目</th><th>责任人</th><th>截止日期</th><th>类型</th><th>触发原因</th></tr></thead>
+          <tbody>${data.map((r,i)=>`
+            <tr>
+              <td>${r.title}</td><td>${r.project}</td><td>${r.person}</td><td>${r.deadline}</td><td>${r.type||'—'}</td><td>${r.reason||'—'}</td>
+            </tr>`).join('')}</tbody></table></div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-pri" onclick="batchCreateFromTable(${JSON.stringify(data).replace(/"/g,'&quot;')})">✅ 批量创建全部（${data.length}条）</button>
+        <button class="btn btn-out" onclick="document.getElementById('tablePreview').innerHTML=''">清空</button>
+      </div>
+    </div>`;
+}
+
+function batchCreateFromTable(data){
+  let count=0;
+  data.forEach(r=>{
+    createWOFromImport({...r,source:'表格导入'});
+    count++;
+  });
+  toast(`批量创建 ${count} 条工单`,'ok');
+  document.getElementById('tablePreview').innerHTML='';
+}
+
+function loadTable(){
+  toast('请使用「加载示例数据」体验，或输入真实AI表格ID后调用 dws sheet API','ok');
+}
+
+// ====== SHARED IMPORT CREATOR ======
+function createWOFromImport(opt){
+  const priority=matchPriority(opt.title+' '+opt.reason,opt.source,opt.type);
+  const newWO={
+    id:'RW-2026-'+String(workOrders.length+1).padStart(4,'0'),
+    source:opt.source||'手动',
+    project:opt.project||'通辽永兴风电场',
+    title:opt.title||'未命名工单',
+    type:opt.type||'其他',
+    reason:opt.reason||'',
+    action:opt.title||'',
+    person:opt.person||'王小宁',
+    approver:opt.approver||(priority==='P1 紧急'?'贾兴威':'金惠良'),
+    deadline:priority==='P1 紧急'?d(1):(priority==='P2 普通'?d(3):d(7)),
+    priority:priority,
+    status:priority==='P1 紧急'?'审批中':'待派发',
+    oaId:priority==='P1 紧急'?'OA-'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'-'+Math.floor(Math.random()*900+100):'',
+    created:new Date().toISOString().slice(0,10),
+    completed:'',evidence:'',conclusion:'',
+    escalation:0,overdueDays:0
+  };
+  workOrders.unshift(newWO);
+}
+
+const defaultRules=[
+  {name:'含责任人',pattern:'(王小宁|于鸿飞|高志强|明南辉|张雷雷|塔拉|明丹辉|郭宝记|陈立超|周涛|负责|责任人)',weight:3,enabled:true},
+  {name:'含截止时间',pattern:'(\\d+月\\d+[日号]|\\d+[\\/\\-]\\d+|截止|期限|ddl|deadline|完成|前)',weight:2,enabled:true},
+  {name:'含行动动词',pattern:'(完成|跟踪|跟进|排查|协调|整改|检查|提交|上报|处理|修复|采购|组织|开展|编制|汇报|确认)',weight:2,enabled:true},
+  {name:'含项目名',pattern:'(通辽永兴|瓮安建中|瓜州二期|城投太旗|金水口|黑茨河|盐锅峡|风电场|光伏)',weight:1,enabled:true},
+  {name:'含偏差/问题',pattern:'(偏差|超标|异常|滞后|不达标|未完成|故障|缺陷|隐患|问题|风险|投诉)',weight:2,enabled:true},
+  {name:'含会议决议',pattern:'(判定会|会议|决议|决定|要求|安排)',weight:1,enabled:true},
+  {name:'含审批/流程',pattern:'(审批|流程|工单|闭环|验收|确认)',weight:1,enabled:true},
+];
+
+const defaultTypeKB=[
+  {type:'纠偏',desc:'指标偏差、考核超标、质量不达标等需要纠正的问题',defaultApprover:'金惠良',defaultPriority:'普通'},
+  {type:'客户沟通',desc:'客户满意度、月度汇报、关系维护等对客事项',defaultApprover:'贾兴威',defaultPriority:'普通'},
+  {type:'关系维护',desc:'与业主、调度、供应商等外部关系维护',defaultApprover:'陈亮',defaultPriority:'普通'},
+  {type:'隐患整改',desc:'安全检查发现的隐患、缺陷整改',defaultApprover:'金惠良',defaultPriority:'紧急'},
+  {type:'非标任务',desc:'年度计划内的非标准化任务',defaultApprover:'陈亮',defaultPriority:'普通'},
+  {type:'其他',desc:'其他无法归类的工单',defaultApprover:'金惠良',defaultPriority:'普通'},
+];
+
+const defaultPersonMap=[
+  {project:'通辽永兴风电场',persons:['王小宁','于鸿飞','高志强','明南辉','明丹辉','张雷雷','陈立超','周涛','塔拉']},
+  {project:'瓮安建中HS300风电场',persons:['于鸿飞','塔拉','明南辉']},
+  {project:'瓜州二期风电场',persons:['高志强','张雷雷','王小宁']},
+  {project:'城投太旗光伏电站',persons:['张雷雷','明南辉','塔拉']},
+];
+
+const defaultPriorityRules=[
+  {id:1,pattern:'(安全|伤亡|事故|火灾|爆炸|触电|坠落|人身|生命)',label:'涉及安全/人身风险',priority:'P1 紧急'},
+  {id:2,pattern:'(扣款|罚款|考核超标|违约|赔偿|合同风险|双细则超标|电价损失)',label:'涉及合同扣款/考核罚款',priority:'P1 紧急'},
+  {id:3,pattern:'(停运|停机|跳闸|脱网|断网|全站停电|大面积故障)',label:'涉及设备停运/全站故障',priority:'P1 紧急'},
+  {id:4,pattern:'(客户投诉|业主不满|满意度.*低|投诉|纠纷)',label:'客户投诉/业主不满',priority:'P2 普通'},
+  {id:5,pattern:'(监视告警|偏差.*超|指标.*异常|效率.*低|PR.*降|功率.*低)',label:'监视告警触发',priority:'P2 普通'},
+  {id:6,pattern:'(判定会|会议决议|领导交办|贾总|陈亮)',label:'判定会决议/领导交办',priority:'P2 普通'},
+  {id:7,pattern:'(隐患|缺陷|整改|检查.*未|排查)',label:'安全隐患/缺陷整改',priority:'P2 普通'},
+  {id:8,pattern:'(年度计划|月度|季度|例行|定期|日常)',label:'年度计划/例行任务',priority:'P3 低优先'},
+  {id:9,pattern:'(培训|汇报|报告|统计|盘点|归档)',label:'培训/汇报/文档类',priority:'P3 低优先'},
+];
+
+
+function renderApprovalFlows(){
+  const flows=JSON.parse(localStorage.getItem('woApprovalFlows'));
+  const container=document.getElementById('approvalFlows');
+  if(!container) return;
+  container.innerHTML=Object.entries(flows).map(([name,flow])=>{
+    const cls=name.includes('P1')?'p1':name.includes('P2')?'p2':'p3';
+    const badge=name.includes('P1')?'自动发起·电话DING':name.includes('P2')?'待派发·应用DING':'待派发·工作通知';
+    return `
+    <div class="af-card ${cls}">
+      <div class="af-header">
+        <h4>${name.includes('P1')?'🔴':name.includes('P2')?'🟠':'🔵'} ${name}</h4>
+        <span class="af-badge">${badge}</span>
+      </div>
+      <div class="af-flow">
+        ${flow.nodes.map((n,i)=>`
+          ${i>0?`<div class="af-connector"><div class="line"></div><div class="arrow"></div><div class="label">${n.type==='approval'?'审批通过 ↓':'↓'}</div></div>`:''}
+          <div class="af-node" ondblclick="editFlowNode('${name}',${i})" title="双击编辑节点">
+            <div class="node-title">${n.title}</div>
+            <div class="node-sub">${n.sub}</div>
+            <span class="node-type ${n.type}">${n.type==='start'?'起始':n.type==='exec'?'执行':n.type==='approval'?'审批':'结束'}</span>
+            ${n.timeout?`<div style="font-size:10px;color:var(--muted);margin-top:2px">⏱ 超时：${n.timeout}天</div>`:''}
+          </div>
+        `).join('')}
+        <div class="af-add-btn" onclick="addFlowNode('${name}')">＋ 添加审批节点</div>
+      </div>
+      <div style="margin-top:10px;font-size:11px;color:var(--muted);text-align:center;padding:6px;background:#f8fafc;border-radius:6px">
+        ⚡ 节点超时升级：${flow.escalation.timeout}h → ${flow.escalation.action} → ${flow.escalation.target}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function editFlowNode(flowName,nodeIdx){
+  const flows=JSON.parse(localStorage.getItem('woApprovalFlows'));
+  const node=flows[flowName].nodes[nodeIdx];
+  if(node.type==='start'||node.type==='end'){toast('起始/结束节点不可编辑');return;}
+  const title=prompt('节点名称',node.title);
+  if(!title) return;
+  const sub=prompt('节点说明',node.sub);
+  const role=prompt('审批人/角色',node.role);
+  const timeout=parseFloat(prompt('超时时间(天)',node.timeout||''));
+  node.title=title; node.sub=sub||''; node.role=role||''; node.timeout=timeout||0;
+  localStorage.setItem('woApprovalFlows',JSON.stringify(flows));
+  renderApprovalFlows();
+  toast('节点已更新','ok');
+}
+
+function addFlowNode(flowName){
+  const flows=JSON.parse(localStorage.getItem('woApprovalFlows'));
+  const title=prompt('新审批节点名称','新审批人');
+  if(!title) return;
+  const role=prompt('审批人姓名','');
+  // Insert before the end node
+  const endIdx=flows[flowName].nodes.findIndex(n=>n.type==='end');
+  const newNode={id:'node-'+Date.now(),type:'approval',title,sub:'审核执行结果',role:role||'',timeout:1};
+  flows[flowName].nodes.splice(endIdx,0,newNode);
+  localStorage.setItem('woApprovalFlows',JSON.stringify(flows));
+  renderApprovalFlows();
+  toast('审批节点已添加','ok');
+}
+
+function resetApprovalFlows(){
+  if(!confirm('恢复默认审批流？自定义修改将丢失。')) return;
+  localStorage.setItem('woApprovalFlows',JSON.stringify(defaultApprovalFlows));
+  renderApprovalFlows();
+  toast('已恢复默认','ok');
+}
+
+function saveApprovalFlows(){
+  toast('审批流已保存','ok');
+  renderApprovalFlows();
+}
+
+
+// ====== INIT ======
+document.getElementById('cfDeadline').value=d(7);
+renderDashboard();
+renderList();
+renderClosed();
+</script>
+</body>
+</html>

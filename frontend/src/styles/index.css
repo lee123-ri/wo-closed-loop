@@ -1,0 +1,66 @@
+:root {
+  /* 信息化平台主色 */
+  --brand: #0052d9;
+  --brand-dark: #003cab;
+  --brand-light: #e8f0ff;
+  --bg: #f5f7fa;
+  --card: #fff;
+  --text: #1c1f23;
+  --muted: #8c8c8c;
+  --border: #e7e7e7;
+  --green: #2ba471;
+  --amber: #e37318;
+  --red: #d54941;
+  --sidebar-bg: #1d2129;
+
+  /* —— 字号比例（全站统一，禁止散用其他值）—— */
+  --fs-display: 28px;   /* 统计大数字 */
+  --fs-h1: 20px;        /* 页面标题 */
+  --fs-h2: 15px;        /* 卡片标题 */
+  --fs-body: 13px;      /* 正文 */
+  --fs-meta: 12px;      /* 次要/meta/表格 */
+  --fs-tag: 11px;       /* 标签/极小 */
+  --fs-num: 20px;       /* KPI 数字 */
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body, #app { height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--fs-body);
+  line-height: 1.6;
+}
+a { color: inherit; text-decoration: none; }
+
+/* TDesign 主题覆盖 */
+:root {
+  --td-brand-color: #0052d9;
+  --td-brand-color-hover: #003cab;
+  --td-brand-color-focus: #0052d9;
+  --td-brand-color-active: #003cab;
+  --td-brand-color-light: #e8f0ff;
+}
+
+/* 统一页面标题 */
+.page-header h1 { font-size: var(--fs-h1); font-weight: 700; }
+.page-header .meta { color: var(--muted); font-size: var(--fs-meta); margin-top: 4px; }
+
+/* 通用 tag */
+.tag { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: var(--fs-tag); font-weight: 500; white-space: nowrap; line-height: 1.6; }
+.tag-blue { background: var(--brand-light); color: var(--brand); }
+.tag-green { background: #e8f7ef; color: var(--green); }
+.tag-amber { background: #fdf0e3; color: var(--amber); }
+.tag-red { background: #fbe5e3; color: var(--red); }
+.tag-gray { background: #f0f0f0; color: #8c8c8c; }
+.src-plan { background: #dbeafe; color: #1e40af; }
+.src-alert { background: #fee2e2; color: #991b1b; }
+.src-meeting { background: #fef3c7; color: #92400e; }
+.src-manual { background: #e0e7ff; color: #3730a3; }
+
+/* 5 等分卡片通用行（替代 t-col，避免 12 栅格无法整除 5） */
+.equal-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+.equal-row-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+@media (max-width: 900px) { .equal-row, .equal-row-4 { grid-template-columns: repeat(2, 1fr); } }
+

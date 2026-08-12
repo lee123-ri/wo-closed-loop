@@ -1,0 +1,171 @@
+# K8s 部署清单（ACK 托管集群）
+
+# 后端 Deployment + Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wo-backend
+  labels: { app: wo-backend }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: wo-backend }
+  template:
+    metadata:
+      labels: { app: wo-backend }
+    spec:
+      containers:
+        - name: backend
+          image: registry.cn-hangzhou.aliyuncs.com/wo/wo-backend:latest
+          ports: [{ containerPort: 8000 }]
+          envFrom:
+            - secretRef: { name: wo-secrets }
+          resources:
+            requests: { cpu: "250m", memory: "512Mi" }
+            limits: { cpu: "1000m", memory: "1Gi" }
+          livenessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 10
+          readinessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wo-backend
+spec:
+  selector: { app: wo-backend }
+  ports: [{ port: 8000, targetPort: 8000 }]
+---
+# 前端 Deployment + Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wo-frontend
+  labels: { app: wo-frontend }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: wo-frontend }
+  template:
+    metadata:
+      labels: { app: wo-frontend }
+    spec:
+      containers:
+        - name: frontend
+          image: registry.cn-hangzhou.aliyuncs.com/wo/wo-frontend:latest
+          ports: [{ containerPort: 80 }]
+          resources:
+            requests: { cpu: "100m", memory: "128Mi" }
+            limits: { cpu: "500m", memory: "256Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wo-frontend
+spec:
+  selector: { app: wo-frontend }
+  ports: [{ port: 80, targetPort: 80 }]
+---
+# Celery Worker（异步通知、OA 发起）
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wo-worker
+  labels: { app: wo-worker }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: wo-worker }
+  template:
+    metadata:
+      labels: { app: wo-worker }
+    spec:
+      containers:
+        - name: worker
+          image: registry.cn-hangzhou.aliyuncs.com/wo/wo-backend:latest
+          command: ["celery", "-A", "app.celery_app", "worker", "-l", "info", "--concurrency=4"]
+          envFrom:
+            - secretRef: { name: wo-secrets }
+          env:
+            - name: APP_ENV
+              value: "production"
+          resources:
+            requests: { cpu: "200m", memory: "256Mi" }
+            limits: { cpu: "1000m", memory: "1Gi" }
+          # 无需就绪探针，Celery 自带健康检查
+---
+# Celery Beat（定时任务：SLA 扫描、升级扫描）
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wo-scheduler
+  labels: { app: wo-scheduler }
+spec:
+  replicas: 1   # beat 必须单实例，避免重复调度
+  selector:
+    matchLabels: { app: wo-scheduler }
+  template:
+    metadata:
+      labels: { app: wo-scheduler }
+    spec:
+      containers:
+        - name: scheduler
+          image: registry.cn-hangzhou.aliyuncs.com/wo/wo-backend:latest
+          command: ["celery", "-A", "app.celery_app", "beat", "-l", "info"]
+          envFrom:
+            - secretRef: { name: wo-secrets }
+          env:
+            - name: APP_ENV
+              value: "production"
+          resources:
+            requests: { cpu: "100m", memory: "128Mi" }
+            limits: { cpu: "500m", memory: "256Mi" }
+---
+# 配置项：外部化（钉钉 key、DB 连接等敏感信息进 Secret）
+apiVersion: v1
+kind: Secret
+metadata:
+  name: wo-secrets
+type: Opaque
+stringData:
+  # 真实部署时用 kubectl create secret 或 sealed-secrets 注入
+  DATABASE_URL: "postgresql+psycopg://wo:CHANGE_ME@rds-host:5432/wo_closed_loop"
+  REDIS_URL: "redis://tair-host:6379/0"
+  JWT_SECRET: "CHANGE_ME_TO_RANDOM_64_CHARS"
+  DINGTALK_APP_KEY: ""
+  DINGTALK_APP_SECRET: ""
+  DINGTALK_AGENT_ID: ""
+  DINGTALK_OA_TEMPLATE_ID: ""
+  DINGTALK_CORP_ID: ""
+  DASHSCOPE_API_KEY: ""
+  OSS_ENDPOINT: ""
+  OSS_BUCKET: ""
+  OSS_ACCESS_KEY_ID: ""
+  OSS_ACCESS_KEY_SECRET: ""
+  CORS_ORIGINS: "https://wo.example.com"
+---
+# Ingress（对接 ALB）
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wo-ingress
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/certificate-id: wo-tls-cert
+spec:
+  rules:
+    - host: wo.example.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service: { name: wo-backend, port: { number: 8000 } }
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: wo-frontend, port: { number: 80 } }

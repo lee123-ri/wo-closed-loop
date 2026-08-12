@@ -1,0 +1,37 @@
+# 系统级配置（启动时加载，环境变量优先）
+# 业务级配置（项目/人员/工单类型/优先级规则/审批流/通知策略/SLA）
+# 存数据库 config 表，通过管理后台编辑，不写死在此文件
+
+system:
+  app_name: 软工单闭环管理系统
+  timezone: Asia/Shanghai
+  date_format: YYYY-MM-DD
+  default_page_size: 20
+  max_upload_mb: 50
+  session_timeout_minutes: 720
+
+# 默认数据（首次初始化种子数据用，后续以数据库为准）
+seed:
+  # 工单来源
+  sources:
+    - { code: plan,    name: 年度计划, color: "#2563eb" }
+    - { code: alert,   name: 监视告警, color: "#dc2626" }
+    - { code: meeting, name: 判定会,   color: "#d97706" }
+    - { code: manual,  name: 手动,     color: "#7c3aed" }
+
+  # 工单状态机（code -> 允许的下一状态 code 列表）
+  statuses:
+    pending:   { name: 待派发, color: gray,   next: [approving] }
+    approving: { name: 审批中, color: blue,   next: [dispatched, rejected] }
+    dispatched: { name: 已派发, color: amber,  next: [executing] }
+    executing: { name: 执行中, color: blue,   next: [verifying, overdue] }
+    verifying: { name: 待验收, color: amber,  next: [closed, executing] }
+    closed:    { name: 已闭环, color: green,  next: [] }
+    overdue:   { name: 已逾期, color: red,    next: [executing, verifying, closed] }
+    rejected:  { name: 已驳回, color: gray,   next: [] }
+
+  # SLA 定义（按优先级，截止天数）
+  sla:
+    P1: { deadline_days: 1, warn_before_hours: 4,  escalate_hours: 24 }
+    P2: { deadline_days: 3, warn_before_hours: 24, escalate_hours: 72 }
+    P3: { deadline_days: 7, warn_before_hours: 48, escalate_hours: 168 }

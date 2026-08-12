@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>软工单 — 提醒·告警·惩罚 三层机制</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:#f8f9fb;color:#1a1a2e;padding:24px;line-height:1.6}
+.container{max-width:1100px;margin:0 auto}
+h1{font-size:24px;margin-bottom:4px}
+.subtitle{color:#6b7280;font-size:14px;margin-bottom:28px}
+
+/* 三层卡片 */
+.layers{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-bottom:28px}
+@media(max-width:800px){.layers{grid-template-columns:1fr}}
+.layer{background:#fff;border-radius:12px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,.06);border-top:4px solid #d1d5db}
+.layer.l1{border-top-color:#2563eb}
+.layer.l2{border-top-color:#d97706}
+.layer.l3{border-top-color:#dc2626}
+.layer .icon{font-size:36px;margin-bottom:8px}
+.layer h3{font-size:18px;margin-bottom:4px}
+.layer .tagline{font-size:13px;color:#6b7280;margin-bottom:16px}
+.layer .item{margin-bottom:12px;padding:10px 14px;background:#f8f9fb;border-radius:8px;font-size:13px}
+.layer .item .item-title{font-weight:700;margin-bottom:2px}
+.layer .item .item-desc{color:#6b7280;font-size:12px}
+
+/* 时间线总览 */
+.timeline{background:#fff;border-radius:12px;padding:28px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.timeline h2{font-size:18px;margin-bottom:20px}
+.tl-track{position:relative;padding:0 0 0 120px}
+.tl-track::before{content:'';position:absolute;left:50px;top:0;bottom:0;width:3px;background:#e5e7eb;border-radius:2px}
+.tl-node{position:relative;margin-bottom:24px;display:flex;align-items:flex-start;gap:16px}
+.tl-node::before{content:'';position:absolute;left:-74px;top:4px;width:14px;height:14px;border-radius:50%;border:3px solid #d1d5db;background:#fff;z-index:1}
+.tl-node.blue::before{border-color:#2563eb;background:#2563eb}
+.tl-node.amber::before{border-color:#d97706;background:#d97706}
+.tl-node.red::before{border-color:#dc2626;background:#dc2626}
+.tl-node .tl-time{position:absolute;left:0;width:44px;text-align:right;font-size:11px;color:#9ca3af;font-weight:600}
+.tl-node .tl-content{background:#f8f9fb;border-radius:8px;padding:14px 18px;flex:1}
+.tl-node .tl-content .tl-title{font-weight:700;font-size:14px;margin-bottom:4px}
+.tl-node .tl-content .tl-detail{font-size:12px;color:#6b7280}
+.tl-node .tl-content .tl-who{font-size:11px;color:#9ca3af;margin-top:4px}
+
+/* 惩罚机制详解 */
+.punish-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:20px}
+@media(max-width:600px){.punish-grid{grid-template-columns:1fr}}
+.punish-card{background:#fff;border:1px solid #fecaca;border-radius:10px;padding:18px}
+.punish-card h4{font-size:14px;color:#dc2626;margin-bottom:8px}
+.punish-card p{font-size:13px;color:#4b5563}
+
+/* 对比表 */
+table{width:100%;border-collapse:collapse;font-size:13px;margin:16px 0}
+th{background:#f0f4ff;padding:10px 14px;text-align:left;font-weight:600;border-bottom:2px solid #d1d5db;font-size:12px;color:#4b5563}
+td{padding:10px 14px;border-bottom:1px solid #e5e7eb}
+.tag{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600}
+.t-blue{background:#eff6ff;color:#2563eb}
+.t-amber{background:#fffbeb;color:#d97706}
+.t-red{background:#fef2f2;color:#dc2626}
+
+.card{background:#fff;border-radius:12px;padding:24px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.card h2{font-size:18px;margin-bottom:16px}
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>软工单闭环 · 提醒 → 告警 → 惩罚 三层机制</h1>
+<div class="subtitle">工单派了不管用？三层递进，确保"事事有回音"</div>
+
+<!-- ====== 三层总览 ====== -->
+<div class="layers">
+  <div class="layer l1">
+    <div class="icon">🔔</div>
+    <h3>第一层 · 提醒</h3>
+    <div class="tagline">确保"知道"</div>
+    <div class="item">
+      <div class="item-title">OA 审批通知</div>
+      <div class="item-desc">审批通过后，钉钉自动推送工作通知给责任人</div>
+    </div>
+    <div class="item">
+      <div class="item-title">群内 @责任人</div>
+      <div class="item-desc">机器人在项目群公开 @责任人，群内可见，形成同伴压力</div>
+    </div>
+    <div class="item">
+      <div class="item-title">面板待办红点</div>
+      <div class="item-desc">工作台待办列表置顶，未读数实时更新</div>
+    </div>
+    <div class="item">
+      <div class="item-title">DING 电话提醒</div>
+      <div class="item-desc">紧急工单（红色优先级）自动发 DING，电话强提醒</div>
+    </div>
+  </div>
+
+  <div class="layer l2">
+    <div class="icon">⚠️</div>
+    <h3>第二层 · 告警</h3>
+    <div class="tagline">确保"重视"</div>
+    <div class="item">
+      <div class="item-title">截止前 24h 预警</div>
+      <div class="item-desc">工作通知 + 群消息，提醒责任人即将到期</div>
+    </div>
+    <div class="item">
+      <div class="item-title">超期 24h 升级</div>
+      <div class="item-desc">群内 @责任人 + 抄送审批人，面板红色标记</div>
+    </div>
+    <div class="item">
+      <div class="item-title">超期 72h 上报</div>
+      <div class="item-desc">自动升级到审批人的上级，群公告通报</div>
+    </div>
+    <div class="item">
+      <div class="item-title">面板逾期专区</div>
+      <div class="item-desc">所有逾期工单在工作台顶部红色专区置顶，领导一眼可见</div>
+    </div>
+  </div>
+
+  <div class="layer l3">
+    <div class="icon">🚫</div>
+    <h3>第三层 · 问责</h3>
+    <div class="tagline">确保"闭环"</div>
+    <div class="item">
+      <div class="item-title">逾期自动记录</div>
+      <div class="item-desc">系统记录超期天数、原因，不可删除，作为考核依据</div>
+    </div>
+    <div class="item">
+      <div class="item-title">月度统计排名</div>
+      <div class="item-desc">每人闭环率、平均响应时间、逾期次数，自动排名</div>
+    </div>
+    <div class="item">
+      <div class="item-title">管理群周报</div>
+      <div class="item-desc">每周汇总逾期+未闭环工单，自动发管理群，贾总可见</div>
+    </div>
+    <div class="item">
+      <div class="item-title">积压熔断</div>
+      <div class="item-desc">同一责任人超过 5 个未闭环工单，暂停派发新工单</div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== 时间线 ====== -->
+<div class="timeline">
+  <h2>📋 一条工单的完整生命周期（从派发到闭环）</h2>
+  <div class="tl-track">
+    <div class="tl-node blue">
+      <div class="tl-time">T+0</div>
+      <div class="tl-content">
+        <div class="tl-title">🔔 工单派发 — 提醒启动</div>
+        <div class="tl-detail">审批通过 → OA 自动通知责任人 → 机器人同步在项目群 @责任人：「王小宁，通辽永兴-变桨系统技改跟踪，请于 8/15 前完成」</div>
+        <div class="tl-who">执行：OA系统 + 群机器人（自动）</div>
+      </div>
+    </div>
+    <div class="tl-node blue">
+      <div class="tl-time">T+1d</div>
+      <div class="tl-content">
+        <div class="tl-title">🔔 24h 未读提醒</div>
+        <div class="tl-detail">若责任人未读工单消息，再次推送工作通知。面板待办列表持续显示。</div>
+        <div class="tl-who">执行：面板定时检查 + 推送（自动）</div>
+      </div>
+    </div>
+    <div class="tl-node amber">
+      <div class="tl-time">截止-24h</div>
+      <div class="tl-content">
+        <div class="tl-title">⚠️ 到期预警 — 告警启动</div>
+        <div class="tl-detail">工作通知：「通辽永兴-变桨系统技改跟踪 将于明天截止，请尽快完成并上传佐证」。群内同步提醒。</div>
+        <div class="tl-who">执行：面板定时检查截止日期（自动）</div>
+      </div>
+    </div>
+    <div class="tl-node amber">
+      <div class="tl-time">截止+24h</div>
+      <div class="tl-content">
+        <div class="tl-title">⚠️ 超期升级 — 抄送审批人</div>
+        <div class="tl-detail">群内 @责任人 + @审批人：「已超期 1 天」。面板工单状态变为红色「已逾期」，进入逾期专区。</div>
+        <div class="tl-who">执行：面板 + 群机器人（自动）</div>
+      </div>
+    </div>
+    <div class="tl-node red">
+      <div class="tl-time">截止+72h</div>
+      <div class="tl-content">
+        <div class="tl-title">🚫 三级上报 — 问责启动</div>
+        <div class="tl-detail">自动升级到审批人的上级领导。群公告：「以下工单超期 3 天未闭环，已上报」。同时计入月度逾期统计。</div>
+        <div class="tl-who">执行：面板自动升级 + 群公告（自动）</div>
+      </div>
+    </div>
+    <div class="tl-node red">
+      <div class="tl-time">每周一</div>
+      <div class="tl-content">
+        <div class="tl-title">📊 管理群周报</div>
+        <div class="tl-detail">机器人自动汇总：「本周逾期工单 3 条，未闭环工单 12 条。逾期最多：王小宁（2条）。闭环率最低：通辽永兴（60%）」</div>
+        <div class="tl-who">执行：面板统计 + 群机器人（自动）</div>
+      </div>
+    </div>
+    <div class="tl-node red">
+      <div class="tl-time">每月1日</div>
+      <div class="tl-content">
+        <div class="tl-title">📊 月度考核数据</div>
+        <div class="tl-detail">自动生成每人绩效数据：闭环率、平均响应天数、逾期次数、超期总天数。作为月度考核输入。</div>
+        <div class="tl-who">执行：面板统计导出（自动）</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ====== 惩罚机制细化 ====== -->
+<div class="card">
+  <h2>🚫 "惩罚"怎么落地 — 五个可执行机制</h2>
+  <div class="punish-grid">
+    <div class="punish-card">
+      <h4>① 逾期留痕，不可消除</h4>
+      <p>每一条逾期记录永久保留在工单历史中，不因后续闭环而清除。面板"闭环记录"页保留完整逾期字段，作为审计依据。</p>
+    </div>
+    <div class="punish-card">
+      <h4>② 月度排名，群内公示</h4>
+      <p>每月 1 日自动生成排名表，发管理群。列：姓名、闭环率、平均响应天数、逾期次数。排名末位自然形成压力。</p>
+    </div>
+    <div class="punish-card">
+      <h4>③ 积压熔断，限制派发</h4>
+      <p>同一责任人未闭环工单 ≥ 5 个时，新工单无法派发给该人。系统提示「该责任人积压过多，请先清理存量或升级处理」。</p>
+    </div>
+    <div class="punish-card">
+      <h4>④ 三级上报，逐级加压</h4>
+      <p>超期 72h 自动抄送上级领导。若上级领导也超期不处理，继续上报。最终可到贾总层面。</p>
+    </div>
+    <div class="punish-card">
+      <h4>⑤ 与考核挂钩</h4>
+      <p>月度导出"工单闭环绩效数据"，包含闭环率、逾期次数、超期天数。可直接作为月度考核评分输入，与绩效工资关联。</p>
+    </div>
+    <div class="punish-card">
+      <h4>⑥ 群通报，公开施压</h4>
+      <p>超期 72h 的工单，机器人在管理群（含贾总、陈亮等）发公告，公开项目名+责任人+超期天数。公开透明本身就是最强的约束。</p>
+    </div>
+  </div>
+</div>
+
+<!-- ====== 技术实现对照 ====== -->
+<div class="card">
+  <h2>🔧 三层机制的技术实现</h2>
+  <table>
+    <tr><th style="width:100px">机制</th><th>触发条件</th><th>实现方式</th><th>开发量</th></tr>
+    <tr>
+      <td><span class="tag t-blue">OA 通知</span></td>
+      <td>审批通过</td>
+      <td>OA 系统自带，无需开发</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <td><span class="tag t-blue">群 @通知</span></td>
+      <td>审批通过 + 超期</td>
+      <td><code>dws chat +send-to-group</code> @责任人</td>
+      <td>低</td>
+    </tr>
+    <tr>
+      <td><span class="tag t-blue">DING 提醒</span></td>
+      <td>紧急工单</td>
+      <td><code>dws ding</code> 发送 DING 消息</td>
+      <td>低</td>
+    </tr>
+    <tr>
+      <td><span class="tag t-amber">到期预警</span></td>
+      <td>截止前 24h</td>
+      <td>面板定时检查 + 群消息推送</td>
+      <td>中</td>
+    </tr>
+    <tr>
+      <td><span class="tag t-amber">超期升级</span></td>
+      <td>超期 24h / 72h</td>
+      <td>面板定时检查 + 群公告 + 抄送上级</td>
+      <td>中</td>
+    </tr>
+    <tr>
+      <td><span class="tag t-amber">逾期专区</span></td>
+      <td>任何超期</td>
+      <td>面板工作台顶部渲染红色区域</td>
+      <td>低</td>
+    </tr>
+    <tr>
+      <td><span class="tag t-red">月度统计</span></td>
+      <td>每月 1 日</td>
+      <td>面板统计 + 群机器人发周报</td>
+      <td>中</td>
+    </tr>
+    <tr>
+      <td><span class="tag t-red">积压熔断</span></td>
+      <td>未闭环 ≥ 5</td>
+      <td>新建工单时校验，前端拦截</td>
+      <td>低</td>
+    </tr>
+    <tr>
+      <td><span class="tag t-red">群通报</span></td>
+      <td>超期 72h</td>
+      <td><code>dws chat +send-to-group</code> 管理群</td>
+      <td>低</td>
+    </tr>
+  </table>
+</div>
+
+</div>
+</body>
+</html>

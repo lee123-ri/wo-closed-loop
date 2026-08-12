@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>软工单闭环面板 — 方案设计</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:#f8f9fb;color:#1a1a2e;padding:24px;line-height:1.6}
+.container{max-width:1100px;margin:0 auto}
+h1{font-size:24px;margin-bottom:4px}
+h2{font-size:18px;margin:28px 0 14px;padding-bottom:8px;border-bottom:2px solid #2563eb}
+h3{font-size:15px;margin:16px 0 10px}
+.subtitle{color:#6b7280;font-size:14px;margin-bottom:24px}
+.card{background:#fff;border-radius:10px;padding:24px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.row{display:flex;gap:16px;flex-wrap:wrap}
+.col{flex:1;min-width:240px}
+
+/* architecture */
+.arch{background:#f0f4ff;border:2px dashed #93a3d0;border-radius:10px;padding:24px;text-align:center;margin:16px 0}
+.arch-box{display:inline-block;background:#fff;border:2px solid #2563eb;border-radius:8px;padding:12px 20px;margin:6px;font-weight:600;font-size:14px}
+.arch-box.gray{border-color:#9ca3af;color:#6b7280}
+.arch-box.green{border-color:#059669;color:#059669}
+.arch-box.purple{border-color:#7c3aed;color:#7c3aed}
+.arch-arr{font-size:20px;color:#2563eb;margin:0 4px}
+
+/* flow */
+.flow{display:flex;align-items:center;gap:0;flex-wrap:wrap;justify-content:center;padding:16px 0}
+.flow-step{background:#fff;border:2px solid #d1d5db;border-radius:8px;padding:12px 16px;text-align:center;min-width:90px;font-size:13px;font-weight:600}
+.flow-step.done{border-color:#059669;background:#ecfdf5;color:#059669}
+.flow-step.active{border-color:#2563eb;background:#eff6ff;color:#2563eb}
+.flow-step.warn{border-color:#d97706;background:#fffbeb;color:#d97706}
+.flow-arr{font-size:18px;color:#9ca3af;margin:0 6px;font-weight:700}
+
+/* tables */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:#f0f4ff;padding:10px 12px;text-align:left;font-weight:600;border-bottom:2px solid #d1d5db;font-size:12px;color:#4b5563}
+td{padding:10px 12px;border-bottom:1px solid #e5e7eb}
+.tag{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600}
+.tag-blue{background:#eff6ff;color:#2563eb}
+.tag-green{background:#ecfdf5;color:#059669}
+.tag-amber{background:#fffbeb;color:#d97706}
+.tag-red{background:#fef2f2;color:#dc2626}
+.tag-gray{background:#f3f4f6;color:#6b7280}
+
+/* stat cards */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:16px 0}
+.stat{background:#fff;border-radius:10px;padding:16px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.06);border-top:3px solid #2563eb}
+.stat.green{border-top-color:#059669}
+.stat.amber{border-top-color:#d97706}
+.stat.red{border-top-color:#dc2626}
+.stat .num{font-size:28px;font-weight:800}
+.stat .lbl{font-size:12px;color:#6b7280;margin-top:2px}
+
+/* decision */
+.decision{background:#fefce8;border:1px solid #fde68a;border-radius:10px;padding:18px 24px;margin:16px 0}
+.decision h4{color:#92400e;margin-bottom:6px}
+
+/* compare */
+.compare{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media(max-width:700px){.compare{grid-template-columns:1fr}}
+.comp-card{background:#fff;border-radius:10px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.06);border-top:3px solid #d1d5db}
+.comp-card.pick{border-top-color:#059669;background:#fafdf9}
+.comp-card h4{font-size:15px;margin-bottom:8px}
+.comp-card ul{font-size:13px;color:#4b5563;padding-left:18px;line-height:2}
+.comp-card .verdict{font-size:13px;font-weight:700;margin-top:10px;padding:6px 12px;border-radius:6px;text-align:center}
+.comp-card.pick .verdict{background:#ecfdf5;color:#059669}
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>软工单闭环面板 · 方案设计</h1>
+<div class="subtitle">李沛东 | 2026-08-06 | 参考：贾总 EAM 原型 v3 + 08-04 听记决议</div>
+
+<!-- ====== 核心定位 ====== -->
+<h2>一、核心定位</h2>
+
+<div class="card">
+  <p style="font-size:14px;margin-bottom:12px;"><strong>软工单面板是一个独立的监控展示层</strong>，不替代钉钉审批流，而是作为"状态聚合 + 发起入口"。</p>
+
+  <div class="arch">
+    <div style="margin-bottom:12px;font-size:13px;color:#6b7280">架构关系</div>
+    <span class="arch-box gray">年度运营计划Agent</span>
+    <span class="arch-arr">→</span>
+    <span class="arch-box gray">监视Agent</span>
+    <span class="arch-arr">→</span>
+    <span class="arch-box green">软工单面板<br><small>发起入口 · 状态聚合</small></span>
+    <br><br>
+    <span class="arch-box">钉钉 OA 审批流<br><small>派发 · 审批 · 闭环</small></span>
+    <span class="arch-arr">⇄</span>
+    <span class="arch-box purple">软工单面板<br><small>状态回读 · 结果展示</small></span>
+  </div>
+
+  <table style="margin-top:16px">
+    <tr><th style="width:120px">职责</th><th>软工单面板</th><th>钉钉 OA 审批</th></tr>
+    <tr><td>工单创建</td><td>✅ 表单填写 → 触发审批</td><td>—</td></tr>
+    <tr><td>派发责任人</td><td>—</td><td>✅ 审批节点指派</td></tr>
+    <tr><td>审批流程</td><td>—</td><td>✅ 多级审批</td></tr>
+    <tr><td>状态监控</td><td>✅ 汇总展示所有工单</td><td>逐个查看</td></tr>
+    <tr><td>执行佐证</td><td>✅ 展示附件</td><td>✅ 审批中上传</td></tr>
+    <tr><td>闭环归档</td><td>✅ 历史记录 + 统计</td><td>审批单存档</td></tr>
+    <tr><td>升级催办</td><td>✅ 面板红色标记</td><td>✅ 工作通知提醒</td></tr>
+  </table>
+</div>
+
+<!-- ====== 数据模型 ====== -->
+<h2>二、工单数据模型</h2>
+
+<div class="card">
+  <table>
+    <tr><th style="width:140px">字段</th><th style="width:100px">类型</th><th>说明</th><th style="width:80px">必显示</th></tr>
+    <tr><td><b>工单编号</b></td><td>自动</td><td>RW-2026-0001 格式</td><td>✅</td></tr>
+    <tr><td><b>来源</b></td><td>标签</td><td>年度计划 / 监视告警 / 判定会 / 手动</td><td>✅ 重点</td></tr>
+    <tr><td><b>项目名称</b></td><td>文本</td><td>关联项目</td><td>✅</td></tr>
+    <tr><td><b>工单类型</b></td><td>单选</td><td>纠偏 / 客户沟通 / 关系维护 / 隐患整改 / 非标任务 / 其他</td><td>✅</td></tr>
+    <tr><td><b>标题</b></td><td>文本</td><td>一句话概括</td><td>✅</td></tr>
+    <tr><td><b>触发原因</b></td><td>多行文本</td><td>为什么创建</td><td></td></tr>
+    <tr><td><b>行动要求</b></td><td>多行文本</td><td>具体做什么</td><td></td></tr>
+    <tr><td><b>责任人</b></td><td>人员</td><td>执行人</td><td>✅ 重点</td></tr>
+    <tr><td><b>审批人</b></td><td>人员</td><td>闭环确认人</td><td>✅</td></tr>
+    <tr><td><b>截止日期</b></td><td>日期</td><td>完成时限</td><td>✅</td></tr>
+    <tr><td><b>状态</b></td><td>枚举</td><td>见下方状态流</td><td>✅ 重点</td></tr>
+    <tr><td><b>OA审批单号</b></td><td>文本</td><td>关联钉钉审批单 ID</td><td></td></tr>
+    <tr><td><b>执行佐证</b></td><td>附件</td><td>照片/截图/文件</td><td></td></tr>
+    <tr><td><b>执行结论</b></td><td>多行文本</td><td>责任人填写</td><td></td></tr>
+    <tr><td><b>创建时间</b></td><td>时间</td><td>自动</td><td></td></tr>
+    <tr><td><b>完成时间</b></td><td>时间</td><td>闭环时自动</td><td></td></tr>
+  </table>
+</div>
+
+<!-- ====== 状态流 ====== -->
+<h2>三、工单状态流转</h2>
+
+<div class="card">
+  <div class="flow">
+    <div class="flow-step active">待派发</div>
+    <span class="flow-arr">→</span>
+    <div class="flow-step">审批中<br><small>钉钉OA</small></div>
+    <span class="flow-arr">→</span>
+    <div class="flow-step">已派发</div>
+    <span class="flow-arr">→</span>
+    <div class="flow-step">执行中</div>
+    <span class="flow-arr">→</span>
+    <div class="flow-step">待验收</div>
+    <span class="flow-arr">→</span>
+    <div class="flow-step done">已闭环</div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;justify-content:center">
+    <span style="font-size:12px;color:#6b7280">⚠️ 审批驳回 → 退回「待派发」</span>
+    <span style="font-size:12px;color:#6b7280">|</span>
+    <span style="font-size:12px;color:#6b7280">⚠️ 验收不通过 → 退回「执行中」</span>
+    <span style="font-size:12px;color:#6b7280">|</span>
+    <span style="font-size:12px;color:#6b7280">⚠️ 超期 → 红色标记 + 升级</span>
+  </div>
+
+  <table style="margin-top:16px">
+    <tr><th>状态</th><th>面板显示</th><th>钉钉侧动作</th><th>谁操作</th></tr>
+    <tr><td><span class="tag tag-gray">待派发</span></td><td>灰色，刚创建</td><td>—</td><td>Agent/手动</td></tr>
+    <tr><td><span class="tag tag-blue">审批中</span></td><td>蓝色，审批进度条</td><td>OA审批流进行中</td><td>审批人</td></tr>
+    <tr><td><span class="tag tag-amber">已派发</span></td><td>橙色，已到责任人</td><td>审批通过，通知责任人</td><td>系统自动</td></tr>
+    <tr><td><span class="tag tag-blue">执行中</span></td><td>蓝色，进度+截止倒计时</td><td>—</td><td>责任人</td></tr>
+    <tr><td><span class="tag tag-amber">待验收</span></td><td>橙色，等审批人确认</td><td>二次审批（闭环确认）</td><td>审批人</td></tr>
+    <tr><td><span class="tag tag-green">已闭环</span></td><td>绿色，归档</td><td>审批完成，入审计库</td><td>系统自动</td></tr>
+    <tr><td><span class="tag tag-red">已逾期</span></td><td>红色，超期天数</td><td>升级催办</td><td>系统自动</td></tr>
+  </table>
+</div>
+
+<!-- ====== Panel 页面结构 ====== -->
+<h2>四、面板页面结构</h2>
+
+<div class="card">
+  <table>
+    <tr><th style="width:90px">页面</th><th style="width:120px">作用</th><th>关键元素</th></tr>
+    <tr>
+      <td><b>工作台</b></td>
+      <td>Dashboard</td>
+      <td>
+        • 四色统计卡：待处理 / 执行中 / 待验收 / 已逾期<br>
+        • 来源分布环图（年度计划/监视告警/判定会/手动）<br>
+        • 待办工单列表（按紧急度排序）<br>
+        • 逾期预警区（红色高亮）
+      </td>
+    </tr>
+    <tr>
+      <td><b>工单列表</b></td>
+      <td>全量视图</td>
+      <td>
+        • 筛选栏：项目 / 来源 / 类型 / 状态 / 责任人<br>
+        • 表格列：编号、<b>来源</b>、项目、标题、<b>责任人</b>、截止日期、<b>状态</b>、OA单号<br>
+        • 批量操作：导出
+      </td>
+    </tr>
+    <tr>
+      <td><b>工单详情</b></td>
+      <td>单工单全貌</td>
+      <td>
+        • 基本信息区：全部字段<br>
+        • 审批进度条：从OA同步的审批节点状态<br>
+        • 时间线：创建→派发→执行→佐证→闭环<br>
+        • 附件/佐证预览
+      </td>
+    </tr>
+    <tr>
+      <td><b>新建工单</b></td>
+      <td>发起入口</td>
+      <td>
+        • 表单（项目、类型、标题、原因、要求、责任人、审批人、截止日期）<br>
+        • 提交 → 触发钉钉OA审批 → 自动创建OA审批单<br>
+        • 返回工单列表
+      </td>
+    </tr>
+    <tr>
+      <td><b>闭环记录</b></td>
+      <td>归档查询</td>
+      <td>
+        • 已闭环工单列表<br>
+        • 按项目/时间/责任人筛选<br>
+        • 闭环率统计
+      </td>
+    </tr>
+  </table>
+</div>
+
+<!-- ====== 数据存储 ====== -->
+<h2>五、数据存储方案</h2>
+
+<div class="compare">
+  <div class="comp-card pick">
+    <h4>🏆 推荐：AI 表格</h4>
+    <ul>
+      <li>钉钉原生，零运维</li>
+      <li>看板+表格双视图</li>
+      <li>API 读写，Agent 可操作</li>
+      <li>支持附件、人员字段</li>
+      <li>权限可控</li>
+      <li>开发量：直接用 dws sheet</li>
+    </ul>
+    <div class="verdict">✅ 推荐</div>
+  </div>
+  <div class="comp-card">
+    <h4>备选：本地 JSON</h4>
+    <ul>
+      <li>纯前端，零依赖</li>
+      <li>无需权限</li>
+      <li>数据在 HTML 内</li>
+      <li style="color:#dc2626">多人无法共享</li>
+      <li style="color:#dc2626">Agent 无法写入</li>
+      <li>仅适合 demo</li>
+    </ul>
+    <div class="verdict" style="background:#fef2f2;color:#dc2626">⚠️ 仅Demo</div>
+  </div>
+  <div class="comp-card">
+    <h4>备选：知识库</h4>
+    <ul>
+      <li>结构化存储</li>
+      <li>版本历史</li>
+      <li>权限管理</li>
+      <li style="color:#dc2626">读取需 API</li>
+      <li style="color:#dc2626">无看板视图</li>
+      <li>开发量中等</li>
+    </ul>
+    <div class="verdict" style="background:#fffbeb;color:#d97706">可用</div>
+  </div>
+</div>
+
+<div class="decision">
+  <h4>💡 建议分两步</h4>
+  <p style="font-size:14px">
+    <strong>今天下午汇报用：</strong>本地 JSON 数据 + HTML 面板（纯前端，即开即用，展示完整交互）<br>
+    <strong>下周实际用：</strong>切换到 AI 表格后端，Agent 可读写，多人可协作
+  </p>
+</div>
+
+<!-- ====== 与钉钉审批的交互 ====== -->
+<h2>六、面板与钉钉审批的交互点</h2>
+
+<div class="card">
+  <table>
+    <tr><th style="width:80px">时机</th><th>面板动作</th><th>钉钉 OA 动作</th><th>技术实现</th></tr>
+    <tr>
+      <td><b>创建工单</b></td>
+      <td>用户/AI 填表 → 点击「派发」</td>
+      <td>自动发起 OA 审批单</td>
+      <td><code>dws oa</code> 创建审批实例</td>
+    </tr>
+    <tr>
+      <td><b>审批进行中</b></td>
+      <td>显示审批进度条 + 当前节点</td>
+      <td>审批人在钉钉内审批</td>
+      <td>定时拉取审批状态 / webhook 回调</td>
+    </tr>
+    <tr>
+      <td><b>审批通过</b></td>
+      <td>状态自动变为「已派发」</td>
+      <td>通知责任人</td>
+      <td>回调更新 AI 表格 / 面板刷新</td>
+    </tr>
+    <tr>
+      <td><b>执行完成</b></td>
+      <td>责任人上传佐证 → 提交验收</td>
+      <td>发起二次审批（闭环确认）</td>
+      <td>面板触发二次审批</td>
+    </tr>
+    <tr>
+      <td><b>闭环确认</b></td>
+      <td>状态变为「已闭环」，归档</td>
+      <td>审批人确认通过</td>
+      <td>回调更新状态</td>
+    </tr>
+    <tr>
+      <td><b>超期</b></td>
+      <td>红色标记 + 逾期天数</td>
+      <td>工作通知催办</td>
+      <td>面板定时检查截止日期</td>
+    </tr>
+  </table>
+</div>
+
+<!-- ====== 面板设计要点 ====== -->
+<h2>七、面板设计要点（参考 EAM 原型但独立风格）</h2>
+
+<div class="row">
+  <div class="col card">
+    <h3>从 EAM 原型借鉴</h3>
+    <table>
+      <tr><td>统计卡片</td><td>✅ 四色状态统计</td></tr>
+      <tr><td>工单列表</td><td>✅ 筛选 + 表格 + 状态标签</td></tr>
+      <tr><td>详情页</td><td>✅ 信息网格 + 时间线</td></tr>
+      <tr><td>状态流转</td><td>✅ 步骤条 + 颜色区分</td></tr>
+      <tr><td>筛选栏</td><td>✅ 多条件组合筛选</td></tr>
+    </table>
+  </div>
+  <div class="col card">
+    <h3>软工单面板差异化</h3>
+    <table>
+      <tr><td>风格</td><td>现代简洁，非 Maximo 企业风格</td></tr>
+      <tr><td>来源列</td><td>🆕 年度计划 / 监视告警 / 判定会 / 手动</td></tr>
+      <tr><td>OA 联动</td><td>🆕 审批进度条 + OA单号可点击</td></tr>
+      <tr><td>升级机制</td><td>🆕 逾期红色标记 + 倒计时</td></tr>
+      <tr><td>入场资料</td><td>❌ 不需要（软工单不涉及）</td></tr>
+      <tr><td>风险等级</td><td>❌ 改为紧急/普通/低优先级</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ====== 开发计划 ====== -->
+<h2>八、上午开发计划</h2>
+
+<div class="card">
+  <table>
+    <tr><th style="width:30px">#</th><th>步骤</th><th>内容</th><th style="width:70px">预计</th></tr>
+    <tr>
+      <td>1</td><td><b>你确认方案</b></td><td>看完这个方案，需要调整的地方告诉我</td><td>10min</td>
+    </tr>
+    <tr>
+      <td>2</td><td><b>我出 HTML 面板</b></td><td>完整可交互面板：工作台 + 列表 + 详情 + 新建 + 闭环记录，6条 demo 数据</td><td>30min</td>
+    </tr>
+    <tr>
+      <td>3</td><td><b>你审阅调整</b></td><td>看交互、字段、数据是否符合预期，提修改意见</td><td>20min</td>
+    </tr>
+    <tr>
+      <td>4</td><td><b>我修改定稿</b></td><td>根据反馈调整，补充 mock 数据使其更真实</td><td>15min</td>
+    </tr>
+    <tr>
+      <td>5</td><td><b>下午汇报</b></td><td>HTML 打开即用，投屏展示完整交互流程</td><td>—</td>
+    </tr>
+  </table>
+</div>
+
+</div>
+</body>
+</html>
