@@ -9,6 +9,9 @@ __pycache__/
 node_modules/
 frontend/dist/
 
+# Vite
+.vite/
+
 # OS
 .DS_Store
 
