@@ -150,11 +150,15 @@ def generate_all(pool_type: str | None = None, db: Session = Depends(get_db)):
 # ── AI表格同步 ────────────────────────────────────────
 
 @router.post("/sync-aitable", response_model=PoolImportResult)
-def sync_aitable(
-    base_id: str = Query(..., description="AI表格 base ID"),
-    table_id: str = Query(..., description="AI表格 table ID"),
-    pool_type: str = Query("anomaly", description="plan|anomaly"),
-    db: Session = Depends(get_db),
-):
-    result = sync_from_aitable(db, base_id, table_id, pool_type)
-    return PoolImportResult(**result)
+def sync_aitable_endpoint(full: bool = False, db: Session = Depends(get_db)):
+    """从数据池-计划 AI 表格同步 EAM 工单到本地数据池"""
+    from app.services.aitable import sync_eam_to_pool
+    result = sync_eam_to_pool(full=full)
+    return PoolImportResult(imported=result["synced"], skipped=result["skipped"], errors=result["errors"])
+
+
+@router.post("/sync-project-map")
+def sync_project_map_endpoint(db: Session = Depends(get_db)):
+    """从 AI 表格同步项目信息"""
+    from app.services.aitable import sync_project_map_to_db
+    return sync_project_map_to_db()

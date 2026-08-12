@@ -92,7 +92,7 @@ export const generateAllFromPool = (pool_type?: string) =>
   http.post<any, GenerateResult>("/pool/generate-all", null, { params: { pool_type } });
 
 // AI表格同步
-export const syncAITable = (base_id: string, table_id: string, pool_type?: string) =>
+export const syncAITable = (base_id?: string, table_id?: string, pool_type?: string) =>
   http.post<any, PoolImportResult>("/pool/sync-aitable", null, { params: { base_id, table_id, pool_type } });
 
 // 回填

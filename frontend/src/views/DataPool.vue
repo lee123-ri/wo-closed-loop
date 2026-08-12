@@ -1,8 +1,11 @@
 <template>
   <div class="pool-page">
     <div class="header">
-      <div><h1>数据池</h1><div class="meta">CSV 导入 · 批量生成工单</div></div>
+      <div><h1>数据池</h1><div class="meta">CSV 导入 · AI表格同步 · 批量生成工单</div></div>
       <div class="header-actions">
+        <button class="btn btn-out" @click="doSync" :disabled="syncing">
+          {{ syncing ? '同步中…' : '🔄 从 AI 表格同步' }}
+        </button>
         <button class="btn btn-out" @click="showUpload = true">📤 导入 CSV</button>
         <button class="btn btn-pri" @click="generateAll" :disabled="!pendingCount || generating">
           ⚡ {{ generating ? '生成中…' : `一键生成工单 (${pendingCount})` }}
@@ -83,7 +86,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
-import { listPoolItems, uploadPoolCSV, generateFromPool, generateAllFromPool, deletePoolItem, type PoolItem, type PoolImportResult } from "@/api/pool";
+import { listPoolItems, uploadPoolCSV, generateFromPool, generateAllFromPool, deletePoolItem, syncAITable, type PoolItem, type PoolImportResult } from "@/api/pool";
 
 const router = useRouter();
 const items = ref<PoolItem[]>([]);
@@ -92,6 +95,7 @@ const filterType = ref("");
 const filterStatus = ref("");
 const selected = ref(new Set<number>());
 const generating = ref(false);
+const syncing = ref(false);
 const showUpload = ref(false);
 const uploadType = ref("plan");
 const uploadResult = ref<PoolImportResult | null>(null);
@@ -129,6 +133,16 @@ async function generateAll() {
   finally { generating.value = false; }
 }
 async function deleteItem(id: number) { if (!confirm("确认删除？")) return; try { await deletePoolItem(id); await load(); } catch (e: any) { alert("删除失败：" + e.message); } }
+
+async function doSync() {
+  syncing.value = true;
+  try {
+    const res = await syncAITable("", "");
+    alert(`同步完成：导入 ${res.imported} 条，跳过 ${res.skipped} 条`);
+    await load();
+  } catch (e: any) { alert("同步失败：" + e.message); }
+  finally { syncing.value = false; }
+}
 
 onMounted(load);
 </script>
