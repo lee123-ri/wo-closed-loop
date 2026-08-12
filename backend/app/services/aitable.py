@@ -9,9 +9,8 @@ from app.models import DataPoolItem, Project, User
 
 # ── 数据池-计划 · 表映射 ──────────────────────────────
 PLAN_BASE_ID = "bva6QBXJwanjQ4B6IMlleblnWn4qY5Pr"
-TABLE_EAM = "rEQsfQH"       # EAM工单
-TABLE_MAP = "HohZcMa"       # 0映射表
-TABLE_SUMMARY = "hERWDMS"   # 汇总表
+TABLE_ANOMALY = "bOywzmP"   # 异常原因表 — 非EAM软工单主数据源
+TABLE_SUMMARY = "hERWDMS"   # 汇总表 — 异常标记辅助
 
 # EAM工单 字段映射: fieldId → 含义
 EAM_FIELDS = {
@@ -75,66 +74,70 @@ def sync_project_map() -> dict:
     return mapping
 
 
-def sync_eam_to_pool(full: bool = False) -> dict:
-    """从 EAM工单表 同步到 data_pool_items"""
+def sync_anomaly_to_pool(full: bool = False) -> dict:
+    """从异常原因表同步非EAM软工单到 data_pool_items
+
+    异常原因表 (bOywzmP) 字段映射:
+      ivATb5i → 待异常原因反馈 (描述)
+      UjHVcMP → 异常原因 (异常甄别类型)
+      iR5P7hE → 区域
+      mAFIHjj → OA项目
+      Mp4xZHB → 项目第一负责人
+      RMi2RbF → 预算下发月份
+    """
     try:
-        records = _get_records(PLAN_BASE_ID, TABLE_EAM)
+        records = _get_records(PLAN_BASE_ID, TABLE_ANOMALY)
     except Exception as e:
         return {"synced": 0, "skipped": 0, "errors": [f"dws CLI 调用失败: {e}"]}
 
     if not records:
-        return {"synced": 0, "skipped": 0, "errors": ["AI 表格返回空数据"]}
+        return {"synced": 0, "skipped": 0, "errors": ["异常原因表返回空数据"]}
 
     db = SessionLocal()
 
-    # 已有记录去重
     existing_refs = set()
     if not full:
         existing = db.query(DataPoolItem.source_ref).filter(
-            DataPoolItem.source_system == "aitable", DataPoolItem.source_ref.isnot(None)
+            DataPoolItem.source_system == "aitable_anomaly", DataPoolItem.source_ref.isnot(None)
         ).all()
         existing_refs = {r[0] for r in existing}
 
-    synced = 0
-    skipped = 0
-    errors: list[str] = []
+    synced = 0; skipped = 0; errors: list[str] = []
 
     for r in records:
         record_id = r.get("recordId", "")
         cells = r.get("cells", {})
 
         if not full and record_id in existing_refs:
-            skipped += 1
-            continue
+            skipped += 1; continue
 
         try:
-            station = _cell_val(cells, "76m6r3i") or ""
-            person = _cell_val(cells, "RyeCQtw") or ""
-            status_raw = _cell_val(cells, "SsIHmuU") or ""
-            desc = _cell_val(cells, "sqF84sv") or ""
+            anomaly_type = _cell_val(cells, "UjHVcMP") or ""
+            reason_text = _cell_val(cells, "ivATb5i") or ""
+            region = _cell_val(cells, "iR5P7hE") or ""
+            project = _cell_val(cells, "mAFIHjj") or ""
+            person = _cell_val(cells, "Mp4xZHB") or ""
+            month = _cell_val(cells, "RMi2RbF") or ""
 
-            dl_str = _cell_val(cells, "GOgskOl") or _cell_val(cells, "97Hj1c1")
-            deadline = None
-            if dl_str:
-                try: deadline = date.fromisoformat(dl_str[:10])
-                except (ValueError, TypeError): pass
+            desc = f"{anomaly_type}: {reason_text}"[:1000]
+            title = f"{project}-{anomaly_type}"[:512] if project else anomaly_type[:512]
 
-            pool_status = "skipped" if status_raw in ("关闭", "已作废") else "pending"
+            pool_status = "pending"
 
-            title = f"{station}-{desc}"[:512] if station else desc[:512]
             item = DataPoolItem(
-                pool_type="plan", source_system="aitable", source_ref=record_id,
-                title=title, project_name=station, person_name=person,
-                deadline=deadline, description=desc, status=pool_status,
-                raw_data={EAM_FIELDS.get(k, k): _cell_val(cells, k) for k in list(cells.keys())[:15]},
+                pool_type="anomaly", source_system="aitable_anomaly", source_ref=record_id,
+                title=title, project_name=project, person_name=person,
+                description=desc, status=pool_status,
+                raw_data={
+                    "anomaly_type": anomaly_type, "reason": reason_text,
+                    "region": region, "project": project, "person": person, "month": month,
+                },
             )
-            db.add(item)
-            synced += 1
+            db.add(item); synced += 1
         except Exception as e:
             errors.append(f"记录 {record_id}: {e}")
 
-    db.commit()
-    db.close()
+    db.commit(); db.close()
     return {"synced": synced, "skipped": skipped, "errors": errors, "total_aitable": len(records)}
 
 

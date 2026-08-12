@@ -53,15 +53,13 @@ def escalation_scan():
 
 @celery_app.task(name="app.tasks.sync_aitable_plan")
 def sync_aitable_plan():
-    """定时从 AI 表格同步 EAM 工单到数据池"""
-    from app.services.aitable import sync_eam_to_pool
-    return sync_eam_to_pool(full=False)
+    """定时从 AI 表格同步非EAM软工单到数据池"""
+    from app.services.aitable import sync_anomaly_to_pool
+    return sync_anomaly_to_pool(full=False)
 
 
 @celery_app.task(name="app.tasks.sync_aitable_full")
 def sync_aitable_full():
     """全量同步 AI 表格数据"""
-    from app.services.aitable import sync_eam_to_pool, sync_project_map_to_db
-    result = sync_eam_to_pool(full=True)
-    proj_result = sync_project_map_to_db()
-    return {**result, "projects": proj_result}
+    from app.services.aitable import sync_anomaly_to_pool
+    return sync_anomaly_to_pool(full=True)

@@ -151,9 +151,9 @@ def generate_all(pool_type: str | None = None, db: Session = Depends(get_db)):
 
 @router.post("/sync-aitable", response_model=PoolImportResult)
 def sync_aitable_endpoint(full: bool = False, db: Session = Depends(get_db)):
-    """从数据池-计划 AI 表格同步 EAM 工单到本地数据池"""
-    from app.services.aitable import sync_eam_to_pool
-    result = sync_eam_to_pool(full=full)
+    """从异常原因表同步非EAM软工单到数据池"""
+    from app.services.aitable import sync_anomaly_to_pool
+    result = sync_anomaly_to_pool(full=full)
     return PoolImportResult(imported=result["synced"], skipped=result["skipped"], errors=result["errors"])
 
 
