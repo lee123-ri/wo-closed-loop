@@ -149,12 +149,16 @@ def generate_all(pool_type: str | None = None, db: Session = Depends(get_db)):
 
 # ── AI表格同步 ────────────────────────────────────────
 
-@router.post("/sync-aitable", response_model=PoolImportResult)
-def sync_aitable_endpoint(full: bool = False, db: Session = Depends(get_db)):
-    """从异常原因表同步非EAM软工单到数据池"""
-    from app.services.aitable import sync_anomaly_to_pool
-    result = sync_anomaly_to_pool(full=full)
-    return PoolImportResult(imported=result["synced"], skipped=result["skipped"], errors=result["errors"])
+@router.post("/sync-aitable")
+def sync_aitable_endpoint(full: bool = True, db: Session = Depends(get_db)):
+    """从三个 AI 表格同步数据到数据池"""
+    from app.services.aitable import sync_anomaly_to_pool, sync_non_eam_to_pool
+    a = sync_anomaly_to_pool(full=full)
+    n = sync_non_eam_to_pool(full=full)
+    return {
+        "anomaly": {"synced": a["synced"], "total": a["total"]},
+        "non_eam": {"synced": n["synced"], "total": n["total"]},
+    }
 
 
 @router.post("/sync-project-map")

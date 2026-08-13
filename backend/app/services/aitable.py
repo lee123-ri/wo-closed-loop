@@ -1,165 +1,168 @@
-"""钉钉 AI 表格同步服务 — 通过 dws CLI 只读拉取"""
+"""钉钉 AI 表格同步服务 — 三表合一"""
 import json
 import subprocess
-from datetime import date, datetime
-from typing import Any
-
+from datetime import date
 from app.core.database import SessionLocal
 from app.models import DataPoolItem, Project, User
 
-# ── 数据池-计划 · 表映射 ──────────────────────────────
-PLAN_BASE_ID = "bva6QBXJwanjQ4B6IMlleblnWn4qY5Pr"
-TABLE_ANOMALY = "bOywzmP"   # 异常原因表 — 非EAM软工单主数据源
-TABLE_SUMMARY = "hERWDMS"   # 汇总表 — 异常标记辅助
+# ── 三个数据源 ────────────────────────────────────────
+ANOMALY_BASE = "OG9lyrgJPzMw9B5jSvpyvdQLWzN67Mw4"   # 数据池-异常指标
+ANOMALY_TABLE = "j5hkt042bpz1m88o46iup"              # 汇总表
 
-# EAM工单 字段映射: fieldId → 含义
-EAM_FIELDS = {
-    "Q8hQIvs": "工单编号", "76m6r3i": "电场名称", "fWI4EpI": "资金计划编号",
-    "m74CYR9": "三级科目", "xutBmyI": "预算月份", "M1dhKbL": "是否有计划",
-    "ZZL3468": "区域", "quh9U6P": "实际完成时间", "aZBAtGh": "实际开始时间",
-    "GOgskOl": "计划结束时间", "97Hj1c1": "计划开始时间", "MiFHZI2": "创建时间",
-    "saQut80": "创建人", "RyeCQtw": "工作负责人", "PkwS8G3": "设备位置",
-    "sqF84sv": "工单描述", "QRTLTzv": "记录编号", "SsIHmuU": "工单状态",
-    "uFMIgBg": "工单类型", "87ME6mP": "场站性质",
-}
+MAP_BASE = "1zknDm0WRaNwg5KkI0BwAMRy8BQEx5rG"       # 数据池-数仓
+MAP_TABLE = "Dzp793M"                                 # 0映射表
 
-MAP_FIELDS = {
-    "xOTtpZc": "项目简称", "3CiBorS": "项目状态", "2rzCUjb": "产品系列",
-    "TMaSENb": "EAM名称", "i3okDTQ": "OMS名称", "4avsLpq": "PowerInsight名称",
-    "IFHB40F": "场站第一负责人", "v6ZTRXw": "省份", "hIASavl": "业主简称",
-}
+PLAN_BASE = "bva6QBXJwanjQ4B6IMlleblnWn4qY5Pr"       # 数据池-计划
+PLAN_TABLE = "bOywzmP"                                 # 异常原因表
 
 
 def _dws(*args: str) -> dict:
-    """调用 dws CLI 并返回 JSON"""
     cmd = ["dws", *args, "--format", "json"]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-    if result.returncode != 0:
-        raise RuntimeError(f"dws failed: {result.stderr[:200]}")
-    return json.loads(result.stdout)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    output = result.stdout.strip()
+    if not output:
+        raise RuntimeError(f"dws stdout empty, stderr: {result.stderr[:200]}")
+    # 解析整个 JSON（可能跨多行）
+    return json.loads(output)
 
 
 def _get_records(base_id: str, table_id: str) -> list[dict]:
-    """通过 dws CLI 只读拉取 AI 表格全部记录"""
     data = _dws("aitable", "record", "query", "--base-id", base_id, "--table-id", table_id, "--all", "--page-limit", "0")
     result = data.get("data", data.get("result", data))
     return result.get("records", result.get("items", []))
 
 
-def _cell_val(cells: dict, field_id: str) -> str | None:
-    v = cells.get(field_id)
-    if v is None: return None
+def _cv(cells: dict, fid: str) -> str:
+    """提取单元格值"""
+    v = cells.get(fid)
+    if v is None: return ""
     if isinstance(v, dict): return v.get("name", str(v))
     if isinstance(v, list) and v: return v[0].get("name", str(v[0])) if isinstance(v[0], dict) else str(v[0])
     return str(v)
 
 
+# ── 1. 映射表 → 本地项目/人员缓存 ──────────────────────
+
 def sync_project_map() -> dict:
-    """从 0映射表 拉取项目映射"""
+    """从数仓.0映射表拉取项目→人员映射"""
     try:
-        records = _get_records(PLAN_BASE_ID, TABLE_MAP)
+        records = _get_records(MAP_BASE, MAP_TABLE)
     except Exception as e:
-        print(f"[aitable] 映射表读取失败: {e}")
+        print(f"[sync] 映射表失败: {e}")
         return {}
     mapping = {}
     for r in records:
-        cells = r.get("cells", {})
-        eam = _cell_val(cells, "TMaSENb") or ""
-        oms = _cell_val(cells, "i3okDTQ") or ""
-        proj = _cell_val(cells, "xOTtpZc") or ""
-        person = _cell_val(cells, "IFHB40F") or ""
-        mapping[eam] = {"project_name": proj, "oms_name": oms, "person_name": person}
-        if oms: mapping[oms] = mapping[eam]
-        if proj: mapping[proj] = mapping[eam]
+        c = r.get("cells", {})
+        proj = _cv(c, "xOTtpZc")      # 项目简称
+        eam = _cv(c, "TMaSENb")        # EAM名称
+        oms = _cv(c, "i3okDTQ")        # OMS名称
+        pi = _cv(c, "4avsLpq")         # PowerInsight名称
+        person = _cv(c, "IFHB40F")      # 场站第一负责人
+        if proj:
+            mapping[proj] = {"person": person, "eam": eam, "oms": oms, "pi": pi}
+        if eam and eam not in mapping:
+            mapping[eam] = {"person": person, "project": proj}
     return mapping
 
 
-def sync_anomaly_to_pool(full: bool = False) -> dict:
-    """从异常原因表同步非EAM软工单到 data_pool_items
+# ── 2. 异常指标 → 信息搜集工单 ─────────────────────────
 
-    异常原因表 (bOywzmP) 字段映射:
-      ivATb5i → 待异常原因反馈 (描述)
-      UjHVcMP → 异常原因 (异常甄别类型)
-      iR5P7hE → 区域
-      mAFIHjj → OA项目
-      Mp4xZHB → 项目第一负责人
-      RMi2RbF → 预算下发月份
+def sync_anomaly_to_pool(full: bool = False) -> dict:
+    """从异常指标.汇总表 → 数据池 (pool_type=anomaly)
+
+    每条记录是一个异常事件，生成"信息搜集工单"，
+    责任人回填原因+措施后，可触发"动作工单"。
     """
     try:
-        records = _get_records(PLAN_BASE_ID, TABLE_ANOMALY)
+        records = _get_records(ANOMALY_BASE, ANOMALY_TABLE)
     except Exception as e:
-        return {"synced": 0, "skipped": 0, "errors": [f"dws CLI 调用失败: {e}"]}
-
-    if not records:
-        return {"synced": 0, "skipped": 0, "errors": ["异常原因表返回空数据"]}
+        return {"synced": 0, "errors": [f"dws: {e}"]}
 
     db = SessionLocal()
-
     existing_refs = set()
     if not full:
         existing = db.query(DataPoolItem.source_ref).filter(
-            DataPoolItem.source_system == "aitable_anomaly", DataPoolItem.source_ref.isnot(None)
+            DataPoolItem.source_system == "anomaly", DataPoolItem.source_ref.isnot(None)
         ).all()
         existing_refs = {r[0] for r in existing}
 
-    synced = 0; skipped = 0; errors: list[str] = []
-
+    synced = 0; errors = []
     for r in records:
-        record_id = r.get("recordId", "")
-        cells = r.get("cells", {})
-
-        if not full and record_id in existing_refs:
-            skipped += 1; continue
-
+        rid = r.get("recordId", "")
+        c = r.get("cells", {})
+        if not full and rid in existing_refs: continue
         try:
-            anomaly_type = _cell_val(cells, "UjHVcMP") or ""
-            reason_text = _cell_val(cells, "ivATb5i") or ""
-            region = _cell_val(cells, "iR5P7hE") or ""
-            project = _cell_val(cells, "mAFIHjj") or ""
-            person = _cell_val(cells, "Mp4xZHB") or ""
-            month = _cell_val(cells, "RMi2RbF") or ""
-
-            desc = f"{anomaly_type}: {reason_text}"[:1000]
-            title = f"{project}-{anomaly_type}"[:512] if project else anomaly_type[:512]
-
-            pool_status = "pending"
-
-            item = DataPoolItem(
-                pool_type="anomaly", source_system="aitable_anomaly", source_ref=record_id,
-                title=title, project_name=project, person_name=person,
-                description=desc, status=pool_status,
-                raw_data={
-                    "anomaly_type": anomaly_type, "reason": reason_text,
-                    "region": region, "project": project, "person": person, "month": month,
-                },
-            )
-            db.add(item); synced += 1
+            proj = _cv(c, "06h8ukzbt5k6lit2wupf2")     # OA项目名称
+            person = _cv(c, "1kgnhr6fqota0ct19aqn6")     # 整改人
+            anomaly_type = _cv(c, "dudwqcjgwobfozvuhgu7l") # 异常指标
+            month = _cv(c, "6xwktuomtdhlqqd3iqh3q")       # 异常月份
+            region = _cv(c, "rmnmea3m114npk2s537em")      # 区域
+            title = f"{proj}-{anomaly_type}"[:512] if proj else anomaly_type[:512]
+            db.add(DataPoolItem(
+                pool_type="anomaly", source_system="anomaly", source_ref=rid,
+                title=title, project_name=proj, person_name=person,
+                description=f"异常月份: {month} | 区域: {region}",
+                status="pending",
+                raw_data={"anomaly_type": anomaly_type, "month": month, "region": region},
+            ))
+            synced += 1
         except Exception as e:
-            errors.append(f"记录 {record_id}: {e}")
-
+            errors.append(f"{rid}: {e}")
     db.commit(); db.close()
-    return {"synced": synced, "skipped": skipped, "errors": errors, "total_aitable": len(records)}
+    return {"synced": synced, "errors": errors, "total": len(records)}
 
 
-def sync_project_map_to_db() -> dict:
-    """从 0映射表 同步项目信息"""
-    mapping = sync_project_map()
-    if not mapping:
-        return {"updated": 0, "message": "无数据"}
-    db = SessionLocal()
-    updated = 0
+# ── 3. 异常原因 → 非EAM软工单 ──────────────────────────
+
+def sync_non_eam_to_pool(full: bool = False) -> dict:
+    """从异常原因表 → 数据池 (pool_type=plan)
+
+    这些是"应推工单但未推"的非EAM工单。
+    """
     try:
-        existing = {p.code: p for p in db.query(Project).all()}
-        for eam_name, info in mapping.items():
-            proj_name = info["project_name"]
-            if not proj_name or len(proj_name) < 2:
-                continue
-            code = proj_name[:8]
-            if code in existing:
-                continue
-            db.add(Project(code=code, name=proj_name, type=None, region=None))
-            updated += 1
-        db.commit()
-    finally:
-        db.close()
-    return {"updated": updated, "total_map": len(mapping)}
+        records = _get_records(PLAN_BASE, PLAN_TABLE)
+    except Exception as e:
+        return {"synced": 0, "errors": [f"dws: {e}"]}
+
+    db = SessionLocal()
+    existing_refs = set()
+    if not full:
+        existing = db.query(DataPoolItem.source_ref).filter(
+            DataPoolItem.source_system == "non_eam", DataPoolItem.source_ref.isnot(None)
+        ).all()
+        existing_refs = {r[0] for r in existing}
+
+    synced = 0; errors = []
+    for r in records:
+        rid = r.get("recordId", "")
+        c = r.get("cells", {})
+        if not full and rid in existing_refs: continue
+        try:
+            anomaly = _cv(c, "UjHVcMP")       # 异常甄别
+            reason = _cv(c, "ivATb5i")         # 待异常原因反馈
+            region = _cv(c, "iR5P7hE")          # 区域
+            proj = _cv(c, "mAFIHjj")            # OA项目
+            person = _cv(c, "Mp4xZHB")          # 项目第一负责人
+            title = f"{proj}-{anomaly}"[:512] if proj else anomaly[:512]
+            db.add(DataPoolItem(
+                pool_type="plan", source_system="non_eam", source_ref=rid,
+                title=title, project_name=proj, person_name=person,
+                description=f"{anomaly}: {reason}"[:1000],
+                status="pending",
+                raw_data={"anomaly": anomaly, "reason": reason, "region": region},
+            ))
+            synced += 1
+        except Exception as e:
+            errors.append(f"{rid}: {e}")
+    db.commit(); db.close()
+    return {"synced": synced, "errors": errors, "total": len(records)}
+
+
+# ── 一键全量同步 ──────────────────────────────────────
+
+def sync_all() -> dict:
+    return {
+        "anomaly": sync_anomaly_to_pool(full=True),
+        "non_eam": sync_non_eam_to_pool(full=True),
+        "map": sync_project_map(),
+    }
