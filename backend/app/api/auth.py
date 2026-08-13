@@ -233,13 +233,14 @@ class UpdateRoleBody(BaseModel):
 
 
 @router.get("/users")
-def list_users(db: Session = Depends(get_db), user: User = Depends(require_admin)):
-    users = db.query(User).order_by(User.role, User.name).all()
-    return [
-        {"id": u.id, "name": u.name, "role": u.role, "phone": u.phone,
-         "dingtalk_id": u.dingtalk_id, "is_active": u.is_active}
-        for u in users
-    ]
+def list_users(page: int = 1, page_size: int = 50, db: Session = Depends(get_db)):
+    users = db.query(User).order_by(User.role, User.name).offset((page-1)*page_size).limit(page_size).all()
+    total = db.query(User).count()
+    return {
+        "items": [{"id": u.id, "name": u.name, "role": u.role, "phone": u.phone,
+                    "dingtalk_id": u.dingtalk_id, "is_active": u.is_active} for u in users],
+        "total": total, "page": page, "page_size": page_size,
+    }
 
 
 @router.patch("/users/{user_id}/role")

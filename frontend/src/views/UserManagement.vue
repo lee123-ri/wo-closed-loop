@@ -7,7 +7,7 @@
     <div class="grid2">
       <!-- 用户列表 -->
       <div class="card">
-        <div class="card-hd"><h3>用户列表</h3><span class="count">{{ users.length }} 人</span></div>
+        <div class="card-hd"><h3>用户列表</h3><span class="count">{{ total }} 人</span></div>
         <table>
           <thead>
             <tr>
@@ -43,6 +43,11 @@
             </tr>
           </tbody>
         </table>
+      <div class="pagination" v-if="total > pageSize">
+        <button class="btn btn-sm btn-out" @click="prevPage" :disabled="page <= 1">‹ 上一页</button>
+        <span class="page-info">{{ page }} / {{ Math.ceil(total / pageSize) }}</span>
+        <button class="btn btn-sm btn-out" @click="nextPage" :disabled="page * pageSize >= total">下一页 ›</button>
+      </div>
       </div>
 
       <!-- 权限配置 -->
@@ -79,6 +84,9 @@ import http from "@/api/http";
 
 const store = useUserStore();
 const users = ref<any[]>([]);
+const total = ref(0);
+const page = ref(1);
+const pageSize = 50;
 const saving = ref(false);
 
 interface PermItem {
@@ -179,11 +187,13 @@ async function toggleActive(u: any) {
 
 async function loadUsers() {
   try {
-    users.value = await http.get("/auth/users");
-  } catch (e: any) {
-    console.error(e);
-  }
+    const res: any = await http.get(`/auth/users?page=${page.value}&page_size=${pageSize}`);
+    users.value = res.items || [];
+    total.value = res.total || 0;
+  } catch (e: any) { console.error(e); }
 }
+function prevPage() { if (page.value > 1) { page.value--; loadUsers(); } }
+function nextPage() { if (page.value * pageSize < total.value) { page.value++; loadUsers(); } }
 
 onMounted(loadUsers);
 </script>
@@ -226,6 +236,8 @@ tr.inactive { opacity: 0.5; }
 .btn-pri:disabled { opacity: 0.6; }
 .btn-out { background: #fff; color: #4b5563; border: 1px solid var(--border); }
 .btn-sm { padding: 4px 10px; font-size: 11px; }
+.pagination { display: flex; justify-content: center; align-items: center; gap: 10px; padding: 12px 0; }
+.page-info { font-size: 12px; color: var(--muted); }
 
 @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
 </style>

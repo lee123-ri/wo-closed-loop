@@ -14,6 +14,11 @@
           </tr>
         </tbody>
       </table>
+      <div class="pagination" v-if="total >= pageSize">
+        <button class="btn btn-sm btn-out" @click="prevPage" :disabled="page <= 1">‹ 上一页</button>
+        <span class="page-info">{{ page }}</span>
+        <button class="btn btn-sm btn-out" @click="nextPage" :disabled="total < pageSize">下一页 ›</button>
+      </div>
     </div>
     <div v-if="showForm" class="modal-overlay" @click.self="showForm = false">
       <div class="modal"><div class="modal-hd"><h3>{{ editing ? '编辑' : '新增' }}项目</h3><button class="btn-close" @click="showForm = false">✕</button></div>
@@ -32,12 +37,17 @@
 import { onMounted, reactive, ref } from "vue";
 import http from "@/api/http";
 const projects = ref<any[]>([]);
+const total = ref(0);
+const page = ref(1);
+const pageSize = 50;
 const showForm = ref(false);
 const editing = ref<any>(null);
 const saving = ref(false);
 const form = reactive({ code: "", name: "", type: "", region: "" });
 function typeLabel(t: string) { return { wind: "风电", pv: "光伏", storage: "储能" }[t] || t || "—"; }
-async function load() { projects.value = await http.get("/config/projects"); }
+async function load() { projects.value = await http.get(`/config/projects?page=${page.value}&page_size=${pageSize}`); total.value = projects.value.length; }
+function prevPage() { if (page.value > 1) { page.value--; load(); } }
+function nextPage() { page.value++; load(); }
 function editProject(p: any) { editing.value = p; form.code = p.code; form.name = p.name; form.type = p.type || ""; form.region = p.region || ""; showForm.value = true; }
 async function save() {
   saving.value = true;
@@ -70,4 +80,6 @@ th { background: #f8fafc; font-weight: 600; font-size: 11px; color: var(--muted)
 .btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; }
 .btn-pri { background: var(--brand); color: #fff; } .btn-pri:disabled { opacity: 0.6; }
 .btn-out { background: #fff; color: #4b5563; border: 1px solid var(--border); } .btn-sm { padding: 4px 10px; font-size: 11px; }
+.pagination { display: flex; justify-content: center; align-items: center; gap: 10px; padding: 12px 0; }
+.page-info { font-size: 12px; color: var(--muted); }
 </style>
