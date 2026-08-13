@@ -8,7 +8,7 @@
         </button>
         <button class="btn btn-out" @click="showUpload = true">📤 导入 CSV</button>
         <button class="btn btn-pri" @click="generateAll" :disabled="!pendingCount || generating">
-          ⚡ {{ generating ? '生成中…' : `一键生成工单 (${pendingCount})` }}
+          ⚡ {{ generating ? '生成中…' : `一键生成工单 (${totalPending || pendingCount})` }}
         </button>
       </div>
     </div>
@@ -91,6 +91,7 @@ import { listPoolItems, uploadPoolCSV, generateFromPool, generateAllFromPool, de
 const router = useRouter();
 const items = ref<PoolItem[]>([]);
 const total = ref(0);
+const totalPending = ref(0);
 const filterType = ref("");
 const filterStatus = ref("");
 const selected = ref(new Set<number>());
@@ -108,8 +109,13 @@ function statusLabel(s: string) { return { pending: "待生成", generated: "已
 function statusClass(s: string) { return { pending: "tag-blue", generated: "tag-green", skipped: "tag-gray" }[s] || ""; }
 
 async function load() {
-  const res = await listPoolItems({ pool_type: filterType.value || undefined, status: filterStatus.value || undefined, page_size: 100 });
+  const res = await listPoolItems({ pool_type: filterType.value || undefined, status: filterStatus.value || undefined, page_size: 500 });
   items.value = res.items; total.value = res.total;
+  // 获取待生成总数
+  try {
+    const p = await listPoolItems({ status: "pending", page_size: 1 });
+    totalPending.value = p.total;
+  } catch { totalPending.value = 0; }
 }
 function toggleAll() { if (allSelected.value) selected.value = new Set(); else items.value.filter((i) => i.status === "pending").forEach((i) => selected.value.add(i.id)); }
 function toggleOne(id: number) { if (selected.value.has(id)) selected.value.delete(id); else selected.value.add(id); }
