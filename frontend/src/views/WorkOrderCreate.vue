@@ -97,7 +97,7 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { createWorkOrder } from "@/api/workorders";
-import { getProjects, getSources, getWoTypes, getUsers, getPersonProjectMap, type ConfigItem } from "@/api/config";
+import { getProjectsAll, getSources, getWoTypes, getUsersAll, getPersonProjectMap, type ConfigItem } from "@/api/config";
 import { importTable } from "@/api/imports";
 
 const router = useRouter();
@@ -159,7 +159,7 @@ async function submitManual() {
 }
 
 onMounted(async () => {
-  const [p, s, t, u, pm] = await Promise.all([getProjects(), getSources(), getWoTypes(), getUsers(), getPersonProjectMap()]);
+  const [p, s, t, u, pm] = await Promise.all([getProjectsAll(), getSources(), getWoTypes(), getUsersAll(), getPersonProjectMap()]);
   projects.value = p; sources.value = s; woTypes.value = t; allUsers.value = u; personMap.value = pm;
   if (p.length) form.project_id = p[0].id;
   if (t.length) form.type_id = t[0].id;

@@ -15,7 +15,9 @@ export const getStatuses = () => http.get<any, ConfigItem[]>("/config/statuses")
 export const getWoTypes = () => http.get<any, ConfigItem[]>("/config/work-order-types");
 export const getWoTypesFull = () => http.get<any, any[]>("/config/work-order-types-full");
 export const getProjects = () => http.get<any, any[]>("/config/projects");
+export const getProjectsAll = () => http.get<any, any[]>("/config/projects/all");
 export const getUsers = () => http.get<any, any[]>("/config/users");
+export const getUsersAll = () => http.get<any, any[]>("/config/users/all");
 export const getPriorityRules = () => http.get<any, any[]>("/config/priority-rules");
 export const getSla = () => http.get<any, any[]>("/config/sla");
 export const getApprovalFlows = () => http.get<any, any[]>("/config/approval-flows");

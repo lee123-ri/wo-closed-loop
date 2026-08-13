@@ -109,7 +109,7 @@ function statusLabel(s: string) { return { pending: "待生成", generated: "已
 function statusClass(s: string) { return { pending: "tag-blue", generated: "tag-green", skipped: "tag-gray" }[s] || ""; }
 
 async function load() {
-  const res = await listPoolItems({ pool_type: filterType.value || undefined, status: filterStatus.value || undefined, page_size: 500 });
+  const res = await listPoolItems({ pool_type: filterType.value || undefined, status: filterStatus.value || undefined, page_size: 50 });
   items.value = res.items; total.value = res.total;
   // 获取待生成总数
   try {

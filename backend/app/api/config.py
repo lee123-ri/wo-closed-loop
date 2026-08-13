@@ -43,13 +43,23 @@ def list_wo_types(db: Session = Depends(get_db)):
 
 
 @router.get("/projects", response_model=list[ProjectOut])
-def list_projects(db: Session = Depends(get_db)):
-    return db.query(Project).filter(Project.is_active.is_(True)).order_by(Project.id).all()
+def list_projects(db: Session = Depends(get_db), page: int = 1, page_size: int = 50):
+    return db.query(Project).filter(Project.is_active.is_(True)).order_by(Project.id).offset((page-1)*page_size).limit(page_size).all()
+
+@router.get("/projects/all", response_model=list[ProjectOut])
+def list_all_projects(db: Session = Depends(get_db)):
+    """不分页，给下拉选择器用"""
+    return db.query(Project).filter(Project.is_active.is_(True)).order_by(Project.name).all()
 
 
 @router.get("/users", response_model=list[UserOut])
-def list_users(db: Session = Depends(get_db)):
-    return db.query(User).filter(User.is_active.is_(True)).order_by(User.id).all()
+def list_users(db: Session = Depends(get_db), page: int = 1, page_size: int = 50):
+    return db.query(User).filter(User.is_active.is_(True)).order_by(User.id).offset((page-1)*page_size).limit(page_size).all()
+
+@router.get("/users/all", response_model=list[UserOut])
+def list_all_users(db: Session = Depends(get_db)):
+    """不分页，给下拉选择器用"""
+    return db.query(User).filter(User.is_active.is_(True)).order_by(User.name).all()
 
 
 @router.get("/person-project-map")
