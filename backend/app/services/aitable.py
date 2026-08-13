@@ -166,3 +166,33 @@ def sync_all() -> dict:
         "non_eam": sync_non_eam_to_pool(full=True),
         "map": sync_project_map(),
     }
+
+
+def sync_project_map_to_db() -> dict:
+    """从数仓.0映射表同步项目到本地 projects 表"""
+    mapping = sync_project_map()
+    if not mapping:
+        return {"updated": 0, "message": "无数据"}
+    db = SessionLocal()
+    updated = 0
+    try:
+        seen = set()
+        for proj_name, info in mapping.items():
+            if not proj_name or len(proj_name) < 2 or proj_name in seen:
+                continue
+            seen.add(proj_name)
+            project_name = info.get("project", proj_name)
+            if not project_name or len(project_name) < 2:
+                continue
+            existing = db.query(Project).filter(Project.name == project_name).first()
+            if existing:
+                continue
+            code = project_name[:8]
+            if db.query(Project).filter(Project.code == code).first():
+                code = f"{project_name[:6]}{updated}"
+            db.add(Project(code=code, name=project_name))
+            updated += 1
+        db.commit()
+    finally:
+        db.close()
+    return {"updated": updated, "total_map": len(mapping)}
