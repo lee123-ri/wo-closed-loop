@@ -470,6 +470,10 @@ async function saveMeasureTasks() {
     // 过滤空任务
     const tasks = measureTasks.value.filter(t => t.title.trim())
       .map(({ expanded, ...rest }) => ({ ...rest, type_id: rest.type_id ? rest.type_id : null }));
+    if (tasks.length === 0) {
+      alert("请先填写措施工单标题再保存草稿");
+      return;
+    }
     await updateWorkOrder(wo.value.id, { triggered_wo_tasks: tasks });
     await load();
   } catch (e: any) {
