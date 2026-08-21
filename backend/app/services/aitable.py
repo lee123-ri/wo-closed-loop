@@ -3,7 +3,7 @@ import json
 import subprocess
 from datetime import date
 from app.core.database import SessionLocal
-from app.models import DataPoolItem, Project, User
+from app.models import ConfigDefinition, DataPoolItem, Project, User
 from app.services.region_map import normalize_region
 
 # ── 三个数据源 ────────────────────────────────────────
@@ -15,6 +15,22 @@ MAP_TABLE = "Dzp793M"                                 # 0映射表
 
 PLAN_BASE = "bva6QBXJwanjQ4B6IMlleblnWn4qY5Pr"       # 数据池-计划
 PLAN_TABLE = "bOywzmP"                                 # 异常原因表
+
+# 不发现场关闭台账（写在异常指标 Base 下，记录「不必发到现场」直接关闭的工单与原因）
+NO_DISPATCH_TABLE_NAME = "不发现场关闭台账"
+NO_DISPATCH_CONFIG_CODE = "no_dispatch_table"
+# 建表时随附的初始字段（操作时间用 text 存储，规避钉钉 date 字段写格式脆弱）
+NO_DISPATCH_FIELDS = [
+    {"fieldName": "标题", "type": "primaryDoc"},
+    {"fieldName": "工单编号", "type": "text"},
+    {"fieldName": "项目名称", "type": "text"},
+    {"fieldName": "异常指标", "type": "text"},
+    {"fieldName": "异常月份", "type": "text"},
+    {"fieldName": "关闭原因", "type": "text"},
+    {"fieldName": "判断来源", "type": "singleSelect", "config": {"options": [{"name": "agent_no_action"}, {"name": "pmo_manual"}]}},
+    {"fieldName": "操作人", "type": "text"},
+    {"fieldName": "操作时间", "type": "text"},
+]
 
 
 def _dws(*args: str) -> dict:
@@ -263,3 +279,170 @@ def sync_project_map_to_db() -> dict:
     finally:
         db.close()
     return {"new_projects": new_count, "region_updated": region_updated, "total_map": len(mapping)}
+
+
+# ── 4. 不发现场关闭台账（写入）────────────────────────
+# 写入依赖当前 dws 账号对「数据池-异常指标」Base 有编辑权限；
+# 权限未授予前，ensure/write 都会失败并打印日志，调用方（close-no-dispatch 接口）
+# 降级为本地落库 + no_dispatch_synced=False，由补偿任务在权限到位后重试。
+
+def _get_no_dispatch_config() -> dict | None:
+    """从 config_definitions 读取已建台账表 tableId + {字段名: fieldId}。"""
+    db = SessionLocal()
+    try:
+        cfg = (
+            db.query(ConfigDefinition)
+            .filter(ConfigDefinition.category == "aitable",
+                    ConfigDefinition.code == NO_DISPATCH_CONFIG_CODE)
+            .first()
+        )
+        if cfg and isinstance(cfg.extra, dict) and cfg.extra.get("table_id"):
+            return cfg.extra
+        return None
+    except Exception as e:
+        print(f"[aitable] 读台账配置失败: {e}")
+        return None
+    finally:
+        db.close()
+
+
+def _set_no_dispatch_config(table_id: str, field_map: dict) -> dict:
+    """把 tableId + {字段名: fieldId} 写回 config_definitions（存在则更新 extra）。"""
+    db = SessionLocal()
+    extra = {"table_id": table_id, "fields": field_map}
+    try:
+        cfg = (
+            db.query(ConfigDefinition)
+            .filter(ConfigDefinition.category == "aitable",
+                    ConfigDefinition.code == NO_DISPATCH_CONFIG_CODE)
+            .first()
+        )
+        if cfg:
+            cfg.extra = extra
+        else:
+            db.add(ConfigDefinition(
+                category="aitable", code=NO_DISPATCH_CONFIG_CODE,
+                name=NO_DISPATCH_TABLE_NAME, extra=extra,
+            ))
+        db.commit()
+        return extra
+    except Exception as e:
+        print(f"[aitable] 写台账配置失败: {e}")
+        return extra
+    finally:
+        db.close()
+
+
+def _extract_table_id(obj) -> str | None:
+    """从 resolve-table / table create 返回体里扒 tableId（防御性解析）。"""
+    if isinstance(obj, str):
+        return obj
+    if isinstance(obj, dict):
+        for key in ("tableId", "table_id", "id"):
+            val = obj.get(key)
+            if isinstance(val, str) and val:
+                return val
+        for wrap in ("data", "result", "table"):
+            inner = obj.get(wrap)
+            if isinstance(inner, (dict, list, str)):
+                tid = _extract_table_id(inner)
+                if tid:
+                    return tid
+    elif isinstance(obj, list):
+        for it in obj:
+            tid = _extract_table_id(it)
+            if tid:
+                return tid
+    return None
+
+
+def _extract_field_map(obj, expected_names: set) -> dict:
+    """从 table create / table get 返回体里扒 {字段名: fieldId}。"""
+    result: dict = {}
+
+    def walk(node):
+        if isinstance(node, dict):
+            fid = node.get("fieldId")
+            fname = node.get("fieldName")
+            if isinstance(fid, str) and isinstance(fname, str) and fname in expected_names:
+                result[fname] = fid
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(obj)
+    return result
+
+
+def ensure_no_dispatch_table() -> dict | None:
+    """幂等建「不发现场关闭台账」表并缓存 tableId/字段映射。
+
+    流程：按名解析已存在表 → 不存在则建 → 字段映射不全则 table get 兜底 → 存配置。
+    无写权限/网络失败返回 None（不抛异常），由调用方降级。
+    """
+    cfg = _get_no_dispatch_config()
+    if cfg:
+        return cfg
+
+    expected = {f["fieldName"] for f in NO_DISPATCH_FIELDS}
+    table_id = None
+    field_map: dict = {}
+    try:
+        try:
+            resolved = _dws("aitable", "+resolve-table", "--base", ANOMALY_BASE,
+                            "--name", NO_DISPATCH_TABLE_NAME)
+            table_id = _extract_table_id(resolved)
+        except Exception as e:
+            print(f"[aitable] 解析台账表失败: {e}")
+
+        if not table_id:
+            created = _dws("aitable", "table", "create", "--base-id", ANOMALY_BASE,
+                           "--name", NO_DISPATCH_TABLE_NAME,
+                           "--fields", json.dumps(NO_DISPATCH_FIELDS, ensure_ascii=False))
+            table_id = _extract_table_id(created)
+            field_map = _extract_field_map(created, expected)
+
+        if table_id and not field_map:
+            info = _dws("aitable", "table", "get", "--base-id", ANOMALY_BASE,
+                        "--table-id", table_id)
+            field_map = _extract_field_map(info, expected)
+
+        if not table_id or not field_map:
+            print("[aitable] 台账表未解析到 tableId/字段映射（可能权限未授予）")
+            return None
+        return _set_no_dispatch_config(table_id, field_map)
+    except Exception as e:
+        print(f"[aitable] 建台账表失败（可能权限未授予）: {e}")
+        return None
+
+
+def write_no_dispatch_record(data: dict) -> bool:
+    """写一条「不发现场关闭台账」记录，data 键对齐 NO_DISPATCH_FIELDS 字段名。
+
+    返回是否成功；失败由调用方本地落库待补偿。
+    """
+    cfg = _get_no_dispatch_config() or ensure_no_dispatch_table()
+    if not cfg:
+        return False
+    table_id = cfg.get("table_id")
+    field_map = cfg.get("fields") or {}
+    cells = {}
+    for name, fid in field_map.items():
+        if name == "标题":
+            continue  # primaryDoc 首列由钉钉自动生成，不手动写入
+        val = data.get(name)
+        if val is None or val == "":
+            continue
+        cells[fid] = val
+    if not cells:
+        return False
+    try:
+        _dws("aitable", "record", "create", "--base-id", ANOMALY_BASE,
+             "--table-id", table_id,
+             "--records", json.dumps([{"cells": cells}], ensure_ascii=False))
+        return True
+    except Exception as e:
+        print(f"[aitable] 写台账记录失败: {e}")
+        return False

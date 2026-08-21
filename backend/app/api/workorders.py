@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db, SessionLocal
 from app.models import Project, User, WorkOrder, WorkOrderTypeKB, ConfigDefinition, StatusLog, DataPoolItem
-from app.schemas.workorder import WorkOrderCreate, WorkOrderListOut, WorkOrderOut, WorkOrderUpdate, StatusLogOut
+from app.schemas.workorder import WorkOrderCreate, WorkOrderListOut, WorkOrderOut, WorkOrderUpdate, StatusLogOut, CloseNoDispatchRequest
 from app.schemas.pool import BackfillRequest
 from app.services.priority_service import normalize_priority
 from app.services.roles import resolve_role_user_id
@@ -49,6 +49,10 @@ def _enrich(wo: WorkOrder, db: Session) -> WorkOrderOut:
         "judgment_result": wo.judgment_result,
         "judgment_requested_at": wo.judgment_requested_at,
         "judgment_completed_at": wo.judgment_completed_at,
+        # 不发现场关闭
+        "closed_without_dispatch": bool(wo.closed_without_dispatch),
+        "no_dispatch_reason": wo.no_dispatch_reason,
+        "no_dispatch_synced": bool(wo.no_dispatch_synced),
     }
     return WorkOrderOut(**d)
 
@@ -441,6 +445,81 @@ def get_backfill(wo_id: int, db: Session = Depends(get_db)):
         "judgment_suggestions": wo.judgment_result.get("suggestions") if wo.judgment_result else None,
         "judgment_confidence": wo.judgment_result.get("confidence") if wo.judgment_result else None,
     }
+
+
+# ── 不发现场关闭（2026-08 流程改造）──────────────────
+
+@router.post("/{wo_id}/close-no-dispatch", response_model=WorkOrderOut)
+def close_no_dispatch(wo_id: int, body: CloseNoDispatchRequest, db: Session = Depends(get_db)):
+    """PMO 判断异常指标工单无需发到现场，直接关闭并记原因。
+
+    1. 校验：仅 alert 来源、状态未终结、原因必填
+    2. 软关闭：status=closed + completed_date + conclusion=原因 + 标记 closed_without_dispatch
+    3. 写 AITable「不发现场关闭台账」；失败则 no_dispatch_synced=False，由补偿任务重试
+    """
+    from datetime import datetime
+    from app.services.aitable import write_no_dispatch_record
+
+    wo = db.get(WorkOrder, wo_id)
+    if not wo:
+        raise HTTPException(404, "工单不存在")
+    if wo.source_code != "alert":
+        raise HTTPException(400, "仅异常指标（alert）来源的工单支持不发现场关闭")
+    if wo.status in ("closed", "rejected"):
+        raise HTTPException(409, f"当前状态 {wo.status} 已终结，不能重复关闭")
+
+    reason = (body.reason or "").strip()
+    if not reason:
+        raise HTTPException(422, "关闭原因不能为空")
+
+    prev_status = wo.status
+
+    # 关联数据池字段（异常指标/月份/项目）
+    pool = db.query(DataPoolItem).filter(DataPoolItem.id == wo.parent_pool_id).first() if wo.parent_pool_id else None
+    raw = (pool.raw_data or {}) if pool else {}
+    proj = db.get(Project, wo.project_id) if wo.project_id else None
+    project_name = proj.name if proj else (pool.project_name if pool else None)
+    anomaly_type = raw.get("anomaly_type") or raw.get("异常指标") or (pool.metric_type if pool else None) or ""
+    month = raw.get("month") or raw.get("异常月份") or ""
+
+    # 判断来源：Agent 已判 no_action_needed → agent_no_action，否则 pmo_manual
+    source = "agent_no_action" if wo.judgment_status == "no_action_needed" else "pmo_manual"
+
+    # 软关闭（不物理删，可追溯）
+    if not wo.completed_date:
+        wo.completed_date = date.today()
+    wo.status = "closed"
+    wo.conclusion = reason
+    wo.closed_without_dispatch = True
+    wo.no_dispatch_reason = reason
+    if wo.deadline and wo.completed_date and wo.completed_date > wo.deadline:
+        wo.overdue_days = (wo.completed_date - wo.deadline).days
+
+    db.add(StatusLog(work_order_id=wo.id, from_status=prev_status, to_status="closed",
+                     note=f"不发现场关闭：{reason}"))
+    db.commit()
+    db.refresh(wo)
+
+    # 写 AITable 台账（非阻断）
+    data = {
+        "标题": f"{project_name or ''}-{anomaly_type or wo.code}-不发现场",
+        "工单编号": wo.code,
+        "项目名称": project_name or "",
+        "异常指标": str(anomaly_type) if anomaly_type else "",
+        "异常月份": str(month) if month else "",
+        "关闭原因": reason,
+        "判断来源": source,
+        "操作人": body.operator_name or "",
+        "操作时间": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }
+    if write_no_dispatch_record(data):
+        wo.no_dispatch_synced = True
+        db.commit()
+        db.refresh(wo)
+    else:
+        print(f"[workorder] {wo.code} 台账写入失败，标记待补偿")
+
+    return _enrich(wo, db)
 
 
 # ── 判断Agent 导出/导入（桥接方案，Agent服务上线前的离线协作） ─────

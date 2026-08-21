@@ -1,7 +1,7 @@
 """工单主表及关联子表"""
 from datetime import date, datetime
 
-from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -68,6 +68,11 @@ class WorkOrder(TimestampMixin, Base):
     judgment_result: Mapped[dict | None] = mapped_column(JSONB, comment="Agent返回的完整判定结果")
     judgment_requested_at: Mapped[datetime | None] = mapped_column(DateTime, comment="提交判断时间")
     judgment_completed_at: Mapped[datetime | None] = mapped_column(DateTime, comment="判断完成时间")
+
+    # 不发现场关闭（2026-08 流程改造，异常指标来源）
+    closed_without_dispatch: Mapped[bool] = mapped_column(Boolean, default=False, comment="是否不发现场直接关闭")
+    no_dispatch_reason: Mapped[str | None] = mapped_column(Text, comment="不发现场关闭原因")
+    no_dispatch_synced: Mapped[bool] = mapped_column(Boolean, default=False, comment="关闭原因是否已写回AITable台账")
 
 
 class AgentImportBatch(TimestampMixin, Base):
