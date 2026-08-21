@@ -115,7 +115,7 @@ async def oa_callback(
       节点1 审批人（确认派发）  → agree → 工单 dispatched
       节点2 执行人（执行+附件） → agree → 工单 verifying（待审批人确认）
       节点3 审批人（确认执行）  → agree → 工单 closed
-    任意节点 refuse → 工单 rejected
+    验收节点(accept) refuse → 工单 returned（退回责任人重填）；其余节点 refuse → rejected
 
     钉钉回调 payload 含 processInstanceId / result / activityName(节点名) / formComponentValues。
     回调类型：钉钉「审批任务流转」事件，每个节点完成都回调。
@@ -172,12 +172,16 @@ async def oa_callback(
     wo.oa_id = body.get("processInstanceId", wo.oa_id)
 
     if result == "refuse":
-        # 任意节点驳回 → rejected
-        db.add(StatusLog(work_order_id=wo.id, from_status=wo.status, to_status="rejected",
-                         note=f"钉钉OA节点「{activity}」驳回"))
-        wo.status = "rejected"
+        # 验收节点(accept)驳回 → 退回重填(returned)；其余节点驳回 → rejected
+        stage = _current_stage(wo)
+        if stage == "accept":
+            to_status, note = "returned", f"验收节点「{activity}」驳回·退回责任人重填"
+        else:
+            to_status, note = "rejected", f"钉钉OA节点「{activity}」驳回"
+        db.add(StatusLog(work_order_id=wo.id, from_status=wo.status, to_status=to_status, note=note))
+        wo.status = to_status
         db.commit()
-        return {"success": True, "status": "rejected"}
+        return {"success": True, "status": to_status}
 
     # agree：按 oa_progress 逐节点推进（角色审批链 → 具体人），再算目标状态
     to = _advance_oa_progress(wo)
@@ -194,6 +198,16 @@ async def oa_callback(
                 wo.conclusion = "钉钉OA审批通过·闭环"
     db.commit()
     return {"success": True, "status": wo.status}
+
+
+def _current_stage(wo: WorkOrder) -> str | None:
+    """当前所在审批阶段：oa_progress 中首个未 approved 节点的 stage。"""
+    if not wo.oa_progress:
+        return None
+    for p in wo.oa_progress:
+        if not p.get("approved"):
+            return p.get("stage")
+    return None
 
 
 def _advance_oa_progress(wo: WorkOrder) -> str | None:
@@ -254,6 +268,7 @@ def _sync_oa_results(wo: WorkOrder, db: Session, form_values: list | None = None
     def extract(fvs):
         conclusion = None
         files = []
+        reason = None
         for fv in (fvs or []):
             name = fv.get("name") or ""
             value = fv.get("value")
@@ -265,26 +280,41 @@ def _sync_oa_results(wo: WorkOrder, db: Session, form_values: list | None = None
                         (v.get("text", "") if isinstance(v, dict) else str(v)) for v in value
                     )
                 conclusion = str(value).strip()
+            elif name == "根因分析":
+                if isinstance(value, list):
+                    value = "\n".join(
+                        (v.get("text", "") if isinstance(v, dict) else str(v)) for v in value
+                    )
+                reason = str(value).strip()
             elif name in ("执行佐证", "执行附件", "附件"):
                 if not isinstance(value, list):
                     value = [{"url": value, "name": "执行附件"}]
                 files = value
-        return conclusion, files
+        return conclusion, files, reason
 
-    conclusion, files = extract(form_values)
-    if not conclusion and not files:
+    conclusion, files, reason = extract(form_values)
+    if not conclusion and not files and not reason:
         try:
             info = dingtalk.query_oa_approval(wo.oa_id)
-            c2, f2 = extract((info or {}).get("formComponentValues"))
+            c2, f2, r2 = extract((info or {}).get("formComponentValues"))
             if not conclusion:
                 conclusion = c2
             if not files:
                 files = f2
+            if not reason:
+                reason = r2
         except Exception as e:
             print(f"[dingtalk] 查询 OA 实例兜底跳过: {e}")
 
     if conclusion:
         wo.conclusion = conclusion
+    if reason:
+        # 责任人回填的根因 → backfill_reason（对应工单回填字段）
+        wo.backfill_reason = reason
+        wo.backfill_status = "filled"
+        if not wo.backfilled_at:
+            from datetime import datetime
+            wo.backfilled_at = datetime.now()
     for f in files or []:
         oss_key = (f.get("url") or "") if isinstance(f, dict) else str(f)
         fname = (f.get("name") or "执行附件") if isinstance(f, dict) else "执行附件"
