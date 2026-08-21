@@ -392,36 +392,41 @@ def seed_approval_flows(db) -> None:
 
     特殊 tokens：creator=提交人, executor=责任人, approver=工单审批人（按工单解析）。
     组织角色：pmo=事业部PMO, division_head=事业部负责人（按 role_assignments 解析）。
+
+    幂等：按优先级 upsert，重跑 seed 会把旧版「人名当 role」的节点结构升级为角色编码。
     """
-    if db.query(ApprovalFlow).count() == 0:
-        p1 = ApprovalFlow(priority="P1", name="P1 紧急审批流", enabled=True,
-            nodes=[
-                {"type": "start", "title": "提交人", "sub": "创建工单", "role": "creator"},
-                {"type": "approval", "title": "事业部PMO", "sub": "审批", "role": "pmo", "timeout_days": 0.5},
-                {"type": "approval", "title": "事业部负责人", "sub": "审批", "role": "division_head", "timeout_days": 1},
-                {"type": "exec", "title": "责任人", "sub": "执行", "role": "executor"},
-                {"type": "approval", "title": "审批人", "sub": "验收", "role": "approver", "timeout_days": 0.5},
-                {"type": "end", "title": "闭环", "sub": "完成", "role": ""},
-            ],
-            escalation={"action": "升级至事业部负责人", "target": "division_head"})
-        p2 = ApprovalFlow(priority="P2", name="P2 普通审批流", enabled=True,
-            nodes=[
-                {"type": "start", "title": "提交人", "sub": "创建工单", "role": "creator"},
-                {"type": "approval", "title": "事业部PMO", "sub": "审批", "role": "pmo", "timeout_days": 1},
-                {"type": "exec", "title": "责任人", "sub": "执行", "role": "executor"},
-                {"type": "approval", "title": "审批人", "sub": "验收", "role": "approver", "timeout_days": 1},
-                {"type": "end", "title": "闭环", "sub": "完成", "role": ""},
-            ],
-            escalation={"action": "升级至事业部负责人", "target": "division_head"})
-        p3 = ApprovalFlow(priority="P3", name="P3 低优先审批流", enabled=True,
-            nodes=[
-                {"type": "start", "title": "提交人", "sub": "创建工单", "role": "creator"},
-                {"type": "approval", "title": "事业部PMO", "sub": "审批", "role": "pmo", "timeout_days": 2},
-                {"type": "exec", "title": "责任人", "sub": "执行", "role": "executor"},
-                {"type": "end", "title": "闭环", "sub": "完成", "role": ""},
-            ],
-            escalation={"action": "升级至事业部负责人", "target": "division_head"})
-        db.add_all([p1, p2, p3])
+    flows = [
+        ("P1", "P1 紧急审批流", [
+            {"type": "start", "title": "提交人", "sub": "创建工单", "role": "creator"},
+            {"type": "approval", "title": "事业部PMO", "sub": "审批", "role": "pmo", "timeout_days": 0.5},
+            {"type": "approval", "title": "事业部负责人", "sub": "审批", "role": "division_head", "timeout_days": 1},
+            {"type": "exec", "title": "责任人", "sub": "执行", "role": "executor"},
+            {"type": "approval", "title": "审批人", "sub": "验收", "role": "approver", "timeout_days": 0.5},
+            {"type": "end", "title": "闭环", "sub": "完成", "role": ""},
+        ]),
+        ("P2", "P2 普通审批流", [
+            {"type": "start", "title": "提交人", "sub": "创建工单", "role": "creator"},
+            {"type": "approval", "title": "事业部PMO", "sub": "审批", "role": "pmo", "timeout_days": 1},
+            {"type": "exec", "title": "责任人", "sub": "执行", "role": "executor"},
+            {"type": "approval", "title": "审批人", "sub": "验收", "role": "approver", "timeout_days": 1},
+            {"type": "end", "title": "闭环", "sub": "完成", "role": ""},
+        ]),
+        ("P3", "P3 低优先审批流", [
+            {"type": "start", "title": "提交人", "sub": "创建工单", "role": "creator"},
+            {"type": "approval", "title": "事业部PMO", "sub": "审批", "role": "pmo", "timeout_days": 2},
+            {"type": "exec", "title": "责任人", "sub": "执行", "role": "executor"},
+            {"type": "end", "title": "闭环", "sub": "完成", "role": ""},
+        ]),
+    ]
+    for priority, name, nodes in flows:
+        f = db.query(ApprovalFlow).filter(ApprovalFlow.priority == priority).first()
+        if not f:
+            f = ApprovalFlow(priority=priority, enabled=True)
+            db.add(f)
+        f.name = name
+        f.nodes = nodes
+        f.escalation = {"action": "升级至事业部负责人", "target": "division_head"}
+        f.enabled = True
     db.commit()
 
 

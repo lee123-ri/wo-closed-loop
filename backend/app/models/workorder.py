@@ -42,6 +42,7 @@ class WorkOrder(TimestampMixin, Base):
 
     # 钉钉
     oa_id: Mapped[str | None] = mapped_column(String(64), comment="钉钉 OA 审批单号")
+    oa_progress: Mapped[list | None] = mapped_column(JSONB, comment="OA审批进度 [{stage,role,title,user_id,dingtalk_id,approved}]")
 
     # SLA
     escalation_level: Mapped[int] = mapped_column(Integer, default=0, comment="0|1|2|3")

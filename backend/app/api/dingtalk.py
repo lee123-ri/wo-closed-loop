@@ -179,16 +179,11 @@ async def oa_callback(
         db.commit()
         return {"success": True, "status": "rejected"}
 
-    # agree：3 节点对应 3 次推进（审批人→执行人→审批人确认）
-    next_map = {
-        "approving": ("executing", "节点1审批通过·开始执行"),
-        "executing": ("verifying", "节点2执行人提交·待确认"),
-        "verifying": ("closed", "节点3审批人确认·闭环"),
-    }
-    if wo.status in next_map:
-        to, note = next_map[wo.status]
+    # agree：按 oa_progress 逐节点推进（角色审批链 → 具体人），再算目标状态
+    to = _advance_oa_progress(wo)
+    if to and to != wo.status:
         db.add(StatusLog(work_order_id=wo.id, from_status=wo.status, to_status=to,
-                         note=f"钉钉OA「{activity}」{note}"))
+                         note=f"钉钉OA「{activity}」{_status_note(to)}"))
         wo.status = to
         from datetime import date as _date
         if to == "closed":
@@ -199,6 +194,52 @@ async def oa_callback(
             _sync_attachments(wo, db)
     db.commit()
     return {"success": True, "status": wo.status}
+
+
+def _advance_oa_progress(wo: WorkOrder) -> str | None:
+    """同意一步：标记首个未通过节点为已批，返回目标状态。
+
+    有 oa_progress 时按角色审批链推进；无（旧工单/未发起）则回落到朴素 next_map。
+    深拷贝列表再回写，触发 SQLAlchemy JSONB 变更检测。
+    """
+    if wo.oa_progress:
+        progress = [dict(p) for p in wo.oa_progress]
+        for p in progress:
+            if not p.get("approved"):
+                p["approved"] = True
+                break
+        wo.oa_progress = progress
+        return _compute_status(progress)
+    return {
+        "approving": "executing",
+        "executing": "verifying",
+        "verifying": "closed",
+    }.get(wo.status)
+
+
+def _compute_status(progress: list[dict]) -> str:
+    """按审批进度算状态：approve 全过→dispatched；execute 过→verifying；
+    accept 过（或 P3 无 accept 阶段）→closed；否则 approving。"""
+    approve_done = all(p.get("approved") for p in progress if p.get("stage") == "approve")
+    execute_done = any(p.get("approved") for p in progress if p.get("stage") == "execute")
+    has_accept = any(p.get("stage") == "accept" for p in progress)
+    accept_done = any(p.get("approved") for p in progress if p.get("stage") == "accept")
+    if accept_done or (execute_done and not has_accept):
+        return "closed"
+    if execute_done:
+        return "verifying"
+    if approve_done:
+        return "dispatched"
+    return "approving"
+
+
+def _status_note(to: str) -> str:
+    return {
+        "dispatched": "审批通过·已派发",
+        "verifying": "执行人提交·待验收",
+        "closed": "审批人确认·闭环",
+        "executing": "审批通过·开始执行",
+    }.get(to, "状态推进")
 
 
 def _sync_attachments(wo: WorkOrder, db: Session):

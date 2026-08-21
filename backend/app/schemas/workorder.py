@@ -68,6 +68,7 @@ class WorkOrderOut(WorkOrderBase):
     deadline: date | None
     completed_date: date | None
     oa_id: str | None
+    oa_progress: list | None = None  # OA审批进度 [{stage,role,title,user_id,dingtalk_id,approved}]
     escalation_level: int
     overdue_days: int
     conclusion: str | None

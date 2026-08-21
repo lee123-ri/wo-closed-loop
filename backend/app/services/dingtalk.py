@@ -75,10 +75,12 @@ def _headers(token: str | None) -> dict:
     return {"Content-Type": "application/json"}
 
 
-def create_oa_approval(wo: Any, token: str | None = None) -> str | None:
+def create_oa_approval(wo: Any, chain: list[dict] | None = None, token: str | None = None) -> str | None:
     """发起钉钉 OA 审批。返回钉钉审批实例 ID。
 
     使用旧版 oapi 网关（已通过测试验证）。
+    chain 为 roles.resolve_oa_chain 解析出的角色审批链；据此填钉钉模板审批节点的
+    具体审批人（approvers），使平台角色审批流与钉钉 OA 节点对齐。
     模板字段：工单编号、项目名称、工单类型、触发原因、行动要求、
               责任人、截止时间、执行佐证、执行结论、审批人
     """
@@ -138,6 +140,10 @@ def create_oa_approval(wo: Any, token: str | None = None) -> str | None:
         "app_v2": True,
         "form_component_values": form_component_values,
     }
+    # 按角色链填审批节点审批人（单模板 3 节点：审批→执行→验收确认）
+    approvers = _build_approvers(chain) if chain else None
+    if approvers:
+        payload["approvers"] = approvers
 
     try:
         resp = httpx.post(
@@ -155,6 +161,49 @@ def create_oa_approval(wo: Any, token: str | None = None) -> str | None:
     except Exception as e:
         print(f"[dingtalk] create OA exception: {e}")
     return None
+
+
+def _build_approvers(chain: list[dict]) -> list[dict]:
+    """把角色链按阶段分组到单模板的 3 个审批节点：approve→execute→accept。
+
+    每个模板审批节点都是「发起人自选审批人」；approve 阶段可能含多人
+    （P1 的 PMO+负责人，模板节点设「依次审批」即依次通过）。
+    P3 无 accept 阶段 → 执行人自确认闭环。
+    """
+    approve = [c["dingtalk_id"] for c in chain if c.get("stage") == "approve"]
+    execute = [c["dingtalk_id"] for c in chain if c.get("stage") == "execute"]
+    accept = [c["dingtalk_id"] for c in chain if c.get("stage") == "accept"]
+    if not accept:
+        accept = execute
+    approvers: list[dict] = []
+    for uids in (approve, execute, accept):
+        if uids:
+            approvers.append({"actionType": "add", "userIds": uids})
+    return approvers
+
+
+def terminate_oa_approval(process_instance_id: str, token: str | None = None) -> bool:
+    """终止钉钉 OA 审批单（平台侧驳回/闭环/重置时反向同步用，best-effort）。
+
+    旧版网关 topapi/processinstance/terminate；失败仅打日志不抛异常。
+    """
+    if not _configured() or not process_instance_id:
+        return False
+    token = token or get_access_token()
+    if not token:
+        return False
+    try:
+        resp = httpx.post(
+            f"{_OAPI}/topapi/processinstance/terminate?access_token={token}",
+            json={"process_instance_id": process_instance_id},
+            timeout=10,
+        )
+        if resp.status_code == 200 and resp.json().get("errcode") == 0:
+            return True
+        print(f"[dingtalk] terminate OA failed: {resp.text[:200]}")
+    except Exception as e:
+        print(f"[dingtalk] terminate OA exception: {e}")
+    return False
 
 
 def _lookup_dingtalk_id(wo: Any, attr: str, as_list: bool = False) -> str | list:
