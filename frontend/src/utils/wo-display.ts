@@ -9,6 +9,7 @@ export const statusMap: Record<string, { label: string; tag: string }> = {
   closed: { label: "已闭环", tag: "tag-green" },
   overdue: { label: "已逾期", tag: "tag-red" },
   rejected: { label: "已驳回", tag: "tag-gray" },
+  returned: { label: "退回重填", tag: "tag-red" },
   judging: { label: "已回填", tag: "tag-amber" },
 };
 
@@ -20,7 +21,7 @@ export const statusTheme = (s: string): string => {
   const m: Record<string, string> = {
     pending: "default", approving: "primary", dispatched: "warning",
     executing: "primary", verifying: "warning", closed: "success",
-    overdue: "danger", rejected: "default",
+    overdue: "danger", rejected: "default", returned: "danger",
   };
   return m[s] || "default";
 };

@@ -240,7 +240,7 @@ def get_status_logs(wo_id: int, db: Session = Depends(get_db)):
 
 @router.post("/{wo_id}/transition", response_model=WorkOrderOut)
 def transition_work_order(wo_id: int, action: str, db: Session = Depends(get_db)):
-    """快捷状态流转：dispatch|start_exec|submit_evidence|close|reject"""
+    """快捷状态流转：dispatch|start_exec|submit_evidence|close|reject|resubmit"""
     wo = db.get(WorkOrder, wo_id)
     if not wo:
         raise HTTPException(404, "工单不存在")
@@ -254,6 +254,8 @@ def transition_work_order(wo_id: int, action: str, db: Session = Depends(get_db)
         "reject": ({"approving"}, "rejected", "审批驳回"),
         # alert 判断流程专用
         "dispatch_measure": ({"judging"}, "closed", "生成措施工单并闭环"),
+        # 退回重填后重新提交（returned → 重新发起 OA）
+        "resubmit": ({"returned"}, "approving", "退回重填·重新发起OA审批"),
         # 重置回待派发（未发起），便于重新测试
         "reset": ({"approving", "dispatched", "executing", "verifying", "overdue", "rejected"}, "pending", "重置为待派发(未发起)"),
     }
@@ -274,6 +276,12 @@ def transition_work_order(wo_id: int, action: str, db: Session = Depends(get_db)
         wo.completed_date = None
         wo.overdue_days = 0
         wo.escalation_level = 0
+    if action == "resubmit":
+        # 退回重填后重新提交：终止旧 OA 实例 → 清空进度 → 重新发起
+        _terminate_oa(wo)
+        wo.oa_id = None
+        wo.oa_progress = None
+        _enrich_oa(wo)
     if action == "dispatch_measure":
         # 创建措施工单B（支持多个）
         from app.services.pool_service import _create_triggered_wo
