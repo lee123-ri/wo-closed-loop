@@ -11,6 +11,7 @@ from app.models import (
     PriorityRule, Project, SLADefinition, User, WorkOrder, WorkOrderTypeKB,
     PersonProjectMap, RoleAssignment,
 )
+from app.services.region_map import normalize_region
 
 
 def _today(offset: int = 0) -> date:
@@ -55,7 +56,7 @@ def seed_projects(db, user_ids) -> dict:
     for code, name, ptype, region in projs:
         p = db.query(Project).filter(Project.code == code).first()
         if not p:
-            p = Project(code=code, name=name, type=ptype, region=region)
+            p = Project(code=code, name=name, type=ptype, region=normalize_region(region))
             db.add(p)
             db.flush()
         ids[name] = p.id

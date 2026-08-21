@@ -58,6 +58,12 @@ class WorkOrderUpdate(BaseModel):
     triggered_wo_tasks: list | None = None
 
 
+class CloseNoDispatchRequest(BaseModel):
+    """不发现场关闭：必填关闭原因，可选操作人"""
+    reason: str = Field(..., min_length=1, max_length=2000, description="关闭原因（必填，写入AITable台账）")
+    operator_name: str | None = Field(None, max_length=64, description="操作人姓名，缺省时为空")
+
+
 class WorkOrderOut(WorkOrderBase):
     id: int
     code: str
@@ -97,6 +103,10 @@ class WorkOrderOut(WorkOrderBase):
     judgment_result: dict[str, Any] | None = None
     judgment_requested_at: datetime | None = None
     judgment_completed_at: datetime | None = None
+    # 不发现场关闭（2026-08）
+    closed_without_dispatch: bool | None = None
+    no_dispatch_reason: str | None = None
+    no_dispatch_synced: bool | None = None
 
     model_config = {"from_attributes": True}
 

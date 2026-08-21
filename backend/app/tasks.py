@@ -81,6 +81,60 @@ def sync_aitable_full():
     return sync_anomaly_to_pool(full=True)
 
 
+@celery_app.task(name="app.tasks.sync_no_dispatch_records")
+def sync_no_dispatch_records():
+    """补偿写「不发现场关闭台账」：扫描已关但未同步到 AITable 的工单，重试写入。
+
+    权限未授予期间持续重试；权限到位后一次补齐全部 pending 记录。
+    """
+    from datetime import datetime
+    from app.core.database import SessionLocal
+    from app.models import WorkOrder, Project, DataPoolItem
+    from app.services.aitable import write_no_dispatch_record
+
+    db = SessionLocal()
+    synced = pending = 0
+    try:
+        wos = (
+            db.query(WorkOrder)
+            .filter(
+                WorkOrder.closed_without_dispatch.is_(True),
+                WorkOrder.no_dispatch_synced.is_(False),
+                WorkOrder.no_dispatch_reason.isnot(None),
+            )
+            .all()
+        )
+        for wo in wos:
+            pool = db.query(DataPoolItem).filter(DataPoolItem.id == wo.parent_pool_id).first() if wo.parent_pool_id else None
+            raw = (pool.raw_data or {}) if pool else {}
+            proj = db.get(Project, wo.project_id) if wo.project_id else None
+            project_name = proj.name if proj else (pool.project_name if pool else None)
+            anomaly_type = raw.get("anomaly_type") or raw.get("异常指标") or (pool.metric_type if pool else None) or ""
+            month = raw.get("month") or raw.get("异常月份") or ""
+            source = "agent_no_action" if wo.judgment_status == "no_action_needed" else "pmo_manual"
+            data = {
+                "标题": f"{project_name or ''}-{anomaly_type or wo.code}-不发现场",
+                "工单编号": wo.code,
+                "项目名称": project_name or "",
+                "异常指标": str(anomaly_type) if anomaly_type else "",
+                "异常月份": str(month) if month else "",
+                "关闭原因": wo.no_dispatch_reason,
+                "判断来源": source,
+                "操作人": "",
+                "操作时间": (wo.completed_date.strftime("%Y-%m-%d")
+                            if wo.completed_date else datetime.now().strftime("%Y-%m-%d %H:%M")),
+            }
+            if write_no_dispatch_record(data):
+                wo.no_dispatch_synced = True
+                synced += 1
+            else:
+                pending += 1
+        db.commit()
+    finally:
+        db.close()
+    return {"synced": synced, "pending": pending}
+
+
 @celery_app.task(name="app.tasks.daily_reminder")
 def daily_reminder():
     """每日提醒：汇总所有活跃工单状态，发送群周报。

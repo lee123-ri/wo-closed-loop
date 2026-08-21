@@ -12,6 +12,7 @@ from app.core.database import get_db
 from app.models import Project, User, WorkOrder, WorkOrderTypeKB, StatusLog, AgentImportBatch
 from app.services.llm_service import parse_minutes
 from app.services.priority_service import match_priority
+from app.services.workorder_code import next_work_order_code
 from datetime import date, datetime, timedelta, timezone
 
 router = APIRouter(prefix="/import", tags=["import"])
@@ -76,9 +77,7 @@ async def import_table(request: Request, file: UploadFile = File(...), db: Sessi
         else:
             deadline = date.today() + timedelta(days={"P1": 1, "P2": 3, "P3": 7}.get(priority, 7))
 
-        year = date.today().year
-        cnt = db.query(WorkOrder).filter(WorkOrder.code.like(f"RW-{year}-%")).count()
-        code = f"RW-{year}-{cnt + 1:04d}"
+        code = next_work_order_code(db)
 
         wo = WorkOrder(
             code=code, title=title,
@@ -205,9 +204,7 @@ def _import_agent_batch(db: Session, body: AgentWorkOrderBatchIn) -> dict:
         except ValueError:
             host_deadline = None
 
-    year = date.today().year
-    cnt = db.query(WorkOrder).filter(WorkOrder.code.like(f"RW-{year}-%")).count()
-    code = f"RW-{year}-{cnt + 1:04d}"
+    code = next_work_order_code(db)
 
     wo = WorkOrder(
         code=code, title=title,

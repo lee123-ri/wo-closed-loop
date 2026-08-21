@@ -202,10 +202,8 @@ def generate_from_pool(db: Session, pool_ids: list[int]) -> dict:
             else:
                 priority = normalize_priority(item.priority) or "P2"
 
-            # 生成 code
-            year = date.today().year
-            cnt = db.query(WorkOrder).filter(WorkOrder.code.like(f"RW-{year}-%")).count()
-            code = f"RW-{year}-{cnt + 1:04d}"
+            # 生成 code（max+1，避免删除导致编号空洞撞号）
+            code = _next_code(db)
 
             # 来源 code
             source_map = {"plan": "plan", "anomaly": "alert", "aitable": "meeting", "excel": "manual"}
@@ -422,9 +420,8 @@ def _create_triggered_wo(
 
 
 def _next_code(db: Session) -> str:
-    year = date.today().year
-    cnt = db.query(WorkOrder).filter(WorkOrder.code.like(f"RW-{year}-%")).count()
-    return f"RW-{year}-{cnt + 1:04d}"
+    from app.services.workorder_code import next_work_order_code
+    return next_work_order_code(db)
 
 
 # ── AI表格同步 ─────────────────────────────────────────

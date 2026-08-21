@@ -31,6 +31,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.escalation_scan",
         "schedule": 600.0,  # 每 10 分钟
     },
+    "no-dispatch-sync": {
+        "task": "app.tasks.sync_no_dispatch_records",
+        "schedule": 600.0,  # 每 10 分钟补偿写不发现场关闭台账
+    },
     "daily-reminder": {
         "task": "app.tasks.daily_reminder",
         "schedule": 1800.0,  # 每30分钟检查（仅9:00-9:59执行）
