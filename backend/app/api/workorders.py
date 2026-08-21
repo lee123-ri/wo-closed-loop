@@ -29,6 +29,7 @@ def _enrich(wo: WorkOrder, db: Session) -> WorkOrderOut:
         "priority": wo.priority, "status": wo.status, "created_date": wo.created_date,
         "planned_start_date": wo.planned_start_date, "deadline": wo.deadline,
         "completed_date": wo.completed_date, "oa_id": wo.oa_id,
+        "oa_progress": wo.oa_progress,
         "escalation_level": wo.escalation_level, "overdue_days": wo.overdue_days,
         "conclusion": wo.conclusion, "created_at": wo.created_at,
         "project_name": proj.name if proj else None,
@@ -178,11 +179,15 @@ def _launch_oa(wo: WorkOrder, db: Session):
     """建单后发起钉钉 OA 审批，回填审批实例 ID。无凭证时占位。"""
     try:
         from app.services import dingtalk
+        from app.services.roles import resolve_oa_chain
         enriched = _enrich(wo, db)
-        instance_id = dingtalk.create_oa_approval(enriched)
+        chain = resolve_oa_chain(db, wo)
+        wo.oa_progress = chain
+        instance_id = dingtalk.create_oa_approval(enriched, chain)
         if instance_id:
             wo.oa_id = instance_id
-            db.commit()
+        # 始终提交 oa_progress，即使未配置钉钉（回调路由依赖它）
+        db.commit()
     except Exception as e:
         print(f"[workorder] 发起钉钉审批跳过: {e}")
 
@@ -262,8 +267,10 @@ def transition_work_order(wo_id: int, action: str, db: Session = Depends(get_db)
         wo.oa_id = "OA-" + _date.today().strftime("%Y%m%d") + "-" + str(wo.id).zfill(3)
         _enrich_oa(wo)
     if action == "reset":
-        # 重置回待派发：清空 OA 单号、闭环日期、逾期与升级痕迹，便于重新发起测试
+        # 重置回待派发：先终止钉钉 OA 单，再清空单号、闭环日期、逾期与升级痕迹
+        _terminate_oa(wo)
         wo.oa_id = None
+        wo.oa_progress = None
         wo.completed_date = None
         wo.overdue_days = 0
         wo.escalation_level = 0
@@ -316,6 +323,9 @@ def transition_work_order(wo_id: int, action: str, db: Session = Depends(get_db)
         # 把生成的工单ID存入triggered_wo_tasks方便前端展示链接
         wo.triggered_wo_tasks = [{"code": c, "id": tid} for c, tid in zip(codes, triggered_ids)]
         note = f"生成{len(codes)}个措施工单并闭环 → {', '.join(codes)}"
+    if action in ("reject", "close"):
+        # 平台侧驳回/闭环时，反向终止钉钉 OA 关联审批单，避免审批人还挂着单子
+        _terminate_oa(wo)
     db.add(StatusLog(work_order_id=wo.id, from_status=wo.status, to_status=to, note=note))
     wo.status = to
     if to == "closed" and not wo.completed_date:
@@ -335,9 +345,12 @@ def _enrich_oa(wo: WorkOrder, db: Session | None = None):
     """尝试发起钉钉 OA 审批，回填真实 OA 实例 ID"""
     try:
         from app.services import dingtalk
+        from app.services.roles import resolve_oa_chain
         s = db or SessionLocal()
         enriched = _enrich(wo, s)
-        instance_id = dingtalk.create_oa_approval(enriched)
+        chain = resolve_oa_chain(s, wo)
+        wo.oa_progress = chain
+        instance_id = dingtalk.create_oa_approval(enriched, chain)
         if instance_id and instance_id != wo.oa_id:
             wo.oa_id = instance_id
         if not db:
@@ -345,6 +358,17 @@ def _enrich_oa(wo: WorkOrder, db: Session | None = None):
             s.close()
     except Exception as e:
         print(f"[workorder] OA 发起跳过: {e}")
+
+
+def _terminate_oa(wo: WorkOrder):
+    """平台侧反向同步：驳回/闭环/重置时终止钉钉 OA 关联审批单（best-effort）。"""
+    if not wo.oa_id:
+        return
+    try:
+        from app.services import dingtalk
+        dingtalk.terminate_oa_approval(wo.oa_id)
+    except Exception as e:
+        print(f"[workorder] 终止 OA 跳过: {e}")
 
 
 def _trigger_notify(wo_id: int, action: str, to_status: str):

@@ -61,3 +61,87 @@ def test_clear_data(client, db):
     assert db.query(WorkOrder).count() == 0
     # 类型保留
     assert db.query(WorkOrderTypeKB).count() > 0
+
+
+def test_oa_callback_advances_by_chain(client, db):
+    """钉钉 OA 回调按角色链逐节点推进：dispatched → verifying → closed"""
+    from datetime import date
+    from app.api.workorders import create_work_order
+    from app.schemas.workorder import WorkOrderCreate
+    from app.models import WorkOrder
+
+    wo = create_work_order(WorkOrderCreate(
+        title="OA回调测试", action="做", source_code="manual", priority="P2",
+        deadline=date.today(), project_id=1, person_id=1, approver_id=11,
+    ), db)
+    payload = {
+        "processInstanceId": "PI-TEST-001",
+        "result": "agree",
+        "activityName": "审批",
+        "formComponentValues": [{"name": "工单编号", "value": wo.code}],
+    }
+    r1 = client.post("/api/dingtalk/oa/callback", json=payload)
+    assert r1.json()["status"] == "dispatched"
+    r2 = client.post("/api/dingtalk/oa/callback", json=payload)
+    assert r2.json()["status"] == "verifying"
+    r3 = client.post("/api/dingtalk/oa/callback", json=payload)
+    assert r3.json()["status"] == "closed"
+
+    orm = db.get(WorkOrder, wo.id)
+    assert orm.completed_date is not None
+    assert orm.oa_id == "PI-TEST-001"
+
+
+def test_oa_callback_refuse(client, db):
+    """任意节点驳回 → rejected"""
+    from datetime import date
+    from app.api.workorders import create_work_order
+    from app.schemas.workorder import WorkOrderCreate
+
+    wo = create_work_order(WorkOrderCreate(
+        title="OA驳回测试", action="做", source_code="manual", priority="P2",
+        deadline=date.today(), project_id=1, person_id=1, approver_id=11,
+    ), db)
+    payload = {
+        "processInstanceId": "PI-TEST-002",
+        "result": "refuse",
+        "activityName": "审批",
+        "formComponentValues": [{"name": "工单编号", "value": wo.code}],
+    }
+    r = client.post("/api/dingtalk/oa/callback", json=payload)
+    assert r.json()["status"] == "rejected"
+
+
+def test_oa_callback_syncs_conclusion_and_attachment(client, db):
+    """闭环回调把钉钉表单「执行结论/执行附件」回写到工单"""
+    from datetime import date
+    from app.api.workorders import create_work_order
+    from app.schemas.workorder import WorkOrderCreate
+    from app.models import WorkOrder, Attachment
+
+    wo = create_work_order(WorkOrderCreate(
+        title="OA结论回写", action="做", source_code="manual", priority="P2",
+        deadline=date.today(), project_id=1, person_id=1, approver_id=11,
+    ), db)
+    code = wo.code
+
+    def post(fvs):
+        return client.post("/api/dingtalk/oa/callback", json={
+            "processInstanceId": "PI-TEST-CONC",
+            "result": "agree",
+            "activityName": "验收确认",
+            "formComponentValues": [{"name": "工单编号", "value": code}, *fvs],
+        })
+
+    post([])  # 审批节点 → dispatched
+    post([])  # 执行节点 → verifying
+    post([  # 验收节点 → closed，附带执行结论+附件
+        {"name": "执行结论", "value": "已更换变频柜PLC并复测正常"},
+        {"name": "执行附件", "value": [{"url": "oss://a/b.jpg", "name": "现场照片.jpg"}]},
+    ])
+
+    orm = db.get(WorkOrder, wo.id)
+    assert orm.status == "closed"
+    assert orm.conclusion == "已更换变频柜PLC并复测正常"
+    atts = db.query(Attachment).filter_by(work_order_id=wo.id).all()
+    assert any(a.oss_key == "oss://a/b.jpg" for a in atts)
