@@ -16,6 +16,7 @@ from app.core.database import get_db
 from app.core.security_middleware import limiter
 from app.models import Project, User, WorkOrder, WorkOrderTypeKB, StatusLog
 from app.services.priority_service import match_priority
+from app.services.workorder_code import next_work_order_code
 
 router = APIRouter(prefix="/bot", tags=["bot"])
 
@@ -81,10 +82,8 @@ async def bot_command(request: Request, db: Session = Depends(get_db)):
     days = {"P1": 1, "P2": 3, "P3": 7}.get(priority, 7)
     deadline = date.today() + timedelta(days=days)
 
-    # 生成工单编号
-    year = date.today().year
-    cnt = db.query(WorkOrder).filter(WorkOrder.code.like(f"RW-{year}-%")).count()
-    code = f"RW-{year}-{cnt + 1:04d}"
+    # 生成工单编号（max+1，避免编号空洞撞号）
+    code = next_work_order_code(db)
 
     wo = WorkOrder(
         code=code, title=title, reason="群机器人@创建", action=title,

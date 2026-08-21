@@ -58,10 +58,8 @@ def _enrich(wo: WorkOrder, db: Session) -> WorkOrderOut:
 
 
 def _next_code(db: Session) -> str:
-    year = date.today().year
-    prefix = f"RW-{year}-"
-    cnt = db.query(WorkOrder).filter(WorkOrder.code.like(f"{prefix}%")).count()
-    return f"{prefix}{cnt + 1:04d}"
+    from app.services.workorder_code import next_work_order_code
+    return next_work_order_code(db)
 
 
 @router.get("", response_model=WorkOrderListOut)

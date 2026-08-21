@@ -17,6 +17,7 @@ import openpyxl
 
 from app.core.database import SessionLocal
 from app.models import Project, StatusLog, User, WorkOrder
+from app.services.workorder_code import next_work_order_code
 
 
 def _dws(*args: str) -> dict:
@@ -240,9 +241,7 @@ def import_drive_workorder_versions() -> dict:
                 action = w["action"]
                 if w.get("accept"):
                     action = f"{action}\n【验收】{w['accept']}"
-                year = date.today().year
-                cnt = db.query(WorkOrder).filter(WorkOrder.code.like(f"RW-{year}-%")).count()
-                code = f"RW-{year}-{cnt + 1:04d}"
+                code = next_work_order_code(db)
                 person_user = users.get((w.get("person") or "").strip())
                 wo = WorkOrder(
                     code=code, title=title, reason=reason or None, action=action or title,
