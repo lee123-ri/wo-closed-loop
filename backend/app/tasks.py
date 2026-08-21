@@ -81,6 +81,56 @@ def sync_aitable_full():
     return sync_anomaly_to_pool(full=True)
 
 
+@celery_app.task(name="app.tasks.create_judgment_meeting")
+def create_judgment_meeting_task(project_id: int):
+    """为新入场项目自动创建判定会日程（异步，避免阻塞项目保存）。"""
+    from app.core.database import SessionLocal
+    from app.models import Project
+    from app.services.judgment_meeting import create_or_update_judgment_meeting
+    db = SessionLocal()
+    try:
+        p = db.get(Project, project_id)
+        if not p:
+            return {"skipped": True, "reason": "项目不存在"}
+        return create_or_update_judgment_meeting(p, db)
+    finally:
+        db.close()
+
+
+@celery_app.task(name="app.tasks.judgment_reminder_scan")
+def judgment_reminder_scan():
+    """每日扫描：判定日前 1 天（D-1）向区域群发提醒。
+
+    每小时触发，仅早上 9:00-9:59 执行一次（避免 D-1 当天重复发送）。
+    """
+    from datetime import date, datetime, timedelta
+    from app.core.database import SessionLocal
+    from app.models import Project
+    from app.services.judgment_meeting import send_d1_reminder
+
+    if datetime.now().hour != 9:
+        return {"skipped": True, "reason": "not 9am"}
+
+    db = SessionLocal()
+    sent = failed = 0
+    try:
+        tomorrow = date.today() + timedelta(days=1)
+        projects = (
+            db.query(Project)
+            .filter(Project.judgment_date == tomorrow, Project.is_active.is_(True))
+            .all()
+        )
+        for p in projects:
+            r = send_d1_reminder(p)
+            if r.get("ok"):
+                sent += 1
+            elif not r.get("skipped"):
+                failed += 1
+    finally:
+        db.close()
+    return {"sent": sent, "failed": failed}
+
+
 @celery_app.task(name="app.tasks.daily_reminder")
 def daily_reminder():
     """每日提醒：汇总所有活跃工单状态，发送群周报。

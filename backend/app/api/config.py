@@ -331,8 +331,18 @@ def del_notification_policy(policy_id: int, db: Session = Depends(get_db)):
 # ── 项目管理 CRUD ─────────────────────────────────────
 
 from pydantic import BaseModel as PydanticBase, field_validator
+from datetime import date
 
 from app.services.region_map import normalize_region
+
+
+def _maybe_trigger_judgment_meeting(project_id: int) -> None:
+    """项目入场日期+产品系列确定后，异步触发判定会自动建会（失败不影响项目保存）"""
+    try:
+        from app.tasks import create_judgment_meeting_task
+        create_judgment_meeting_task.delay(project_id)
+    except Exception as e:
+        print(f"[config] 触发判定会建会失败: {e}")
 
 
 class ProjectCreate(PydanticBase):
@@ -340,6 +350,8 @@ class ProjectCreate(PydanticBase):
     name: str
     type: str | None = None
     region: str | None = None
+    entry_date: date | None = None
+    product_series: str | None = None
 
     @field_validator("region")
     @classmethod
@@ -352,6 +364,8 @@ class ProjectUpdate(PydanticBase):
     type: str | None = None
     region: str | None = None
     is_active: bool | None = None
+    entry_date: date | None = None
+    product_series: str | None = None
 
     @field_validator("region")
     @classmethod
@@ -362,10 +376,12 @@ class ProjectUpdate(PydanticBase):
 def create_project(body: ProjectCreate, db: Session = Depends(get_db)):
     if db.query(Project).filter(Project.code == body.code).first():
         raise HTTPException(409, "项目编码已存在")
-    p = Project(code=body.code, name=body.name, type=body.type, region=body.region)
+    p = Project(code=body.code, name=body.name, type=body.type, region=body.region,
+                entry_date=body.entry_date, product_series=body.product_series)
     db.add(p)
     db.commit()
     db.refresh(p)
+    _maybe_trigger_judgment_meeting(p.id)
     return p
 
 @router.patch("/projects/{project_id}", response_model=ProjectOut)
@@ -376,6 +392,7 @@ def update_project(project_id: int, body: ProjectUpdate, db: Session = Depends(g
         setattr(p, k, v)
     db.commit()
     db.refresh(p)
+    _maybe_trigger_judgment_meeting(p.id)
     return p
 
 @router.delete("/projects/{project_id}", status_code=204)

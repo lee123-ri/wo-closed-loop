@@ -172,6 +172,12 @@ class ProjectOut(BaseModel):
     type: str | None = None
     region: str | None = None
     dingtalk_group_id: str | None = None
+    entry_date: str | None = None
+    product_series: str | None = None
+    judgment_date: str | None = None
+    judgment_event_id: str | None = None
+    judgment_status: str | None = None
+    judgment_error: str | None = None
     model_config = {"from_attributes": True}
 
 
