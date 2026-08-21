@@ -82,7 +82,7 @@ def get_stats(db: Session = Depends(get_db)):
     todo_raw = [w for w in all_wos if w.status != "closed"]
     todo_raw.sort(key=lambda w: (w.status != "overdue", w.deadline or date.max))
     todo_items = []
-    for w in todo_raw[:10]:
+    for w in todo_raw[:100]:  # 扩大取数范围，前端分页
         person = db.get(User, w.person_id) if w.person_id else None
         todo_items.append({
             "id": w.id, "code": w.code, "title": w.title, "status": w.status,

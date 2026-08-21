@@ -68,6 +68,52 @@ spec:
   selector: { app: wo-frontend }
   ports: [{ port: 80, targetPort: 80 }]
 ---
+# 判断Agent Deployment + Service（技术团队提供镜像）
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wo-judgment-agent
+  labels: { app: wo-judgment-agent }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: wo-judgment-agent }
+  template:
+    metadata:
+      labels: { app: wo-judgment-agent }
+    spec:
+      containers:
+        - name: agent
+          image: registry.cn-hangzhou.aliyuncs.com/wo/wo-judgment-agent:latest
+          ports: [{ containerPort: 8080 }]
+          env:
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: wo-secrets
+                  key: DASHSCOPE_API_KEY
+            - name: LLM_MODEL
+              value: "qwen-max"
+          resources:
+            requests: { cpu: "500m", memory: "512Mi" }
+            limits: { cpu: "2", memory: "2Gi" }
+          livenessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /health, port: 8080 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wo-judgment-agent
+spec:
+  selector: { app: wo-judgment-agent }
+  ports: [{ port: 8080, targetPort: 8080 }]
+---
 # Celery Worker（异步通知、OA 发起）
 apiVersion: apps/v1
 kind: Deployment
@@ -139,12 +185,18 @@ stringData:
   DINGTALK_AGENT_ID: ""
   DINGTALK_OA_TEMPLATE_ID: ""
   DINGTALK_CORP_ID: ""
+  DINGTALK_CALLBACK_TOKEN: ""
+  DINGTALK_CALLBACK_AES_KEY: ""
   DASHSCOPE_API_KEY: ""
   OSS_ENDPOINT: ""
   OSS_BUCKET: ""
   OSS_ACCESS_KEY_ID: ""
   OSS_ACCESS_KEY_SECRET: ""
   CORS_ORIGINS: "https://wo.example.com"
+  JUDGMENT_AGENT_URL: "http://wo-judgment-agent:8080"
+  JUDGMENT_AGENT_TOKEN: ""
+  JUDGMENT_TIMEOUT: "10"
+  JUDGMENT_ENABLED: "true"
 ---
 # Ingress（对接 ALB）
 apiVersion: networking.k8s.io/v1

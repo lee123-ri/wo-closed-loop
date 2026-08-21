@@ -2,6 +2,8 @@
 
 所有调用都从 settings 取 key，真实 key 在 .env 填入即可，代码无需改动。
 未配置 key 时方法返回占位结果，不报错（便于本地开发）。
+
+OA审批使用 oapi.dingtalk.com 旧版网关（已通过测试验证可用）。
 """
 import time
 import hashlib
@@ -22,6 +24,7 @@ settings = get_settings()
 # access_token 缓存（10 分钟有效期，提前 5 分钟刷新）
 _TOKEN_KEY = "dingtalk:access_token"
 _API = "https://api.dingtalk.com"
+_OAPI = "https://oapi.dingtalk.com"
 
 
 def _redis():
@@ -38,7 +41,7 @@ def _configured() -> bool:
 
 
 def get_access_token() -> str | None:
-    """获取企业 access_token，带 Redis 缓存"""
+    """获取企业 access_token（使用旧版 oapi 网关），带 Redis 缓存"""
     if not _configured():
         return None
     r = _redis()
@@ -47,59 +50,129 @@ def get_access_token() -> str | None:
         if cached:
             return cached.decode() if isinstance(cached, bytes) else cached
     try:
-        resp = httpx.post(
-            f"{_API}/v1.0/oauth2/accessToken",
-            json={"appKey": settings.dingtalk_app_key, "appSecret": settings.dingtalk_app_secret},
+        resp = httpx.get(
+            f"{_OAPI}/gettoken",
+            params={"appkey": settings.dingtalk_app_key, "appsecret": settings.dingtalk_app_secret},
             timeout=10,
         )
         resp.raise_for_status()
-        token = resp.json().get("accessToken")
-        if token and r:
-            r.setex(_TOKEN_KEY, 7000, token)  # 缓存 ~116 分钟
-        return token
+        data = resp.json()
+        if data.get("errcode") == 0:
+            token = data.get("access_token")
+            if token and r:
+                r.setex(_TOKEN_KEY, 7000, token)  # 缓存 ~116 分钟
+            return token
+        else:
+            print(f"[dingtalk] gettoken failed: errcode={data.get('errcode')} msg={data.get('errmsg')}")
+            return None
     except Exception as e:
         print(f"[dingtalk] get_access_token failed: {e}")
         return None
 
 
 def _headers(token: str | None) -> dict:
-    return {"x-acs-dingtalk-access-token": token or "", "Content-Type": "application/json"}
+    """旧版 oapi 不需要特殊 header，token 通过 URL 参数传递"""
+    return {"Content-Type": "application/json"}
 
 
 def create_oa_approval(wo: Any, token: str | None = None) -> str | None:
     """发起钉钉 OA 审批。返回钉钉审批实例 ID。
 
-    需在钉钉后台配置审批模板（DINGTALK_OA_TEMPLATE_ID），字段映射：
-      标题->title, 原因->reason, 行动->action, 责任人->person, 截止->deadline
+    使用旧版 oapi 网关（已通过测试验证）。
+    模板字段：工单编号、项目名称、工单类型、触发原因、行动要求、
+              责任人、截止时间、执行佐证、执行结论、审批人
     """
     if not _configured() or not settings.dingtalk_oa_template_id:
         print("[dingtalk] OA 模板未配置，跳过发起审批")
         return None
     token = token or get_access_token()
-    approver = wo.approver_name or ""
-    # 查审批人的钉钉 userId（此处简化，真实场景需通讯录接口映射）
-    payload = {
-        "processCode": settings.dingtalk_oa_template_id,
-        "originatorUserId": "",  # 提交人 userId（需映射）
-        "deptId": 0,
-        "formComponentValues": [
-            {"name": "工单编号", "value": getattr(wo, "code", "")},
-            {"name": "标题", "value": getattr(wo, "title", "")},
-            {"name": "触发原因", "value": getattr(wo, "reason", "") or ""},
-            {"name": "行动要求", "value": getattr(wo, "action", "") or ""},
-            {"name": "责任人", "value": getattr(wo, "person_name", "") or ""},
-            {"name": "审批人", "value": approver},
-            {"name": "截止日期", "value": str(getattr(wo, "deadline", "") or "")},
-        ],
+    if not token:
+        print("[dingtalk] no access_token, skip OA")
+        return None
+
+    # OA 模板中工单类型的可选值（必须与钉钉管理后台「软工单闭环审批」模板的下拉选项一致，
+    # 若模板下拉尚未同步为这 11 类，请先在钉钉后台更新模板选项）
+    _OA_TYPE_OPTIONS = {
+        "客户满意度/客户投诉", "履约指标异常", "应签未签", "考核扣款", "项目风险",
+        "绩效考核", "成本管理", "专项服务", "重点工作督办", "设备预警工单", "其他",
     }
+
+    # 获取关联数据
+    project_name = ""
+    type_name = ""
     try:
-        resp = httpx.post(f"{_API}/v1.0/workflow/processes", headers=_headers(token), json=payload, timeout=10)
+        db = SessionLocal()
+        from app.models import Project, WorkOrderTypeKB
+        proj = db.query(Project).filter(Project.id == wo.project_id).first()
+        if proj:
+            project_name = proj.name or ""
+        typ = db.query(WorkOrderTypeKB).filter(WorkOrderTypeKB.id == wo.type_id).first()
+        if typ:
+            raw = typ.name or ""
+            # 如果工单类型不在 OA 模板选项里，fallback 到"其他"避免钉钉校验失败
+            type_name = raw if raw in _OA_TYPE_OPTIONS else "其他"
+        db.close()
+    except Exception as e:
+        print(f"[dingtalk] lookup project/type failed: {e}")
+
+    # 获取发起人 userId（映射 person_id → dingtalk_id）
+    originator_user_id = _lookup_dingtalk_id(wo, "person_id")
+
+    # 构建审批表单数据（字段名必须与钉钉OA模板中的字段名完全一致）
+    form_component_values = [
+        {"name": "工单编号", "value": getattr(wo, "code", "")},
+        {"name": "项目名称", "value": project_name},
+        {"name": "工单类型", "value": type_name},
+        {"name": "触发原因", "value": getattr(wo, "reason", "") or ""},
+        {"name": "行动要求", "value": getattr(wo, "action", "") or ""},
+        {"name": "责任人", "value": _lookup_dingtalk_id(wo, "person_id", as_list=True)},
+        {"name": "审批人", "value": _lookup_dingtalk_id(wo, "approver_id", as_list=True)},
+        {"name": "截止时间", "value": str(getattr(wo, "deadline", "") or "")},
+    ]
+
+    # 使用旧版 oapi 网关发起审批（新网关 /v1.0/workflow/processes 404）
+    payload = {
+        "process_code": settings.dingtalk_oa_template_id,
+        "originator_user_id": originator_user_id,
+        "dept_id": 1,
+        "app_v2": True,
+        "form_component_values": form_component_values,
+    }
+
+    try:
+        resp = httpx.post(
+            f"{_OAPI}/topapi/processinstance/create?access_token={token}",
+            json=payload,
+            timeout=10,
+        )
         if resp.status_code == 200:
-            return resp.json().get("result", {}).get("processInstanceId")
-        print(f"[dingtalk] create OA failed: {resp.status_code} {resp.text[:200]}")
+            data = resp.json()
+            if data.get("errcode") == 0:
+                return data.get("process_instance_id") or data.get("instanceId")
+            print(f"[dingtalk] create OA failed: errcode={data.get('errcode')} msg={data.get('errmsg')}")
+        else:
+            print(f"[dingtalk] create OA HTTP {resp.status_code}: {resp.text[:200]}")
     except Exception as e:
         print(f"[dingtalk] create OA exception: {e}")
     return None
+
+
+def _lookup_dingtalk_id(wo: Any, attr: str, as_list: bool = False) -> str | list:
+    """从数据库查询用户的钉钉 userId，代替旧的 _staff_value（用名字不靠谱）"""
+    user_id = getattr(wo, attr, None)
+    if not user_id:
+        return [] if as_list else ""
+    try:
+        db = SessionLocal()
+        user = db.query(User).filter(User.id == user_id).first()
+        db.close()
+        if user and user.dingtalk_id:
+            return [user.dingtalk_id] if as_list else user.dingtalk_id
+        if user:
+            return [user.name or ""] if as_list else (user.name or "")
+    except Exception:
+        pass
+    return [] if as_list else ""
 
 
 def query_oa_approval(process_instance_id: str, token: str | None = None) -> dict | None:

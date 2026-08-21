@@ -91,6 +91,7 @@ class WorkOrderTypeOut(BaseModel):
     name: str
     desc: str | None = None
     default_approver_id: int | None = None
+    default_approver_role: str | None = None
     default_priority: str
     sort_order: int
     # SOP 字段
@@ -110,7 +111,35 @@ class WorkOrderTypeCreate(BaseModel):
     name: str
     desc: str | None = None
     default_approver_id: int | None = None
+    default_approver_role: str | None = None
     default_priority: str = "P2"
+    # SOP 字段
+    guidance_ref: str | None = None
+    sop_purpose: str | None = None
+    sop_scope: str | None = None
+    sop_steps: list | None = None
+    sop_acceptance: str | None = None
+    sop_backfill_required: bool = True
+    sop_escalation: dict | None = None
+    sop_related_guidance: list | None = None
+
+
+class WorkOrderTypeUpdate(BaseModel):
+    """工单类型更新：所有字段可选，仅更新传入的字段"""
+    type_code: str | None = None
+    name: str | None = None
+    desc: str | None = None
+    default_approver_id: int | None = None
+    default_approver_role: str | None = None
+    default_priority: str | None = None
+    guidance_ref: str | None = None
+    sop_purpose: str | None = None
+    sop_scope: str | None = None
+    sop_steps: list | None = None
+    sop_acceptance: str | None = None
+    sop_backfill_required: bool | None = None
+    sop_escalation: dict | None = None
+    sop_related_guidance: list | None = None
 
 
 class PersonMapOut(BaseModel):
@@ -150,4 +179,32 @@ class UserOut(BaseModel):
     id: int
     name: str
     role: str
+    department: str | None = None
     model_config = {"from_attributes": True}
+
+
+class RegionPMOOut(BaseModel):
+    id: int
+    region: str
+    user_id: int
+    user_name: str | None = None
+    model_config = {"from_attributes": True}
+
+
+class RegionPMOCreate(BaseModel):
+    region: str
+    user_id: int
+
+
+class RoleAssignmentOut(BaseModel):
+    id: int
+    role_code: str
+    role_name: str
+    user_id: int | None = None
+    user_name: str | None = None
+    sort_order: int
+    model_config = {"from_attributes": True}
+
+
+class RoleAssignmentUpdate(BaseModel):
+    user_id: int | None = None

@@ -9,6 +9,7 @@ export const statusMap: Record<string, { label: string; tag: string }> = {
   closed: { label: "已闭环", tag: "tag-green" },
   overdue: { label: "已逾期", tag: "tag-red" },
   rejected: { label: "已驳回", tag: "tag-gray" },
+  judging: { label: "已回填", tag: "tag-amber" },
 };
 
 export const statusLabel = (s: string) => statusMap[s]?.label ?? s;
@@ -59,8 +60,43 @@ export const FLOW_STEPS = [
   "closed",
 ] as const;
 
-/** 根据当前状态计算审批流进度 */
-export function flowProgress(status: string): { idx: number; steps: { code: string; state: "done" | "active" | "warn" | "todo" }[] } {
+/** 根据当前状态计算审批流进度。
+ *  alert 来源 → 3步判断流程：待回填 → 判定中 → 已闭环
+ */
+export function flowProgress(
+  status: string,
+  sourceCode?: string,
+  backfillFilled?: boolean,
+): { idx: number; steps: { code: string; state: "done" | "active" | "warn" | "todo" }[] } {
+
+  // alert 来源 → 判断流程
+  if (sourceCode === "alert") {
+    const steps = [
+      { code: "pending", label: "待回填" },
+      { code: "judging", label: "已回填" },
+      { code: "closed", label: "已闭环" },
+    ];
+    let idx: number;
+    if (status === "closed") {
+      idx = 2;
+    } else if (status === "judging") {
+      idx = 1;
+    } else {
+      idx = 0;
+    }
+    return {
+      idx,
+      steps: steps.map((s, i) => ({
+        code: s.code,
+        state: i < idx ? "done" as const
+             : i === idx ? "active" as const
+             : "todo" as const,
+      })),
+    };
+  }
+
+  // 普通工单 → 原审批流
+  const FLOW_STEPS = ["pending", "approving", "dispatched", "executing", "verifying", "closed"] as const;
   let idx = FLOW_STEPS.indexOf(status as any);
   if (idx === -1) idx = status === "overdue" ? 3 : status === "rejected" ? 1 : 0;
   const steps = FLOW_STEPS.map((code, i) => {

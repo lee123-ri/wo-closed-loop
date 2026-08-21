@@ -12,7 +12,7 @@
 
     <template v-if="stats.total > 0">
       <!-- 统计卡片 -->
-      <div class="equal-row stats-row">
+      <div class="card-row">
         <t-card v-for="s in statCards" :key="s.key" class="stat-card" :class="s.cls" hover @click="goToList(s.filter)">
           <div class="stat-num" :style="{ color: s.color }">{{ s.value }}</div>
           <div class="stat-lbl">{{ s.label }}</div>
@@ -20,12 +20,10 @@
       </div>
 
       <!-- SLA 指标 -->
-      <div class="equal-row kpi-row">
+      <div class="card-row">
         <t-card class="kpi-card">
-          <div class="kpi-ring">
-            <t-statistic title="SLA 合规率" :value="stats.sla_compliance" suffix="%" :color="slaColor" />
-            <div class="kpi-sub" :style="{color: slaColor}">{{ slaCompliance >= 90 ? '良好' : slaCompliance >= 70 ? '需关注' : '告警' }}</div>
-          </div>
+          <t-statistic title="SLA 合规率" :value="stats.sla_compliance" suffix="%" :color="slaColor" />
+          <div class="kpi-sub" :style="{color: slaColor}">{{ slaCompliance >= 90 ? '良好' : slaCompliance >= 70 ? '需关注' : '告警' }}</div>
         </t-card>
         <t-card class="kpi-card"><t-statistic title="MTTR 平均处理(天)" :value="stats.mttr_days ?? '—'" /></t-card>
         <t-card class="kpi-card"><t-statistic title="MTTA 响应(天)" :value="stats.mtta_days ?? '—'" /></t-card>
@@ -46,67 +44,71 @@
         </div>
       </t-card>
 
-      <t-row :gutter="16" class="main-row">
-        <!-- 待办 -->
-        <t-col :span="6" :lg="6">
-          <t-card title="📋 待办工单" :subtitle="`共 ${stats.todo_items.length} 条`" class="todo-card">
-            <t-list>
-              <t-list-item v-for="w in stats.todo_items" :key="w.id" @click="goDetail(w.id)" class="todo-item" :class="{overdue: w.status==='overdue'}">
-                <t-list-item-meta>
-                  <template #title>
-                    <t-tag size="small" :theme="statusTheme(w.status)">{{ statusLabel(w.status) }}</t-tag>
-                    <span class="todo-title">{{ w.title }}</span>
-                  </template>
-                  <template #description>
-                    <span class="todo-meta">{{ w.person }} · 截止 {{ w.deadline }}</span>
-                    <t-tag v-if="w.escalation_level > 0" size="small" theme="warning" style="margin-left:8px">{{ escLabel[w.escalation_level] }}</t-tag>
-                  </template>
-                </t-list-item-meta>
-              </t-list-item>
-            </t-list>
-          </t-card>
-        </t-col>
+      <!-- 待办 + 来源分布 -->
+      <div class="two-col">
+        <t-card title="📋 待办工单" :subtitle="`共 ${stats.todo_items.length} 条`" class="todo-card">
+          <t-list :split="true">
+            <t-list-item v-for="w in paginatedTodos" :key="w.id" @click="goDetail(w.id)" class="todo-item" :class="{overdue: w.status==='overdue'}">
+              <t-list-item-meta>
+                <template #title>
+                  <t-tag size="small" :theme="statusTheme(w.status)">{{ statusLabel(w.status) }}</t-tag>
+                  <span class="todo-title">{{ w.title }}</span>
+                </template>
+                <template #description>
+                  <span class="todo-meta">{{ w.person }} · 截止 {{ w.deadline }}</span>
+                  <t-tag v-if="w.escalation_level > 0" size="small" theme="warning" style="margin-left:8px">{{ escLabel[w.escalation_level] }}</t-tag>
+                </template>
+              </t-list-item-meta>
+            </t-list-item>
+            <t-list-item v-if="stats.todo_items.length === 0" class="todo-empty">
+              🎉 暂无待办，所有工单已闭环
+            </t-list-item>
+          </t-list>
+          <t-pagination
+            v-if="stats.todo_items.length > todoPageSize"
+            :current="todoPage"
+            :page-size="todoPageSize"
+            :total="stats.todo_items.length"
+            :page-size-options="[5, 10, 20]"
+            size="small"
+            show-jumper
+            @current-change="onTodoCurrentChange"
+            @page-size-change="onTodoPageSizeChange"
+            style="margin-top:12px; justify-content:center"
+          />
+        </t-card>
 
-        <!-- 来源分布 + 时效 -->
-        <t-col :span="6" :lg="6">
-          <t-card title="📊 来源分布" class="dist-card">
-            <div v-for="s in stats.source_dist" :key="s.code" class="dist-item" @click="goToList({ source_code: s.code })">
-              <div class="dist-row">
-                <span class="src-tag" :class="srcClass(s.code)">{{ s.name }}</span>
-                <span class="dist-count">{{ s.count }} 条 · {{ s.pct }}%</span>
-              </div>
-              <t-progress :percentage="s.pct" :color="srcColor(s.code)" size="small" />
+        <t-card title="📊 来源分布" class="dist-card">
+          <div v-for="s in stats.source_dist" :key="s.code" class="dist-item" @click="goToList({ source_code: s.code })">
+            <div class="dist-row">
+              <span class="src-tag" :class="srcClass(s.code)">{{ s.name }}</span>
+              <span class="dist-count">{{ s.count }} 条 · {{ s.pct }}%</span>
             </div>
-
-            <t-divider />
-
-            <div class="aging">
-              <div class="aging-title">工单时效分布（创建→闭环）</div>
-              <div class="aging-bar">
-                <div class="aging-seg green" :style="{flex: agingTotal ? aging.d3/agingTotal : 0}">{{ aging.d3 || '' }}</div>
-                <div class="aging-seg amber" :style="{flex: agingTotal ? aging.d7/agingTotal : 0}">{{ aging.d7 || '' }}</div>
-                <div class="aging-seg orange" :style="{flex: agingTotal ? aging.d14/agingTotal : 0}">{{ aging.d14 || '' }}</div>
-                <div class="aging-seg red" :style="{flex: agingTotal ? aging.o14/agingTotal : 0}">{{ aging.o14 || '' }}</div>
-              </div>
-              <div class="aging-axis"><span>≤3天</span><span>3-7天</span><span>7-14天</span><span>&gt;14天</span></div>
+            <t-progress :percentage="s.pct" :color="srcColor(s.code)" size="small" />
+          </div>
+          <t-divider />
+          <div class="aging">
+            <div class="aging-title">工单时效分布（创建→闭环）</div>
+            <div class="aging-bar">
+              <div class="aging-seg green" :style="{flex: agingTotal ? aging.d3/agingTotal : 0}">{{ aging.d3 || '' }}</div>
+              <div class="aging-seg amber" :style="{flex: agingTotal ? aging.d7/agingTotal : 0}">{{ aging.d7 || '' }}</div>
+              <div class="aging-seg orange" :style="{flex: agingTotal ? aging.d14/agingTotal : 0}">{{ aging.d14 || '' }}</div>
+              <div class="aging-seg red" :style="{flex: agingTotal ? aging.o14/agingTotal : 0}">{{ aging.o14 || '' }}</div>
             </div>
-          </t-card>
-        </t-col>
-      </t-row>
+            <div class="aging-axis"><span>≤3天</span><span>3-7天</span><span>7-14天</span><span>&gt;14天</span></div>
+          </div>
+        </t-card>
+      </div>
 
-    <!-- 趋势图表 -->
-    <t-row :gutter="16" style="margin-top:16px">
-      <t-col :span="8">
+      <!-- 趋势图表 -->
+      <div class="two-col" style="--left:2; --right:1">
         <t-card title="月度趋势">
           <div ref="trendChart" style="height:240px"></div>
         </t-card>
-      </t-col>
-      <t-col :span="4">
         <t-card title="工单类型分布">
           <div ref="typeChart" style="height:240px"></div>
         </t-card>
-      </t-col>
-    </t-row>
+      </div>
     </template>
   </div>
 </template>
@@ -143,15 +145,20 @@ const agingTotal = computed(() => Object.values(aging.value).reduce((a, b) => a 
 const slaCompliance = computed(() => stats.value.sla_compliance);
 const slaColor = computed(() => slaCompliance.value >= 90 ? "#2ba471" : slaCompliance.value >= 70 ? "#e37318" : "#d54941");
 
+// ── 待办分页 ──
+const todoPage = ref(1);
+const todoPageSize = ref(10);
+const paginatedTodos = computed(() => {
+  const s = (todoPage.value - 1) * todoPageSize.value;
+  return stats.value.todo_items.slice(s, s + todoPageSize.value);
+});
+function onTodoCurrentChange(current: number) { todoPage.value = current; }
+function onTodoPageSizeChange(pageSize: number) { todoPageSize.value = pageSize; todoPage.value = 1; }
+
 const srcColorMap: Record<string, string> = { plan: "#0052d9", alert: "#d54941", meeting: "#e37318", manual: "#7c3aed" };
 const srcClassMap: Record<string, string> = { plan: "src-plan", alert: "src-alert", meeting: "src-meeting", manual: "src-manual" };
 const srcColor = (c: string) => srcColorMap[c] ?? "#8c8c8c";
 const srcClass = (c: string) => srcClassMap[c] ?? "";
-
-function statusTheme(s: string): any {
-  return ({ pending: "default", approving: "primary", dispatched: "warning", executing: "primary",
-    verifying: "warning", closed: "success", overdue: "danger", rejected: "default" } as any)[s] || "default";
-}
 
 function goToList(f: any) { router.push({ path: "/work-orders", query: f }); }
 function goDetail(id: number) { router.push(`/work-orders/${id}`); }
@@ -210,29 +217,45 @@ onMounted(async () => {
 .empty-desc { color: var(--muted); font-size: var(--fs-meta); margin-bottom: 16px; }
 .empty-desc code { background: #f0f4ff; padding: 2px 6px; border-radius: 3px; }
 
-.stats-row .stat-card { text-align: center; border-left: 3px solid var(--border); transition: all .15s; }
+/* ── 等宽卡片行（flexbox，自动平分） ── */
+.card-row { display: flex; gap: 16px; }
+.card-row > * { flex: 1; min-width: 0; }
+
+/* 统计卡片 */
+.stat-card { text-align: center; border-left: 3px solid var(--border); transition: all .15s; }
 .stat-card.amber { border-left-color: var(--amber); }
 .stat-card.red { border-left-color: var(--red); }
 .stat-card.green { border-left-color: var(--green); }
+.stat-card.blue { border-left-color: var(--blue); }
 .stat-num { font-size: var(--fs-display); font-weight: 800; line-height: 1; }
 .stat-lbl { font-size: var(--fs-meta); color: var(--muted); margin-top: 6px; }
 
+/* KPI 卡片 */
 .kpi-card { text-align: center; }
 .kpi-sub { font-size: var(--fs-meta); margin-top: 4px; }
 
+/* 告警条 */
 .alert-card { background: linear-gradient(90deg, #fbe5e3, #fff); border: 1px solid #f5b3b0; }
 .alert-inner { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .alert-icon { font-size: 20px; }
 .alert-text { font-size: var(--fs-body); font-weight: 600; color: #a82820; }
 .alert-items { display: flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
 
-.main-row { margin-top: 0; }
+/* ── 双列布局（待办+来源 / 趋势+类型） ── */
+.two-col { display: flex; gap: 16px; }
+.two-col > *:first-child { flex: var(--left, 3); min-width: 0; }
+.two-col > *:last-child { flex: var(--right, 2); min-width: 0; }
+
+/* 待办 */
+.todo-card :deep(.t-card__body) { max-height: 500px; overflow-y: auto; }
 .todo-item { cursor: pointer; border-radius: 6px; padding: 4px 8px; }
 .todo-item:hover { background: #f5f7fa; }
 .todo-item.overdue { background: #fef2f2; }
 .todo-title { font-size: var(--fs-body); margin-left: 8px; }
 .todo-meta { font-size: var(--fs-tag); color: var(--muted); }
+.todo-empty { text-align: center; padding: 16px; color: var(--muted); }
 
+/* 来源分布 */
 .dist-item { padding: 6px 0; cursor: pointer; }
 .dist-item:hover { background: #f5f7fa; border-radius: 4px; }
 .dist-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: var(--fs-body); }
@@ -243,6 +266,7 @@ onMounted(async () => {
 .src-meeting { background: #fef3c7; color: #92400e; }
 .src-manual { background: #e0e7ff; color: #3730a3; }
 
+/* 时效 */
 .aging { margin-top: 8px; }
 .aging-title { font-size: var(--fs-meta); color: var(--muted); margin-bottom: 6px; }
 .aging-bar { display: flex; height: 20px; border-radius: 4px; overflow: hidden; }

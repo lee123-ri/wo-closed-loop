@@ -204,14 +204,15 @@ def get_permissions():
                 "闭环记录": {"roles": ["admin", "approver", "executor"]},
             },
             "基础数据": {
-                "项目管理": {"roles": ["admin"]},
+                "项目管理": {"roles": ["admin", "approver"]},
+                "用户管理": {"roles": ["admin"]},
                 "数据池": {"roles": ["admin", "approver"]},
                 "SOP知识库": {"roles": ["admin", "approver", "executor"]},
             },
             "系统设置": {
-                "用户管理": {"roles": ["admin"]},
                 "规则配置": {"roles": ["admin"]},
                 "操作日志": {"roles": ["admin"]},
+                "钉钉集成": {"roles": ["admin", "approver"]},
             },
         },
         "actions": {
@@ -233,7 +234,7 @@ class UpdateRoleBody(BaseModel):
 
 
 @router.get("/users")
-def list_users(page: int = 1, page_size: int = 50, db: Session = Depends(get_db)):
+def list_users(page: int = 1, page_size: int = 50, db: Session = Depends(get_db), _: User = Depends(require_auth)):
     users = db.query(User).order_by(User.role, User.name).offset((page-1)*page_size).limit(page_size).all()
     total = db.query(User).count()
     return {

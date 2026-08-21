@@ -43,10 +43,16 @@
             </tr>
           </tbody>
         </table>
-      <div class="pagination" v-if="total > pageSize">
-        <button class="btn btn-sm btn-out" @click="prevPage" :disabled="page <= 1">‹ 上一页</button>
-        <span class="page-info">{{ page }} / {{ Math.ceil(total / pageSize) }}</span>
-        <button class="btn btn-sm btn-out" @click="nextPage" :disabled="page * pageSize >= total">下一页 ›</button>
+      <div class="pagination-bar" v-if="total > 0">
+        <t-pagination
+          v-model:current="page"
+          v-model:pageSize="pageSize"
+          :total="total"
+          :page-size-options="[10, 20, 50]"
+          show-page-size
+          show-jumper
+          @change="onPageChange"
+        />
       </div>
       </div>
 
@@ -86,7 +92,7 @@ const store = useUserStore();
 const users = ref<any[]>([]);
 const total = ref(0);
 const page = ref(1);
-const pageSize = 50;
+const pageSize = ref(10);
 const saving = ref(false);
 
 interface PermItem {
@@ -115,15 +121,20 @@ const permissionConfig = reactive<PermGroup[]>([
     ],
   },
   {
-    label: "数据管理",
+    label: "基础数据",
     items: [
+      { title: "项目管理", roles: ["admin", "approver"] },
+      { title: "用户管理", roles: ["admin"] },
       { title: "数据池", roles: ["admin", "approver"] },
+      { title: "SOP知识库", roles: ["admin", "approver", "executor"] },
     ],
   },
   {
     label: "系统设置",
     items: [
-      { title: "用户管理", roles: ["admin"] },
+      { title: "规则配置", roles: ["admin"] },
+      { title: "操作日志", roles: ["admin"] },
+      { title: "钉钉集成", roles: ["admin", "approver"] },
     ],
   },
 ]);
@@ -178,7 +189,7 @@ async function changeRole(u: any) {
 
 async function toggleActive(u: any) {
   try {
-    const res = await http.patch(`/auth/users/${u.id}/toggle-active`);
+    const res = await http.patch<any, any>(`/auth/users/${u.id}/toggle-active`);
     u.is_active = res.is_active;
   } catch (e: any) {
     alert("操作失败：" + e.message);
@@ -187,13 +198,16 @@ async function toggleActive(u: any) {
 
 async function loadUsers() {
   try {
-    const res: any = await http.get(`/auth/users?page=${page.value}&page_size=${pageSize}`);
+    const res: any = await http.get(`/auth/users?page=${page.value}&page_size=${pageSize.value}`);
     users.value = res.items || [];
     total.value = res.total || 0;
   } catch (e: any) { console.error(e); }
 }
-function prevPage() { if (page.value > 1) { page.value--; loadUsers(); } }
-function nextPage() { if (page.value * pageSize < total.value) { page.value++; loadUsers(); } }
+function onPageChange(p: any) {
+  page.value = p.current;
+  pageSize.value = p.pageSize;
+  loadUsers();
+}
 
 onMounted(loadUsers);
 </script>
@@ -236,8 +250,7 @@ tr.inactive { opacity: 0.5; }
 .btn-pri:disabled { opacity: 0.6; }
 .btn-out { background: #fff; color: #4b5563; border: 1px solid var(--border); }
 .btn-sm { padding: 4px 10px; font-size: 11px; }
-.pagination { display: flex; justify-content: center; align-items: center; gap: 10px; padding: 12px 0; }
-.page-info { font-size: 12px; color: var(--muted); }
+.pagination-bar { display: flex; justify-content: center; padding: 16px 0 0; }
 
 @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
 </style>

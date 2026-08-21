@@ -12,6 +12,7 @@ export interface WorkOrder {
   source_code: string;
   project_id: number | null;
   project_name: string | null;
+  region: string | null;
   person_id: number | null;
   person_name: string | null;
   approver_id: number | null;
@@ -19,6 +20,7 @@ export interface WorkOrder {
   type_id: number | null;
   type_name: string | null;
   created_date: string;
+  planned_start_date: string | null;
   deadline: string | null;
   completed_date: string | null;
   oa_id: string | null;
@@ -26,6 +28,14 @@ export interface WorkOrder {
   overdue_days: number;
   duration_days: number | null;
   is_overdue: boolean;
+  // 判断Agent
+  judgment_status: string | null;
+  judgment_result: any | null;
+  // 回填增强
+  triggered_wo_title: string | null;
+  triggered_wo_deadline: string | null;
+  triggered_wo_person_name: string | null;
+  triggered_wo_tasks: any | null;
 }
 
 export interface WorkOrderList {

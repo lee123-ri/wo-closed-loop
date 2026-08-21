@@ -6,6 +6,9 @@
         <button class="btn btn-out" @click="doSync" :disabled="syncing">
           {{ syncing ? '同步中…' : '🔄 从 AI 表格同步' }}
         </button>
+        <button class="btn btn-out" @click="doFullSync" :disabled="fullSyncing">
+          {{ fullSyncing ? '同步中…' : '🚀 一键全链路同步' }}
+        </button>
         <button class="btn btn-out" @click="showUpload = true">📤 导入 CSV</button>
         <button class="btn btn-pri" @click="generateAll" :disabled="!pendingCount || generating">
           ⚡ {{ generating ? '生成中…' : `一键生成工单 (${totalPending || pendingCount})` }}
@@ -86,7 +89,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
-import { listPoolItems, uploadPoolCSV, generateFromPool, generateAllFromPool, deletePoolItem, syncAITable, type PoolItem, type PoolImportResult } from "@/api/pool";
+import { listPoolItems, uploadPoolCSV, generateFromPool, generateAllFromPool, deletePoolItem, syncAITable, syncFull, type PoolItem, type PoolImportResult } from "@/api/pool";
 
 const router = useRouter();
 const items = ref<PoolItem[]>([]);
@@ -97,6 +100,7 @@ const filterStatus = ref("");
 const selected = ref(new Set<number>());
 const generating = ref(false);
 const syncing = ref(false);
+const fullSyncing = ref(false);
 const showUpload = ref(false);
 const uploadType = ref("plan");
 const uploadResult = ref<PoolImportResult | null>(null);
@@ -148,6 +152,23 @@ async function doSync() {
     await load();
   } catch (e: any) { alert("同步失败：" + e.message); }
   finally { syncing.value = false; }
+}
+
+async function doFullSync() {
+  if (!confirm("一键全链路同步：AITable→数据池→生成工单，并搜索钉盘「工单版」xlsx 导入。可能需要几分钟，确认继续？")) return;
+  fullSyncing.value = true;
+  try {
+    const res = await syncFull();
+    const lines = [
+      `AITable：异常指标导入 ${res.aitable?.anomaly_synced} 条、非EAM ${res.aitable?.non_eam_synced} 条`,
+      `数据池生成工单：${res.pool_generated} 条`,
+      `钉盘「工单版」导入：${res.drive_imported} 条（文件 ${res.drive_files} 个）`,
+    ];
+    if (res.errors?.length) lines.push("⚠️ " + res.errors.join("；"));
+    alert("✅ 同步完成\n" + lines.join("\n"));
+    await load();
+  } catch (e: any) { alert("同步失败：" + e.message); }
+  finally { fullSyncing.value = false; }
 }
 
 onMounted(load);

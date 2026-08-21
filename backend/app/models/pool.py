@@ -24,6 +24,7 @@ class DataPoolItem(TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(512), nullable=False, comment="事项标题")
     project_name: Mapped[str | None] = mapped_column(String(128), comment="场站名（映射前原始值）")
     person_name: Mapped[str | None] = mapped_column(String(64), comment="责任人（映射前原始值）")
+    priority: Mapped[str | None] = mapped_column(String(16), comment="计划类自带优先级 P1|P2|P3；异常指标固定P1")
     deadline: Mapped[date | None] = mapped_column(Date, comment="截止日期")
     description: Mapped[str | None] = mapped_column(Text, comment="描述/触发原因")
 

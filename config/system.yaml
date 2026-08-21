@@ -29,6 +29,7 @@ seed:
     closed:    { name: 已闭环, color: green,  next: [] }
     overdue:   { name: 已逾期, color: red,    next: [executing, verifying, closed] }
     rejected:  { name: 已驳回, color: gray,   next: [] }
+    judging:   { name: 判断中, color: purple, next: [closed] }
 
   # SLA 定义（按优先级，截止天数）
   sla:

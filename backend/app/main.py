@@ -1,4 +1,6 @@
 """FastAPI 应用入口"""
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -11,10 +13,36 @@ from slowapi.errors import RateLimitExceeded
 
 settings = get_settings()
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """启动时自动建表 + 检查是否需要灌入种子数据"""
+    try:
+        from app.core.database import SessionLocal, Base, engine
+        # 自动创建缺失的表（无需手动跑 alembic）
+        Base.metadata.create_all(bind=engine)
+        from app.models import WorkOrder, User
+        db = SessionLocal()
+        try:
+            user_count = db.query(User).count()
+            wo_count = db.query(WorkOrder).count()
+            if user_count == 0 or wo_count == 0:
+                print(f"[startup] 数据库为空（用户{user_count}，工单{wo_count}），自动灌入种子数据...")
+                from app.seed import run
+                run()
+                print("[startup] 种子数据灌入完成")
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"[startup] 种子数据检查跳过（可能数据库未就绪）: {e}")
+    yield
+
+
 app = FastAPI(
     title=settings.app_name,
     version="0.5.0",
     description="软工单闭环管理系统 API",
+    lifespan=lifespan,
 )
 
 # 限流

@@ -22,3 +22,7 @@ frontend/dist/
 
 # Logs
 *.log
+
+# 本地运行/构建产物
+*.rdb
+*.tsbuildinfo
