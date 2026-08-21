@@ -13,8 +13,7 @@ export const updateSla = (id: number, data: { deadline_days?: number; warn_befor
 
 // 工单类型
 export const getWoTypesFull = () => http.get<any, any[]>("/config/work-order-types-full");
-export const addWoType = (data: { type_code: string; name: string; desc?: string; default_approver_id?: number; default_priority: string }) =>
-  http.post<any, any>("/config/work-order-types", data);
+export const addWoType = (data: any) => http.post<any, any>("/config/work-order-types", data);
 export const updateWoType = (id: number, data: any) => http.patch<any, any>(`/config/work-order-types/${id}`, data);
 export const delWoType = (id: number) => http.delete<any, void>(`/config/work-order-types/${id}`);
 

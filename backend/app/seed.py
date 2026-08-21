@@ -9,7 +9,7 @@ from app.core.config import load_system_yaml
 from app.models import (
     ApprovalFlow, ConfigDefinition, NotificationPolicy, ParsingRule,
     PriorityRule, Project, SLADefinition, User, WorkOrder, WorkOrderTypeKB,
-    PersonProjectMap,
+    PersonProjectMap, RoleAssignment,
 )
 
 
@@ -74,6 +74,28 @@ def seed_projects(db, user_ids) -> dict:
     return ids
 
 
+def seed_roles(db) -> None:
+    """灌入组织角色 → 人员映射（审批流用角色编码，具体人名可在后台配置）。
+
+    角色编码对应指引里的角色层级：
+      division_head=事业部负责人, pmo=事业部PMO/经营分析, delivery_pmo=交付/专项PMO
+    """
+    people = {u.name: u.id for u in db.query(User).all()}
+    roles = [
+        ("division_head", "事业部负责人", "贾兴威"),
+        ("pmo", "事业部PMO/经营分析", "金惠良"),
+        ("delivery_pmo", "交付/专项PMO", "陈亮"),
+    ]
+    for i, (code, name, person) in enumerate(roles):
+        ra = db.query(RoleAssignment).filter_by(role_code=code).first()
+        if not ra:
+            ra = RoleAssignment(role_code=code, sort_order=i)
+            db.add(ra)
+        ra.role_name = name
+        ra.user_id = people.get(person)
+    db.commit()
+
+
 def seed_config(db) -> None:
     """来源 + 状态 + 工单类型"""
     cfg = load_system_yaml().get("seed", {})
@@ -91,197 +113,187 @@ def seed_config(db) -> None:
                 sort_order=i, extra={"next": info.get("next", [])},
             ))
 
-    # 工单类型（含 SOP — 基于 YWSYB-GLZY 官方指引）
+# ── 工单类型：按 YWSYB-GLZY 真实指引重映射（2026-08-19） ──
+    # 依据：012《经营管理部异常指标监控工作指引》七类核心异常指标
+    #       + 007 项目风险 + 001 重点工作督办 + 009 设备预警工单 + 022/023/024 专项服务
+    # 调整：insurance(保险理赔) 无对应指引已删除；payment(回款结算) 归入 unsigned(应签未签)；
+    #       relation(关系维护)/compliance(合规)/nonstandard(非标) 无独立指引，分别并入对应类/删除。
+    # 阈值：全部取自指引原文，逐条核对见 docs/规则台账-待业务确认.md D2 表。
+    # 注意：default_approver / default_priority 仍待业务确认（台账 C 节），此处为便于建单的占位默认值。
     types = [
-        # ── 原有 6 种 ──
-        ("correction", "纠偏", "运行指标偏差、效率异常、PR值偏低等运营指标类问题",
-         "金惠良", "P2",
-         "YWSYB-GLZY-012",
-         "规范七类核心异常指标的识别、监控、分发与闭环管理",
-         "经营管理部监控→异常识别判定→定向分发PMO→整改执行→结果验证",
-         [
-             {"step": 1, "action": "确认偏差指标及超标幅度", "standard": "对比合同阈值或公司内控值", "role": "经营管理部"},
-             {"step": 2, "action": "排查根因（设备/人员/环境/管理/合同）", "standard": "区分责任归属，明确是否我方原因", "role": "PMO+区域"},
-             {"step": 3, "action": "制定纠偏措施并执行", "standard": "24h内响应，P1事项4h内启动", "role": "PMO+项目现场"},
-             {"step": 4, "action": "验证纠偏效果", "standard": "指标恢复至正常范围，连续3天无异常", "role": "经营管理部"},
-             {"step": 5, "action": "输出纠偏报告，纳入月度复盘", "standard": "含根因分析+措施+效果+预防建议", "role": "PMO"},
-         ],
-         "指标恢复至合同/内控阈值范围内，连续监测周期无复发",
-         True,
-         {"timeout_hours": 24, "action": "升级至事业部PMO专项支撑", "target": "事业部负责人"},
-         [{"ref": "YWSYB-GLZY-007", "title": "三级风险管理机制"}, {"ref": "YWSYB-GLZY-012", "title": "异常指标监控工作指引"}, {"ref": "YWSYB-GLZY-010", "title": "风机产品运营管理指引"}],
-        ),
-        ("customer", "客户沟通", "客户满意度调查、月度汇报、客户关系维护",
-         "贾兴威", "P2",
+        # ── 012 七类核心异常指标 ──
+        ("customer", "客户满意度/客户投诉", "月度满意度调查 + 抱怨性/追责性客诉全流程管控",
+         "division_head", "P2",
          "YWSYB-GLZY-008",
-         "规范传统运维项目客户满意度管理，涵盖满意度调查与客户投诉（抱怨性/追责性）全流程管控",
-         "月度线上满意度调查→结果分析→整改跟踪；客诉分类→处理→回访闭环",
+         "规范传统运维项目客户满意度调查与客户投诉全流程管控",
+         "月度线上满意度调查→结果整理筛选→问题项目回访→整改跟踪→验收闭环；客诉分类→处理→回函→闭环",
          [
-             {"step": 1, "action": "月度满意度调查发放与回收", "standard": "每月通过线上渠道完成，回收率≥80%", "role": "区域PMO"},
-             {"step": 2, "action": "分析满意度结果，识别不满项目", "standard": "满意度<80分需重点关注", "role": "经营管理部"},
-             {"step": 3, "action": "客诉分类：抱怨性/追责性", "standard": "抱怨性=无经济损失；追责性=有损失需补偿", "role": "PMO"},
-             {"step": 4, "action": "制定整改方案并执行", "standard": "追责性客诉24h内响应，3天内出方案", "role": "项目现场+PMO"},
-             {"step": 5, "action": "客户回访确认满意度恢复", "standard": "月度跟踪，连续2月≥80分可关闭", "role": "区域PMO"},
+             {"step": 1, "action": "问卷分发(每月25日前)+区域3日内组织完成提交", "standard": "线上渠道确保接收,规定日未提交按0分", "role": "综合管理经理/区域负责人"},
+             {"step": 2, "action": "结果统计并筛选不满意(分数<80分 或 客户明确表达具体诉求)", "standard": "问卷提交截止日后1个工作日内完成统计", "role": "综合管理经理/经营分析"},
+             {"step": 3, "action": "问题项目逐一回访,填写《客户满意度调查回访记录表》", "standard": "整理完成后3-5个工作日内完成回访", "role": "PMO/经营分析经理"},
+             {"step": 4, "action": "制定整改措施(明确目标/责任人/时限);整改周期超1个月的分阶段计划,每5个工作日同步进展,次月20日前完成跟踪", "standard": "措施要可操作、可评价", "role": "PMO牵头+责任部门"},
+             {"step": 5, "action": "整改验收:客户签字确认《满意度整改验收单》", "standard": "业主明确表示满意或不再追责后方可闭环", "role": "PMO"},
          ],
-         "客户满意度连续2月≥80分，客诉关闭且客户确认满意",
+         "整改以客户签字《满意度整改验收单》为据;业主明确满意或不再追责后闭环",
          True,
-         {"timeout_hours": 72, "action": "升级至事业部负责人", "target": "事业部分管领导"},
-         [{"ref": "YWSYB-GLZY-008", "title": "客户满意度管理指引"}, {"ref": "YWSYB-GLZY-012", "title": "异常指标监控工作指引"}],
+         {"timeout_hours": 48, "action": "连续两次满意度调查无改进→按《项目风险管理办法》申请风险升级", "target": "事业部负责人"},
+         [{"ref": "YWSYB-GLZY-007", "title": "项目风险管理办法(暂行版)"}, {"ref": "YWSYB-GLZY-012", "title": "经营管理部异常指标监控工作指引"}],
         ),
-        ("relation", "关系维护", "与业主、调度、供应商、政府等外部关系维护",
-         "陈亮", "P2",
-         "YWSYB-GLZY-029",
-         "维护项目相关外部关系，确保信息畅通、协同高效，支撑项目稳定运营",
-         "识别关键关系→定期沟通→问题预警→协同解决→关系评估",
+        ("contract", "履约指标异常", "电量、设备可靠性(TBA/MTBF/MTTR/FLG)、等效可利用小时数等合同/内控指标未达要求",
+         "pmo", "P1",
+         "YWSYB-GLZY-010",
+         "规范风机产品履约指标监控与偏差纠偏,指标阈值首选合同值、次选内控值",
+         "按月核算指标→与合同值/内控值比对→识别偏差→风险分级→PMO牵头整改→验证闭环",
          [
-             {"step": 1, "action": "梳理项目关键外部关系人清单", "standard": "含业主/调度/供应商/政府等，每月更新", "role": "区域PMO"},
-             {"step": 2, "action": "制定沟通计划并执行", "standard": "重要关系每月至少1次正式沟通", "role": "项目负责人"},
-             {"step": 3, "action": "记录沟通要点和待办事项", "standard": "每次沟通后24h内录入", "role": "项目负责人"},
-             {"step": 4, "action": "跟踪待办事项闭环", "standard": "纳入月度PMO复盘", "role": "区域PMO"},
+             {"step": 1, "action": "按月核算TBA/MTBF/MTTR/FLG等指标,与合同值/内控值比对", "standard": "参照GB/T25385、NB/T31047,HS300 TBA≥95%、HS400≥97%等", "role": "PMO+经营管理部"},
+             {"step": 2, "action": "识别偏差:未达合同阈值或内控值即判定异常", "standard": "根据合同约定或公司内控值判定", "role": "PMO"},
+             {"step": 3, "action": "风险分级:按007(影响金额>10万/5-10万/1-5万 或 半年累计3次不达标)定级", "standard": "结合合同指标类风险分级表", "role": "PMO+经营管理部"},
+             {"step": 4, "action": "整改:PMO牵头\"从问题到解决\",接收异常后启动整改", "standard": "接收异常后1个工作日内启动整改", "role": "PMO"},
+             {"step": 5, "action": "验证闭环:整改后验证达标/未达标", "standard": "未达标由经营管理部要求PMO 7个工作日内补充整改", "role": "经营管理部"},
          ],
-         "关键关系人满意度良好，无因关系问题导致的项目风险",
+         "指标恢复至合同/内控阈值,经营管理部审核确认闭环",
          True,
+         {"timeout_hours": 24, "action": "按007风险分级:一级报董办会/二级辅导员决策/三级事业部月度跟踪", "target": "事业部负责人"},
+         [{"ref": "YWSYB-GLZY-021", "title": "集中式运维产品指标体系"}, {"ref": "YWSYB-GLZY-012", "title": "经营管理部异常指标监控工作指引"}, {"ref": "YWSYB-GLZY-007", "title": "项目风险管理办法(暂行版)"}],
+        ),
+        ("unsigned", "应签未签确认单", "已完成服务/节点需签回确认单未签回,或客户异议/资料缺失影响签回",
+         "delivery_pmo", "P2",
+         "YWSYB-GLZY-012",
+         "规范应签未签确认单跟踪,降低资金占用",
+         "账期监控→识别应签未签→风险分级→催收/协商→签回闭环",
+         [
+             {"step": 1, "action": "监控应签未签确认单(资金占用天数)与据实结算回款", "standard": "以计划部统计数据为准", "role": "经营管理部"},
+             {"step": 2, "action": "识别异常:确认单未签回/客户异议/资料缺失,或据实结算未按期结回", "standard": "按012应签未签异常判定", "role": "经营管理部"},
+             {"step": 3, "action": "风险分级:按007资金占用天数分档", "standard": "资金占用天数>15000 / 5000-15000 / 3000-5000 万元*天 对应一/二/三级", "role": "PMO+计划部"},
+             {"step": 4, "action": "催收/协商:先区域沟通,无效则升级事业部", "standard": "营销部门应签未签协同", "role": "区域PMO→事业部"},
+             {"step": 5, "action": "签回闭环:确认单签回/款项结回", "standard": "经营管理部审核确认", "role": "经营管理部"},
+         ],
+         "确认单签回或款项结回,账期恢复正常",
+         True,
+         {"timeout_hours": 72, "action": "按007资金占用天数分档升级至事业部负责人", "target": "事业部负责人"},
+         [{"ref": "YWSYB-GLZY-007", "title": "项目风险管理办法(暂行版)"}],
+        ),
+        ("penalty", "考核扣款", "按合同约定或内部规则产生的扣款,或重复发生扣款",
+         "pmo", "P1",
+         "YWSYB-GLZY-012",
+         "规范考核扣款异常管理与整改",
+         "识别扣款→风险分级→PMO整改→验证闭环",
+         [
+             {"step": 1, "action": "识别考核扣款异常(含双细则考核、内部规则扣款、重复扣款)", "standard": "按012考核扣款异常定义", "role": "经营管理部"},
+             {"step": 2, "action": "风险分级:按007考核单金额分档", "standard": "考核单金额>10万/5-10万/1-5万元 对应一/二/三级", "role": "PMO+经营管理部"},
+             {"step": 3, "action": "整改:PMO牵头,接收异常后启动整改", "standard": "1个工作日内启动", "role": "PMO"},
+             {"step": 4, "action": "验证闭环:整改后验证达标/未达标", "standard": "未达标7个工作日内补充整改", "role": "经营管理部"},
+         ],
+         "扣款风险消除或已制定有效防控措施",
+         True,
+         {"timeout_hours": 24, "action": "按007考核单金额分档升级", "target": "事业部负责人"},
+         [{"ref": "YWSYB-GLZY-007", "title": "项目风险管理办法(暂行版)"}],
+        ),
+        ("risk", "项目风险", "已识别未闭环的项目风险(合同/预算/履约交付/客户满意度/回款/安全合规等)",
+         "division_head", "P1",
+         "YWSYB-GLZY-007",
+         "规范项目全周期风险分级管控,早发现早介入",
+         "风险识别(投标前/合同签订后/交付运维/收尾结算)→分级→动态监控→应对执行→升降级管理",
+         [
+             {"step": 1, "action": "风险识别:覆盖投标前→合同签订后→交付运维→收尾结算四阶段", "standard": "营销中心/产品管理部/区域/项目各自识别,无例外项目", "role": "营销/产品管理部/区域/项目"},
+             {"step": 2, "action": "风险分级:按\"发生概率×影响程度\"定三级(低)/二级(中)/一级(危机)", "standard": "影响金额>10万/5-10万/1-5万 或 客诉连续2/3/6个月低于80分等", "role": "事业部"},
+             {"step": 3, "action": "动态监控:一级/二级每双周、三级每月跟进,纳入风险台账", "standard": "跟进损失变化/拦截效果/升级迹象", "role": "事业部+辅导员"},
+             {"step": 4, "action": "应对执行:三级事业部月度跟踪、二级辅导员决策、一级董办会决策", "standard": "权责闭环、责任到人", "role": "辅导员/董办会"},
+             {"step": 5, "action": "升降级:风险有效控制则降级,升级触发则按流程提报", "standard": "三级→二级由事业部判断+辅导员确认,→一级由辅导员判断+董办会", "role": "事业部/辅导员/董办会"},
+         ],
+         "风险闭环或降级至常规监控级",
+         True,
+         {"timeout_hours": 24, "action": "一级风险立即报董办会,二级由辅导员决策,三级事业部月度跟踪", "target": "董办会/事业部负责人"},
+         [{"ref": "YWSYB-GLZY-012", "title": "经营管理部异常指标监控工作指引"}, {"ref": "YWSYB-GLZY-008", "title": "传统运维项目客户满意度管理指引V2"}],
+        ),
+        ("performance", "绩效考核异常", "信息化使用、生产计划完成率、合同指标完成率、内控管理指标未达绩效标准",
+         "pmo", "P3",
+         "YWSYB-GLZY-012",
+         "规范绩效考核异常指标管理",
+         "识别未达标→定向分发PMO→整改→验证闭环",
+         [
+             {"step": 1, "action": "识别绩效指标未达标准", "standard": "信息化使用/生产计划/合同指标/内控指标未达标", "role": "经营管理部"},
+             {"step": 2, "action": "定向分发PMO,牵头整改", "standard": "接收异常后1个工作日内启动", "role": "经营管理部→PMO"},
+             {"step": 3, "action": "验证闭环", "standard": "未达标7个工作日内补充整改", "role": "经营管理部"},
+         ],
+         "指标达标或整改闭环",
+         False,
          None,
-         [{"ref": "YWSYB-GLZY-029", "title": "PMO工作机制落实指引"}],
+         [{"ref": "YWSYB-GLZY-007", "title": "项目风险管理办法(暂行版)"}],
         ),
-        ("hazard", "隐患整改", "安全检查发现的隐患、设备缺陷整改、安全设施维护",
-         "金惠良", "P1",
-         "YWSYB-GLZY-009",
-         "建立基于数字化系统联动的预警管理机制，通过数据分析识别异常，依托EAM系统实现工单规范流转",
-         "PowerInsight数据分析→预警识别→EAM工单生成→审核派发→排查处理→结果反馈→闭环归档",
+        ("cost", "成本管理异常", "项目预算超支、报销超期、支出与审批不符",
+         "delivery_pmo", "P2",
+         "YWSYB-GLZY-012",
+         "规范成本管理异常监控与整改",
+         "识别成本异常→风险分级→PMO整改→验证闭环",
          [
-             {"step": 1, "action": "系统识别或人工发现隐患/缺陷", "standard": "PowerInsight自动推送或现场巡检发现", "role": "数智化小组/项目现场"},
-             {"step": 2, "action": "生成预警工单，标定闭环时限", "standard": "高频故障/亚健康等异常自动标定时限", "role": "EAM系统"},
-             {"step": 3, "action": "PMO审核工单信息并派发", "standard": "1个工作日内完成审核，确认机组归属/质保期", "role": "风机PMO"},
-             {"step": 4, "action": "现场排查处理", "standard": "按闭环时限执行，复杂异常24h内申请技术支持", "role": "项目现场"},
-             {"step": 5, "action": "处理结果反馈与闭环", "standard": "含处理过程/结果/佐证材料，PMO确认后归档", "role": "PMO+项目现场"},
+             {"step": 1, "action": "识别成本异常(预算超支/报销超期/支出与审批不符)", "standard": "按012成本管理异常定义", "role": "经营管理部"},
+             {"step": 2, "action": "风险分级:按007预算成本类(超预算>10万/5-10万/1-5万)分档", "standard": "结合预算成本类风险分级表", "role": "PMO+经营管理部"},
+             {"step": 3, "action": "整改:PMO牵头,1个工作日内启动", "standard": "关注预算调整:科目间调整由交付经理审批,调增由事业部总经理审批", "role": "PMO"},
+             {"step": 4, "action": "验证闭环", "standard": "未达标7个工作日内补充整改", "role": "经营管理部"},
          ],
-         "隐患已消除，处理结果经PMO审核确认，佐证材料完整归档",
+         "成本恢复预算内或整改闭环",
          True,
-         {"timeout_hours": 4, "action": "升级至三级管理第一责任人", "target": "事业部技术管理部"},
-         [{"ref": "YWSYB-GLZY-009", "title": "风机设备预警工单管理指引"}, {"ref": "YWSYB-GLZY-005", "title": "风机技术支持工作指引"}, {"ref": "YWSYB-GLZY-007", "title": "三级风险管理机制"}],
+         {"timeout_hours": 48, "action": "按007预算类金额分档升级", "target": "事业部负责人"},
+         [{"ref": "YWSYB-GLZY-007", "title": "项目风险管理办法(暂行版)"}, {"ref": "YWSYB-GLZY-022", "title": "专项服务项目预算管理指引"}],
         ),
-        ("nonstandard", "非标任务", "年度计划内的非标准化任务、重点工作督办",
-         "陈亮", "P2",
+        # ── 专项服务 ──
+        ("special", "专项服务项目", "专项(技改)服务项目立项、预算、交付节点、日报、满意度回访全流程",
+         "delivery_pmo", "P2",
+         "YWSYB-GLZY-023",
+         "规范专项服务项目预算/交付关键节点/执行日报/满意度管理",
+         "立项+预算→交付节点跟踪→节点督办→满意度回访→客诉闭环",
+         [
+             {"step": 1, "action": "预算录入/调整走OA\"项目预算编制/调整审批-技改类\";交付完成满45天关闭预算", "standard": "调增由事业部总经理审批;未批准/原因不明/不合理不调整", "role": "交付经理"},
+             {"step": 2, "action": "交付关键节点跟踪:合同接收7天内确认工期、完工5天内签验收单、预试20天出报告、开票10天、入账30天", "standard": "按交付重点跟踪节点管理指引", "role": "项目负责人/销售负责人"},
+             {"step": 3, "action": "节点督办:未推进每天1次征询,3次未果升级直属上级,仍不解决邮件报事业部负责人", "standard": "逐级升级直至事项推进", "role": "交付管理"},
+             {"step": 4, "action": "满意度回访:入场前48h告知反馈渠道,交付完成72h内回访", "standard": "形成《客户满意度调查回访记录》", "role": "交付经理"},
+             {"step": 5, "action": "客诉处理:抱怨3天内调查5天内反馈;追责立即止损+回函经事业部负责人审核", "standard": "客户明确满意或不再追责后闭环", "role": "业务部负责人/交付经理"},
+         ],
+         "交付验收通过、预算关闭、满意度回访完成、客诉闭环",
+         True,
+         {"timeout_hours": 48, "action": "交付节点3次督办未果→邮件报事业部负责人/区域负责人", "target": "事业部负责人"},
+         [{"ref": "YWSYB-GLZY-022", "title": "专项服务项目预算管理指引"}, {"ref": "YWSYB-GLZY-024", "title": "专项服务项目客户满意度管理指引"}],
+        ),
+        # ── 重点工作督办 ──
+        ("keywork", "重点工作督办", "事业部重点工作事项(含跨部门)推进、执行监控、验收关闭",
+         "division_head", "P2",
          "YWSYB-GLZY-001",
-         "规范事业部重点工作事项推进，强化过程监督与成果交付，确保重点事项按期高质量完成",
-         "事项接收→执行监控→节点跟踪→验收关闭",
+         "规范重点工作督办,确保事项按期高质量完成",
+         "事项发布(明确目标/范围/交付要求/计划节点)→每日更新→周跟踪月通报→变更汇报→验收关闭",
          [
-             {"step": 1, "action": "明确任务目标、范围及交付要求", "standard": "录入《事业部重点工作督办表》，含里程碑节点", "role": "事项发布人"},
-             {"step": 2, "action": "主责人每日更新进度", "standard": "含当前进展/存在问题/下一步计划", "role": "主责人"},
-             {"step": 3, "action": "周跟踪+月通报", "standard": "每周五汇总进度偏差，月度例会通报", "role": "督办人"},
-             {"step": 4, "action": "完成验收关闭", "standard": "完成后8h内发起验收→辅导人组织验收→督办人标记关闭", "role": "主责人+辅导人"},
+             {"step": 1, "action": "事项发布:明确任务目标/范围/交付要求/主责人/辅导人/计划节点", "standard": "录入《事业部重点工作督办表》,计划节点经事业部负责人确认", "role": "事项发布人"},
+             {"step": 2, "action": "每日更新进度:含当前进展/存在问题/下一步计划", "standard": "每日更新督办表进度栏", "role": "主责人"},
+             {"step": 3, "action": "周跟踪+月通报:每周五汇总进度偏差事项同步事业部群", "standard": "周跟踪+月通报", "role": "督办人"},
+             {"step": 4, "action": "变更汇报:重点工作冲突延期/内容变更>20%/外部依赖失责超48h 须立即上报", "standard": "未及时上报按延期未完成处理", "role": "主责人"},
+             {"step": 5, "action": "验收关闭:完成后8小时内发起验收→辅导人组织验收→督办人标记关闭", "standard": "较计划验收关闭时间延误≥1天需升级管理", "role": "主责人/辅导人/督办人"},
          ],
-         "交付物达标，辅导人验收通过，督办人确认关闭",
-         True,
-         {"timeout_hours": 24, "action": "超期通报+书面说明", "target": "事业部负责人"},
-         [{"ref": "YWSYB-GLZY-001", "title": "重点工作督办管理指引"}, {"ref": "YWSYB-GLZY-029", "title": "PMO工作机制落实指引"}],
+         "成果达标,辅导人验收通过,督办人确认关闭",
+         False,
+         {"timeout_hours": 24, "action": "逾期首日群通报+1个工作日内书面说明(根因/改进计划)", "target": "事业部负责人"},
+         [],
         ),
-        # ── 新增 6 种 ──
-        ("alert", "预警工单", "风机设备预警、PowerInsight系统自动推送的异常告警",
-         "金惠良", "P1",
+        # ── 设备预警工单 ──
+        ("alert", "设备预警工单", "Powerinsight识别的高频故障/亚健康机组预警,EAM工单闭环",
+         "pmo", "P1",
          "YWSYB-GLZY-009",
-         "基于PowerInsight系统数据分析识别高频故障、亚健康等异常机组，自动生成预警工单并规范流转",
-         "PowerInsight数据采集→预警模型识别→自动推送EAM→PMO审核→派发→排查→闭环",
+         "规范风电机组预警工单生成、流转、处理与闭环",
+         "预警识别(Powerinsight)→EAM工单生成→PMO审核→派发→现场处理→复核闭环",
          [
-             {"step": 1, "action": "PowerInsight系统自动识别异常", "standard": "高频故障/亚健康/振动异常等自动触发", "role": "数智化小组"},
-             {"step": 2, "action": "预警工单自动推送至EAM", "standard": "含机组编号/异常性质/运行数据特征", "role": "系统自动"},
-             {"step": 3, "action": "PMO审核工单并标定闭环时限", "standard": "1个工作日内完成审核派发", "role": "风机PMO"},
-             {"step": 4, "action": "现场排查处理", "standard": "按时限执行，复杂异常24h内申请技术支持", "role": "项目现场"},
-             {"step": 5, "action": "处理结果反馈与闭环归档", "standard": "PMO确认后归档，纳入月度复盘", "role": "PMO+项目现场"},
+             {"step": 1, "action": "预警识别:Powerinsight自动识别高频故障/亚健康,生成标准化工单(机组编号/异常性质)", "standard": "工单生成后1小时内推送EAM", "role": "数智化小组/系统"},
+             {"step": 2, "action": "PMO审核:审核异常准确性/机组归属/质保期,标定闭环时限", "standard": "1个工作日内完成审核", "role": "风机PMO"},
+             {"step": 3, "action": "派发:非质保EAM派发;质保先邮件告知客户(抄送交付体系部)再派发", "standard": "审核通过后≤2小时派发", "role": "风机PMO"},
+             {"step": 4, "action": "现场处理:项目负责人24小时内已读确认,复杂异常24小时内申请技术小组(24小时内提方案)", "standard": "质保期24小时内建立与厂家沟通渠道", "role": "项目负责人+风机技术小组"},
+             {"step": 5, "action": "复核闭环:PMO 2个工作日内复核,通过则归档", "standard": "EAM留存至少2年;资料完整率≥99%", "role": "风机PMO"},
          ],
-         "预警已消除，处理结果经PMO确认，数据回传PowerInsight",
+         "处理结果经PMO复核确认;工单闭环及时率≥98%、异常一次排查成功率≥95%",
          True,
-         {"timeout_hours": 4, "action": "升级至事业部技术管理部", "target": "技术管理部负责人"},
-         [{"ref": "YWSYB-GLZY-009", "title": "风机设备预警工单管理指引"}, {"ref": "YWSYB-GLZY-005", "title": "风机技术支持工作指引"}],
+         {"timeout_hours": 24, "action": "超时限环节24小时内联系三级第一责任人协调解决", "target": "三级第一责任人"},
+         [{"ref": "YWSYB-GLZY-005", "title": "风机技术支持工作指引"}],
         ),
-        ("contract", "合同履约", "保电量/保收益/合同指标考核、扣款风险、双细则超标",
-         "贾兴威", "P1",
-         "YWSYB-GLZY-007",
-         "规范合同履约类风险管控，覆盖保电量/保收益/设备可靠性/双细则等合同指标考核",
-         "合约指标监控→偏差识别→风险分级→整改方案→PMO跟踪→闭环验证",
-         [
-             {"step": 1, "action": "监控合同指标达成情况", "standard": "按月对比合同阈值，识别偏差", "role": "经营管理部"},
-             {"step": 2, "action": "风险分级评估", "standard": "按影响金额和频次定级（一级>10万/二级5-10万/三级1-5万）", "role": "PMO"},
-             {"step": 3, "action": "制定整改方案并执行", "standard": "P1事项需事业部审批，P2/P3由PMO直接推动", "role": "PMO+区域"},
-             {"step": 4, "action": "跟踪整改效果", "standard": "按风险等级定期跟踪（一级双周/二级双周/三级月）", "role": "PMO"},
-             {"step": 5, "action": "闭环归档", "standard": "指标恢复+整改报告+预防措施", "role": "PMO+经营管理部"},
-         ],
-         "合同指标恢复至阈值范围内，考核风险已消除或已制定有效防控措施",
-         True,
-         {"timeout_hours": 24, "action": "升级至事业部负责人及董办会", "target": "事业部负责人"},
-         [{"ref": "YWSYB-GLZY-007", "title": "三级风险管理机制"}, {"ref": "YWSYB-GLZY-012", "title": "异常指标监控工作指引"}, {"ref": "YWSYB-GLZY-021", "title": "集中式运维产品指标体系"}],
-        ),
-        ("payment", "回款结算", "应签未签确认单、尾款结算、据实结算、对账争议",
-         "陈亮", "P2",
-         "YWSYB-GLZY-007",
-         "规范回款结算类事项管理，确保款项按期回收，降低财务风险",
-         "账期监控→应签未签识别→催收/协商→争议解决→回款确认",
-         [
-             {"step": 1, "action": "监控回款账期", "standard": "按合同约定回款节点跟踪", "role": "经营管理部"},
-             {"step": 2, "action": "识别应签未签/逾期未回", "standard": "账期>30天启动预警，>90天升级", "role": "经营管理部"},
-             {"step": 3, "action": "发起催收或协商", "standard": "先区域沟通，无效则升级至事业部", "role": "区域PMO→事业部"},
-             {"step": 4, "action": "争议解决与确认", "standard": "涉及争议需营销/法务协同", "role": "PMO+营销+法务"},
-             {"step": 5, "action": "回款确认闭环", "standard": "款项到账+确认单签回", "role": "经营管理部"},
-         ],
-         "款项到账，确认单已签回，账期恢复正常",
-         True,
-         {"timeout_hours": 72, "action": "升级至事业部负责人+营销中心", "target": "事业部负责人"},
-         [{"ref": "YWSYB-GLZY-007", "title": "三级风险管理机制"}, {"ref": "YWSYB-GLZY-012", "title": "异常指标监控工作指引"}],
-        ),
-        ("insurance", "保险理赔", "电站财产险/机损险事故报险、定损、理赔全流程",
-         "金惠良", "P2",
-         "YWSYB-GLZY-007",
-         "规范电站保险事故处理流程，确保理赔及时、证据完整、损失最小化",
-         "事故发生→报险→现场勘查→定损→资料提交→理赔跟进→结案",
-         [
-             {"step": 1, "action": "事故发生后立即报险", "standard": "24h内报险，重大事故2h内", "role": "项目现场"},
-             {"step": 2, "action": "现场证据收集与保全", "standard": "照片/视频/运行记录/维修记录/损失清单", "role": "项目现场+区域PMO"},
-             {"step": 3, "action": "配合保险公司定损", "standard": "提供完整证据链，必要时引入第三方评估", "role": "区域PMO+法务"},
-             {"step": 4, "action": "理赔资料提交与跟进", "standard": "按保险公司要求完整提交，定期跟进进度", "role": "经营管理部"},
-             {"step": 5, "action": "结案与复盘", "standard": "理赔款到账，输出事故分析+预防措施", "role": "经营管理部+PMO"},
-         ],
-         "理赔款到账，事故分析报告完成，预防措施已落实",
-         True,
-         {"timeout_hours": 48, "action": "升级至事业部负责人+法务", "target": "事业部负责人"},
-         [{"ref": "YWSYB-GLZY-007", "title": "三级风险管理机制"}, {"ref": "YWSYB-GLZY-008", "title": "客户满意度管理指引"}],
-        ),
-        ("compliance", "合规管理", "消防验收、安全合规检查、资质审核、监管要求整改",
-         "金惠良", "P1",
-         "YWSYB-GLZY-007",
-         "规范合规类事项管理，确保项目满足消防/安全/资质等监管要求，避免处罚风险",
-         "合规要求识别→自查/检查→不符合项整改→验收确认→闭环归档",
-         [
-             {"step": 1, "action": "识别合规要求", "standard": "消防/安全/环保/资质/许可等法规要求", "role": "区域PMO"},
-             {"step": 2, "action": "自查或配合外部检查", "standard": "按检查清单逐项核实", "role": "项目现场"},
-             {"step": 3, "action": "不符合项整改", "standard": "P1事项立即整改，P2/P3限时整改", "role": "项目现场+PMO"},
-             {"step": 4, "action": "整改验收", "standard": "内部验收+外部验收（如需）", "role": "PMO+监管部门"},
-             {"step": 5, "action": "归档与持续监控", "standard": "整改报告+验收文件归档，纳入定期复查", "role": "经营管理部"},
-         ],
-         "整改完成，验收通过，相关文件归档，无遗留合规风险",
-         True,
-         {"timeout_hours": 24, "action": "升级至事业部负责人", "target": "事业部负责人"},
-         [{"ref": "YWSYB-GLZY-007", "title": "三级风险管理机制"}, {"ref": "YWSYB-GLZY-001", "title": "重点工作督办管理指引"}],
-        ),
-        ("special", "专项服务", "专项服务项目立项、执行、交付、日报、结算全流程",
-         "陈亮", "P2",
-         "YWSYB-GLZY-022",
-         "规范专项服务项目全生命周期管理，涵盖立项/预算/交付/日报/结算/满意度",
-         "立项→预算审批→执行交付→日报跟踪→结算→客户满意度回访",
-         [
-             {"step": 1, "action": "专项服务项目立项", "standard": "含项目范围/预算/周期/交付标准", "role": "PMO"},
-             {"step": 2, "action": "预算审批与资源配置", "standard": "按预算管理制度审批，配置人员/物料", "role": "PMO+经营管理部"},
-             {"step": 3, "action": "执行交付与日报跟踪", "standard": "每日提交执行日报，PMO跟踪进度", "role": "项目现场+PMO"},
-             {"step": 4, "action": "交付验收", "standard": "按合同约定交付标准验收", "role": "PMO+客户"},
-             {"step": 5, "action": "结算与满意度回访", "standard": "完成结算，客户满意度调查", "role": "经营管理部+区域PMO"},
-         ],
-         "交付验收通过，结算完成，客户满意度达标",
-         True,
-         {"timeout_hours": 48, "action": "升级至事业部负责人", "target": "事业部负责人"},
-         [{"ref": "YWSYB-GLZY-022", "title": "专项服务项目预算管理指引"}, {"ref": "YWSYB-GLZY-023", "title": "专项服务项目交付重点跟踪"}, {"ref": "YWSYB-GLZY-024", "title": "专项服务项目客户满意度"}],
-        ),
+        # ── 兜底 ──
         ("other", "其他", "其他无法归入上述类型的工单",
-         "金惠良", "P3",
+         "pmo", "P3",
          None,
          "处理无法归入上述类型的其他工作事项",
          "按实际情况灵活处理",
@@ -296,10 +308,10 @@ def seed_config(db) -> None:
          [],
         ),
     ]
-    # approver by name
-    name_to_id = {u.name: u.id for u in db.query(User).all()}
+    # 审批人：按角色（role_assignments）解析，具体人名可在后台配置
+    role_to_user = {ra.role_code: ra.user_id for ra in db.query(RoleAssignment).all()}
     for i, item in enumerate(types):
-        code, name, desc, approver_name, pri = item[:5]
+        code, name, desc, approver_role, pri = item[:5]
         guidance_ref = item[5] if len(item) > 5 else None
         sop_purpose = item[6] if len(item) > 6 else None
         sop_scope = item[7] if len(item) > 7 else None
@@ -312,7 +324,8 @@ def seed_config(db) -> None:
         if not existing:
             db.add(WorkOrderTypeKB(
                 type_code=code, name=name, desc=desc,
-                default_approver_id=name_to_id.get(approver_name),
+                default_approver_id=role_to_user.get(approver_role),
+                default_approver_role=approver_role,
                 default_priority=pri, sort_order=i,
                 guidance_ref=guidance_ref,
                 sop_purpose=sop_purpose,
@@ -324,7 +337,7 @@ def seed_config(db) -> None:
                 sop_related_guidance=sop_related,
             ))
         else:
-            # 更新已有记录的 SOP 字段
+            # 更新已有记录的 SOP 字段 + 审批人角色
             existing.guidance_ref = guidance_ref
             existing.sop_purpose = sop_purpose
             existing.sop_scope = sop_scope
@@ -333,6 +346,8 @@ def seed_config(db) -> None:
             existing.sop_backfill_required = sop_backfill
             existing.sop_escalation = sop_escalation
             existing.sop_related_guidance = sop_related
+            existing.default_approver_role = approver_role
+            existing.default_approver_id = role_to_user.get(approver_role)
     db.commit()
 
 
@@ -344,7 +359,7 @@ def seed_rules(db) -> None:
             ("(停运|停机|跳闸|脱网|断网|全站停电|大面积故障)", "涉及设备停运/全站故障", "P1"),
             ("(客户投诉|业主不满|满意度.*低|投诉|纠纷)", "客户投诉/业主不满", "P2"),
             ("(监视告警|偏差.*超|指标.*异常|效率.*低|PR.*降|功率.*低)", "监视告警触发", "P2"),
-            ("(判定会|会议决议|领导交办|贾总|陈亮)", "判定会决议/领导交办", "P2"),
+            ("(判定会|会议决议|领导交办)", "判定会决议/领导交办", "P2"),
             ("(隐患|缺陷|整改|检查.*未|排查)", "安全隐患/缺陷整改", "P2"),
             ("(年度计划|月度|季度|例行|定期|日常)", "年度计划/例行任务", "P3"),
             ("(培训|汇报|报告|统计|盘点|归档)", "培训/汇报/文档类", "P3"),
@@ -373,34 +388,39 @@ def seed_sla(db) -> None:
 
 
 def seed_approval_flows(db) -> None:
+    """审批流节点用角色编码引用审批人（人名由 role_assignments 在后台配置）。
+
+    特殊 tokens：creator=提交人, executor=责任人, approver=工单审批人（按工单解析）。
+    组织角色：pmo=事业部PMO, division_head=事业部负责人（按 role_assignments 解析）。
+    """
     if db.query(ApprovalFlow).count() == 0:
         p1 = ApprovalFlow(priority="P1", name="P1 紧急审批流", enabled=True,
             nodes=[
                 {"type": "start", "title": "提交人", "sub": "创建工单", "role": "creator"},
-                {"type": "approval", "title": "项目主管", "sub": "金惠良", "role": "金惠良", "timeout_days": 0.5},
-                {"type": "approval", "title": "分管领导", "sub": "贾兴威", "role": "贾兴威", "timeout_days": 1},
-                {"type": "exec", "title": "执行", "sub": "责任人", "role": "executor"},
-                {"type": "approval", "title": "验收", "sub": "审批人", "role": "approver", "timeout_days": 0.5},
+                {"type": "approval", "title": "事业部PMO", "sub": "审批", "role": "pmo", "timeout_days": 0.5},
+                {"type": "approval", "title": "事业部负责人", "sub": "审批", "role": "division_head", "timeout_days": 1},
+                {"type": "exec", "title": "责任人", "sub": "执行", "role": "executor"},
+                {"type": "approval", "title": "审批人", "sub": "验收", "role": "approver", "timeout_days": 0.5},
                 {"type": "end", "title": "闭环", "sub": "完成", "role": ""},
             ],
-            escalation={"timeout_hours": 4, "action": "电话DING上级", "target": "贾兴威"})
+            escalation={"action": "升级至事业部负责人", "target": "division_head"})
         p2 = ApprovalFlow(priority="P2", name="P2 普通审批流", enabled=True,
             nodes=[
                 {"type": "start", "title": "提交人", "sub": "创建工单", "role": "creator"},
-                {"type": "approval", "title": "审批人", "sub": "金惠良/陈亮", "role": "approver", "timeout_days": 1},
-                {"type": "exec", "title": "执行", "sub": "责任人", "role": "executor"},
-                {"type": "approval", "title": "验收", "sub": "审批人", "role": "approver", "timeout_days": 1},
+                {"type": "approval", "title": "事业部PMO", "sub": "审批", "role": "pmo", "timeout_days": 1},
+                {"type": "exec", "title": "责任人", "sub": "执行", "role": "executor"},
+                {"type": "approval", "title": "审批人", "sub": "验收", "role": "approver", "timeout_days": 1},
                 {"type": "end", "title": "闭环", "sub": "完成", "role": ""},
             ],
-            escalation={"timeout_hours": 24, "action": "电话DING", "target": "上级"})
+            escalation={"action": "升级至事业部负责人", "target": "division_head"})
         p3 = ApprovalFlow(priority="P3", name="P3 低优先审批流", enabled=True,
             nodes=[
                 {"type": "start", "title": "提交人", "sub": "创建工单", "role": "creator"},
-                {"type": "approval", "title": "审批人", "sub": "审批", "role": "approver", "timeout_days": 2},
-                {"type": "exec", "title": "执行", "sub": "责任人", "role": "executor"},
+                {"type": "approval", "title": "事业部PMO", "sub": "审批", "role": "pmo", "timeout_days": 2},
+                {"type": "exec", "title": "责任人", "sub": "执行", "role": "executor"},
                 {"type": "end", "title": "闭环", "sub": "完成", "role": ""},
             ],
-            escalation={"timeout_hours": 48, "action": "应用DING", "target": "上级"})
+            escalation={"action": "升级至事业部负责人", "target": "division_head"})
         db.add_all([p1, p2, p3])
     db.commit()
 
@@ -425,34 +445,39 @@ def seed_workorders(db, user_ids, proj_ids) -> None:
     name_to_id = user_ids
     # 类型 id
     type_codes = {
-        "纠偏": "correction", "客户沟通": "customer", "关系维护": "relation",
-        "隐患整改": "hazard", "非标任务": "nonstandard", "其他": "other",
+        "客户满意度/客户投诉": "customer", "履约指标异常": "contract", "应签未签": "unsigned",
+        "考核扣款": "penalty", "项目风险": "risk", "绩效考核": "performance",
+        "成本管理": "cost", "专项服务": "special", "重点工作督办": "keywork",
+        "设备预警工单": "alert", "其他": "other",
     }
     src_map = {"年度计划": "plan", "监视告警": "alert", "判定会": "meeting", "手动": "manual"}
     rows = [
-        ("RW-2026-0001", "P2", "年度计划", "通辽永兴风电场", "变桨系统技改跟踪", "纠偏", "业主技改方案流标，进度滞后", "跟进招投标进度，每周汇报", "王小宁", "金惠良", -2, "overdue", 3, 2),
-        ("RW-2026-0002", "P1", "监视告警", "通辽永兴风电场", "AGC双细则考核超标纠偏", "纠偏", "7月双细则考核扣分超标15%", "排查AGC响应延迟原因，协调厂家修模", "明南辉", "金惠良", 5, "executing", 0, 0),
-        ("RW-2026-0003", "P3", "判定会", "通辽永兴风电场", "沉降观测检测补充", "非标任务", "08-03判定会发现漏项", "联系检测单位，11月前完成", "于鸿飞", "陈亮", 90, "pending", 0, 0),
-        ("RW-2026-0004", "P2", "年度计划", "瓮安建中HS300风电场", "客户月度汇报满意度偏低整改", "客户沟通", "上月客户满意度评分仅72分", "本月增加一次现场拜访，解决客户反馈的3个问题", "于鸿飞", "贾兴威", -1, "overdue", 2, 1),
-        ("RW-2026-0005", "P1", "手动", "瓜州二期风电场", "新员工安全培训交底", "隐患整改", "新入场人员未完成三级安全教育", "组织安全培训，完成考试并归档", "高志强", "金惠良", -4, "overdue", 3, 4),
-        ("RW-2026-0006", "P2", "监视告警", "城投太旗光伏电站", "组件清洗质量不达标", "纠偏", "上月清洗后PR值未提升", "要求清洗单位返工，重新验收", "张雷雷", "陈亮", 3, "verifying", 0, 0),
-        ("RW-2026-0007", "P3", "年度计划", "通辽永兴风电场", "预防性试验准备-停电协调", "非标任务", "年度计划8月停电窗口", "协调调度确认8/19-20停电时间", "于鸿飞", "金惠良", 0, "executing", 0, 0),
-        ("RW-2026-0008", "P3", "判定会", "通辽永兴风电场", "安全培训交底确认", "客户沟通", "判定会确认已完成但无记录", "补录安全培训交底记录并上传", "王小宁", "金惠良", -7, "closed", 0, 0),
-        ("RW-2026-0009", "P2", "年度计划", "通辽永兴风电场", "风机定检第一批旁站监督", "非标任务", "定检队伍进场不稳定", "协调定检单位稳定出勤，做好旁站记录", "高志强", "陈亮", -10, "closed", 0, 0),
+        ("RW-2026-0001", "P2", "年度计划", "通辽永兴风电场", "变桨系统技改跟踪", "履约指标异常", "业主技改方案流标，进度滞后", "跟进招投标进度，每周汇报", "王小宁", "金惠良", -2, "overdue", 3, 2),
+        ("RW-2026-0002", "P1", "监视告警", "通辽永兴风电场", "AGC双细则考核超标纠偏", "考核扣款", "7月双细则考核扣分超标15%", "排查AGC响应延迟原因，协调厂家修模", "明南辉", "金惠良", 5, "executing", 0, 0),
+        ("RW-2026-0003", "P3", "判定会", "通辽永兴风电场", "沉降观测检测补充", "重点工作督办", "08-03判定会发现漏项", "联系检测单位，11月前完成", "于鸿飞", "陈亮", 90, "pending", 0, 0),
+        ("RW-2026-0004", "P2", "年度计划", "瓮安建中HS300风电场", "客户月度汇报满意度偏低整改", "客户满意度/客户投诉", "上月客户满意度评分仅72分", "本月增加一次现场拜访，解决客户反馈的3个问题", "于鸿飞", "贾兴威", -1, "overdue", 2, 1),
+        ("RW-2026-0005", "P1", "手动", "瓜州二期风电场", "新员工安全培训交底", "其他", "新入场人员未完成三级安全教育", "组织安全培训，完成考试并归档", "高志强", "金惠良", -4, "overdue", 3, 4),
+        ("RW-2026-0006", "P2", "监视告警", "城投太旗光伏电站", "组件清洗质量不达标", "履约指标异常", "上月清洗后PR值未提升", "要求清洗单位返工，重新验收", "张雷雷", "陈亮", 3, "verifying", 0, 0),
+        ("RW-2026-0007", "P3", "年度计划", "通辽永兴风电场", "预防性试验准备-停电协调", "重点工作督办", "年度计划8月停电窗口", "协调调度确认8/19-20停电时间", "于鸿飞", "金惠良", 0, "executing", 0, 0),
+        ("RW-2026-0008", "P3", "判定会", "通辽永兴风电场", "安全培训交底确认", "其他", "判定会确认已完成但无记录", "补录安全培训交底记录并上传", "王小宁", "金惠良", -7, "closed", 0, 0),
+        ("RW-2026-0009", "P2", "年度计划", "通辽永兴风电场", "风机定检第一批旁站监督", "重点工作督办", "定检队伍进场不稳定", "协调定检单位稳定出勤，做好旁站记录", "高志强", "陈亮", -10, "closed", 0, 0),
         ("RW-2026-0010", "P3", "手动", "瓜州二期风电场", "备品备件库房盘点", "其他", "季度例行盘点", "完成盘点并更新台账", "高志强", "金惠良", -15, "closed", 0, 0),
         ("RW-2026-0011", "P3", "年度计划", "瓮安建中HS300风电场", "月度运营分析报告", "其他", "7月月度报告提交", "按模板完成7月运营分析报告", "塔拉", "贾兴威", -3, "closed", 0, 0),
-        ("RW-2026-0012", "P1", "监视告警", "城投太旗光伏电站", "逆变器效率异常排查", "纠偏", "3号逆变器效率连续3天低于95%", "现场排查逆变器，必要时更换", "张雷雷", "陈亮", 1, "approving", 0, 0),
-        ("RW-2026-0013", "P2", "判定会", "通辽永兴风电场", "涉网试验-1号SVG未完成", "非标任务", "判定会发现1号SVG未完成涉网试验", "8月内完成1号SVG涉网试验", "明南辉", "金惠良", 25, "dispatched", 0, 0),
-        ("RW-2026-0014", "P3", "年度计划", "瓮安建中HS300风电场", "消防设施月度检查", "隐患整改", "8月消防检查", "完成灭火器、消防栓检查并记录", "塔拉", "金惠良", -5, "closed", 0, 0),
-        ("RW-2026-0015", "P2", "手动", "城投太旗光伏电站", "双细则日报数据核对", "纠偏", "本周功率预测准确率偏低", "联系功率预测厂家修模", "明南辉", "陈亮", 2, "verifying", 0, 0),
+        ("RW-2026-0012", "P1", "监视告警", "城投太旗光伏电站", "逆变器效率异常排查", "履约指标异常", "3号逆变器效率连续3天低于95%", "现场排查逆变器，必要时更换", "张雷雷", "陈亮", 1, "approving", 0, 0),
+        ("RW-2026-0013", "P2", "判定会", "通辽永兴风电场", "涉网试验-1号SVG未完成", "重点工作督办", "判定会发现1号SVG未完成涉网试验", "8月内完成1号SVG涉网试验", "明南辉", "金惠良", 25, "dispatched", 0, 0),
+        ("RW-2026-0014", "P3", "年度计划", "瓮安建中HS300风电场", "消防设施月度检查", "其他", "8月消防检查", "完成灭火器、消防栓检查并记录", "塔拉", "金惠良", -5, "closed", 0, 0),
+        ("RW-2026-0015", "P2", "手动", "城投太旗光伏电站", "双细则日报数据核对", "考核扣款", "本周功率预测准确率偏低", "联系功率预测厂家修模", "明南辉", "陈亮", 2, "verifying", 0, 0),
     ]
     for code, pri, src, proj, title, wtype, reason, action, person, approver, dl_off, status, esc, od in rows:
         type_kb = db.query(WorkOrderTypeKB).filter_by(type_code=type_codes[wtype]).first()
+        # 根据项目名推断区域
+        region_map = {"通辽永兴风电场": "华北", "瓮安建中HS300风电场": "西南", "瓜州二期风电场": "西北", "城投太旗光伏电站": "华北"}
         wo = WorkOrder(
             code=code, title=title, reason=reason, action=action,
             project_id=proj_ids[proj], person_id=name_to_id[person], approver_id=name_to_id[approver],
             type_id=type_kb.id if type_kb else None,
             source_code=src_map[src], status=status, priority=pri,
+            region=region_map.get(proj),
             created_date=_today(dl_off - 7 if "closed" in status or status == "overdue" else dl_off - 3),
             deadline=_today(dl_off),
             completed_date=_today(dl_off) if status == "closed" else None,
@@ -473,6 +498,8 @@ def run() -> None:
         u = seed_users(db)
         print("→ 灌入项目...")
         p = seed_projects(db, u)
+        print("→ 灌入角色→人员映射...")
+        seed_roles(db)
         print("→ 灌入配置（来源/状态/类型）...")
         seed_config(db)
         print("→ 灌入规则...")

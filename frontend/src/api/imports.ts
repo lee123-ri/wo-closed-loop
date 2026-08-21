@@ -49,3 +49,30 @@ export const importMinutesBatch = (items: any[]) =>
       })
     )
   );
+
+// ── 可靠性Agent 复盘 HTML 导入 ──────────────────────────
+
+export interface AgentHtmlWorkOrder {
+  workorder_id: string;
+  code: string;
+  status: string;
+  unmapped: string[];
+  task_count?: number;
+}
+
+export interface AgentHtmlImportResult {
+  created: number;
+  skipped_duplicate: number;
+  total: number;
+  batch_key?: string;
+  already_imported?: boolean;
+  message?: string;
+  parsed_count?: number;
+  project?: string;
+  trigger?: { indicator?: string; period?: string };
+  results: AgentHtmlWorkOrder[];
+}
+
+/** 上传「指标异常处置SOP」复盘 HTML → 后端解析并生成待派发草稿工单 */
+export const importAgentHtml = (html: string) =>
+  http.post<any, AgentHtmlImportResult>("/import/agent-html", { html });

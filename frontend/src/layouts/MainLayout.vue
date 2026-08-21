@@ -35,8 +35,9 @@
             <template #icon><span class="fold-icon">{{ collapsed ? '☰' : '◁' }}</span></template>
           </t-button>
           <t-breadcrumb :max-item="4">
-            <t-breadcrumb-item>软工单闭环管理</t-breadcrumb-item>
-            <t-breadcrumb-item>{{ currentTitle }}</t-breadcrumb-item>
+            <t-breadcrumb-item v-for="(item, i) in breadcrumbs" :key="i" :to="i < breadcrumbs.length - 1 ? item.path : undefined">
+              {{ item.title }}
+            </t-breadcrumb-item>
           </t-breadcrumb>
         </div>
         <div class="header-right">
@@ -61,7 +62,9 @@
       <!-- 内容区 -->
       <t-content class="app-content">
         <router-view v-if="!refreshing" v-slot="{ Component }">
-          <component :is="Component" />
+          <keep-alive include="WorkOrderList">
+            <component :is="Component" />
+          </keep-alive>
         </router-view>
       </t-content>
     </t-layout>
@@ -118,6 +121,7 @@ const allMenuGroups = [
     icon: "◈",
     items: [
       { path: "/projects", icon: "◈", title: "项目管理" },
+      { path: "/users", icon: "👥", title: "用户管理" },
       { path: "/pool", icon: "◫", title: "数据池" },
       { path: "/sop", icon: "📖", title: "SOP知识库" },
     ],
@@ -126,9 +130,9 @@ const allMenuGroups = [
     label: "系统设置",
     icon: "⚙",
     items: [
-      { path: "/users", icon: "👥", title: "用户管理" },
       { path: "/config", icon: "⚙", title: "规则配置" },
       { path: "/audit-log", icon: "📋", title: "操作日志" },
+      { path: "/dingtalk", icon: "✆", title: "钉钉集成" },
     ],
   },
 ];
@@ -157,6 +161,30 @@ const activeMenu = computed(() => {
 
 const currentTitle = computed(() => (route.meta.title as string) || "工作台");
 const env = import.meta.env.MODE || "development";
+
+// 动态面包屑
+const breadcrumbs = computed(() => {
+  const crumbs: { title: string; path: string }[] = [];
+  const path = route.path;
+  // 首页不加面包屑
+  if (path === "/" || path === "") return crumbs;
+
+  // 从 matched 中获取层级：matched[0] 是 MainLayout，后续是子路由
+  const matched = route.matched;
+  // 找父级页面：路径前缀匹配的菜单项
+  const parentPath = "/" + path.split("/").slice(1, -1).join("/");
+  if (parentPath !== "/" && parentPath !== path) {
+    const parentMenu = menus.value.find((m) => m.path === parentPath);
+    if (parentMenu) {
+      crumbs.push({ title: parentMenu.title, path: parentPath });
+    }
+  }
+  // 当前页
+  if (route.meta.title) {
+    crumbs.push({ title: route.meta.title as string, path: path });
+  }
+  return crumbs;
+});
 
 function onMenuChange(path: string) {
   router.push(path);

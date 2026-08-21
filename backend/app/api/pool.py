@@ -161,6 +161,16 @@ def sync_aitable_endpoint(full: bool = True, db: Session = Depends(get_db)):
     }
 
 
+@router.post("/sync-full")
+def sync_full_endpoint(db: Session = Depends(get_db)):
+    """一键同步全链路：AITable→数据池→生成工单 + 钉盘「工单版」xlsx→工单。"""
+    from app.services.aitable import full_sync
+    try:
+        return full_sync()
+    except Exception as e:
+        raise HTTPException(502, f"同步失败: {e}")
+
+
 @router.post("/sync-project-map")
 def sync_project_map_endpoint(db: Session = Depends(get_db)):
     """从 AI 表格同步项目信息"""

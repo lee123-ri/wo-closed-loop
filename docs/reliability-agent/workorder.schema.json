@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://wo-closed-loop/reliability-agent/workorder.schema.json",
+  "title": "可靠性Agent指标异常处置工单出参契约",
+  "description": "指标异常处置SOP技能(wind-farm-anomaly-sop)输出到软工单平台的工单结构化契约。字段对齐软工单OA审批模板(PROC-DD7BF4A0-0102-4A4E-B3D1-7BE5FE8F42AF)。本 schema 是「Agent 出参」与「软工单平台入库」之间的接口契约。",
+  "type": "object",
+  "required": ["schema_version", "project", "generated_at", "workorders"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0.0" },
+    "agent": {
+      "type": "string",
+      "description": "产出方标识，如「指标异常处置SOP技能(wind-farm-anomaly-sop) v3.2」"
+    },
+    "project": {
+      "type": "string",
+      "description": "项目简称，对应 OA「项目名称」"
+    },
+    "generated_at": { "type": "string", "format": "date" },
+    "trigger": {
+      "type": "object",
+      "description": "触发本批次工单的指标异常上下文（溯源用，不直接入 OA）",
+      "properties": {
+        "indicator": { "type": "string" },
+        "period": { "type": "string" },
+        "value": { "type": "array", "items": { "type": "number" } },
+        "threshold": { "type": "number" }
+      }
+    },
+    "workorders": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/workorder" }
+    }
+  },
+  "$defs": {
+    "person": {
+      "type": "object",
+      "description": "责任相关人。Agent 只给 name/role，dingtalk_id 由平台导入时补齐。",
+      "required": ["name", "role"],
+      "properties": {
+        "name": { "type": "string", "description": "姓名或组织名，如「远景能源」「我方项目监督岗」" },
+        "role": { "type": "string", "description": "执行方 / 监管方 / 审批人" },
+        "dingtalk_id": {
+          "type": "string",
+          "description": "钉钉 userId，平台侧导入时按 name 查 User 表补齐"
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "description": "单条 EAM 停机日志引用，构成 OA「工单记录附件/佐证」。",
+      "required": ["date", "device", "fault", "detail"],
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "device": { "type": "string", "description": "机位/设备，如「3#集电线F15风机」" },
+        "fault": { "type": "string", "description": "故障部件/类型" },
+        "detail": { "type": "string", "description": "停机时长/损失/处理过程摘要" },
+        "eam_ref": { "type": "string", "description": "EAM 停机日志原文引用" }
+      }
+    },
+    "workorder": {
+      "type": "object",
+      "required": [
+        "workorder_id", "title", "subtype", "oa_type", "reason", "action",
+        "responsible", "approver", "deadline_days", "deadline_basis",
+        "completion_criteria", "evidence", "smart"
+      ],
+      "properties": {
+        "workorder_id": {
+          "type": "string",
+          "description": "幂等键：project+device+fault+date 的确定性摘要。平台据此去重，Agent 重跑不重复建单。"
+        },
+        "title": { "type": "string", "description": "工单标题：项目简称+机位+系统/部件+问题概述" },
+        "subtype": {
+          "type": "string",
+          "enum": ["超时型", "高频型", "共性缺陷型", "紧急确认类"],
+          "description": "可靠性归因分型（Agent 原生四分类），用于定措施模板"
+        },
+        "oa_type": {
+          "type": "string",
+          "description": "OA「工单类型」11 类之一。可靠性工单默认「设备预警工单」(GLZY-009)，GAP-004 待业务裁决。"
+        },
+        "reason": { "type": "string", "description": "OA「触发原因」= 依据事件（机位×故障×损失×EAM原文）" },
+        "action": { "type": "string", "description": "OA「行动要求」= S 具体任务原文（精确到机位/部件/事件事实）" },
+        "target_metric": { "type": "string", "description": "M 目标值（量化），导入时并入行动要求或单列" },
+        "responsible": { "$ref": "#/$defs/person", "description": "OA「责任人」执行方" },
+        "approver": { "$ref": "#/$defs/person", "description": "OA「审批人」监管方" },
+        "deadline_days": {
+          "type": "integer",
+          "description": "时限天数（相对派发日），平台导入时折算绝对日期；紧急确认类=0"
+        },
+        "deadline_basis": { "type": "string", "description": "时限依据说明，如「复盘报告7日内」/「全场普查30日内」" },
+        "completion_criteria": {
+          "type": "string",
+          "description": "A 完成标志（验收证据），闭环时回填 OA「执行结论」"
+        },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/evidence" },
+          "description": "EAM 停机日志引用列表"
+        },
+        "smart": {
+          "type": "object",
+          "description": "SMART(S/M/A/R/T) 原文快照，供复盘与追溯，不覆盖上面平铺字段。",
+          "required": ["S", "M", "A", "R", "T"],
+          "properties": {
+            "S": { "type": "string" },
+            "M": { "type": "string" },
+            "A": { "type": "string" },
+            "R": { "type": "string" },
+            "T": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

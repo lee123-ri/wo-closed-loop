@@ -4,15 +4,17 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.api.auth import require_auth
 from app.models import (
     ApprovalFlow, ConfigDefinition, NotificationPolicy, ParsingRule, PriorityRule, Project, SLADefinition,
-    User, WorkOrderTypeKB, PersonProjectMap,
+    User, WorkOrderTypeKB, PersonProjectMap, RegionPMO, RoleAssignment,
 )
 from app.schemas.config import (
     ApprovalFlowOut, ConfigDefCreate, ConfigDefinitionOut, NotificationPolicyCreate,
     NotificationPolicyOut, ParsingRuleOut, PersonMapCreate, PersonMapOut,
     PriorityRuleCreate, PriorityRuleOut, PriorityRuleUpdate, ProjectOut, SLADefinitionOut, UserOut,
-    WorkOrderTypeCreate, WorkOrderTypeOut,
+    WorkOrderTypeCreate, WorkOrderTypeOut, WorkOrderTypeUpdate,
+    RegionPMOOut, RegionPMOCreate, RoleAssignmentOut, RoleAssignmentUpdate,
 )
 
 router = APIRouter(prefix="/config", tags=["config"])
@@ -53,11 +55,11 @@ def list_all_projects(db: Session = Depends(get_db)):
 
 
 @router.get("/users", response_model=list[UserOut])
-def list_users(db: Session = Depends(get_db), page: int = 1, page_size: int = 50):
+def list_users(db: Session = Depends(get_db), page: int = 1, page_size: int = 50, _: User = Depends(require_auth)):
     return db.query(User).filter(User.is_active.is_(True)).order_by(User.id).offset((page-1)*page_size).limit(page_size).all()
 
 @router.get("/users/all", response_model=list[UserOut])
-def list_all_users(db: Session = Depends(get_db)):
+def list_all_users(db: Session = Depends(get_db), _: User = Depends(require_auth)):
     """不分页，给下拉选择器用"""
     return db.query(User).filter(User.is_active.is_(True)).order_by(User.name).all()
 
@@ -183,19 +185,30 @@ def list_wo_types_full(db: Session = Depends(get_db)):
 @router.post("/work-order-types", response_model=WorkOrderTypeOut, status_code=201)
 def add_wo_type(body: WorkOrderTypeCreate, db: Session = Depends(get_db)):
     mx = db.query(WorkOrderTypeKB).count()
-    t = WorkOrderTypeKB(type_code=body.type_code, name=body.name, desc=body.desc,
-                        default_approver_id=body.default_approver_id,
-                        default_priority=body.default_priority, sort_order=mx)
+    t = WorkOrderTypeKB(
+        type_code=body.type_code, name=body.name, desc=body.desc,
+        default_approver_id=body.default_approver_id,
+        default_priority=body.default_priority, sort_order=mx,
+        guidance_ref=body.guidance_ref,
+        sop_purpose=body.sop_purpose,
+        sop_scope=body.sop_scope,
+        sop_steps=body.sop_steps,
+        sop_acceptance=body.sop_acceptance,
+        sop_backfill_required=body.sop_backfill_required,
+        sop_escalation=body.sop_escalation,
+        sop_related_guidance=body.sop_related_guidance,
+    )
     db.add(t); db.commit(); db.refresh(t)
     return t
 
 
 @router.patch("/work-order-types/{type_id}", response_model=WorkOrderTypeOut)
-def update_wo_type(type_id: int, body: WorkOrderTypeCreate, db: Session = Depends(get_db)):
+def update_wo_type(type_id: int, body: WorkOrderTypeUpdate, db: Session = Depends(get_db)):
     t = db.get(WorkOrderTypeKB, type_id)
     if not t: raise HTTPException(404, "类型不存在")
-    t.type_code = body.type_code; t.name = body.name; t.desc = body.desc
-    t.default_approver_id = body.default_approver_id; t.default_priority = body.default_priority
+    data = body.model_dump(exclude_unset=True)
+    for k, v in data.items():
+        setattr(t, k, v)
     db.commit(); db.refresh(t)
     return t
 
@@ -317,7 +330,10 @@ def del_notification_policy(policy_id: int, db: Session = Depends(get_db)):
 
 # ── 项目管理 CRUD ─────────────────────────────────────
 
-from pydantic import BaseModel as PydanticBase
+from pydantic import BaseModel as PydanticBase, field_validator
+
+from app.services.region_map import normalize_region
+
 
 class ProjectCreate(PydanticBase):
     code: str
@@ -325,11 +341,22 @@ class ProjectCreate(PydanticBase):
     type: str | None = None
     region: str | None = None
 
+    @field_validator("region")
+    @classmethod
+    def _norm_region(cls, v: str | None) -> str | None:
+        return normalize_region(v)
+
+
 class ProjectUpdate(PydanticBase):
     name: str | None = None
     type: str | None = None
     region: str | None = None
     is_active: bool | None = None
+
+    @field_validator("region")
+    @classmethod
+    def _norm_region(cls, v: str | None) -> str | None:
+        return normalize_region(v)
 
 @router.post("/projects", response_model=ProjectOut, status_code=201)
 def create_project(body: ProjectCreate, db: Session = Depends(get_db)):
@@ -371,4 +398,85 @@ def list_audit_logs(page: int = 1, page_size: int = 50, db: Session = Depends(ge
                     "detail": r.detail, "operator": r.operator, "created_at": r.created_at.isoformat()} for r in rows],
         "total": total, "page": page, "page_size": page_size,
     }
-    db.delete(p); db.commit()
+
+
+# ── 区域 PMO 配置 ──────────────────────────────────────
+
+@router.get("/region-pmos", response_model=list[RegionPMOOut])
+def list_region_pmos(db: Session = Depends(get_db)):
+    """列出所有区域 PMO 映射"""
+    rows = db.query(RegionPMO).order_by(RegionPMO.id).all()
+    result = []
+    for r in rows:
+        user = db.get(User, r.user_id)
+        result.append(RegionPMOOut(
+            id=r.id, region=r.region, user_id=r.user_id,
+            user_name=user.name if user else None,
+        ))
+    return result
+
+
+@router.post("/region-pmos", response_model=RegionPMOOut, status_code=201)
+def set_region_pmo(body: RegionPMOCreate, db: Session = Depends(get_db)):
+    """设置区域 PMO（如果区域已存在则更新）"""
+    existing = db.query(RegionPMO).filter(RegionPMO.region == body.region).first()
+    if existing:
+        existing.user_id = body.user_id
+        db.commit()
+        db.refresh(existing)
+        r = existing
+    else:
+        r = RegionPMO(region=body.region, user_id=body.user_id)
+        db.add(r)
+        db.commit()
+        db.refresh(r)
+    user = db.get(User, r.user_id)
+    return RegionPMOOut(id=r.id, region=r.region, user_id=r.user_id,
+                        user_name=user.name if user else None)
+
+
+@router.delete("/region-pmos/{pmo_id}", status_code=204)
+def delete_region_pmo(pmo_id: int, db: Session = Depends(get_db)):
+    """删除区域 PMO 映射"""
+    r = db.get(RegionPMO, pmo_id)
+    if not r:
+        raise HTTPException(404, "区域PMO不存在")
+    db.delete(r)
+    db.commit()
+
+
+# ── 组织角色 → 人员配置（审批流用角色，人名可后台改） ──
+
+@router.get("/role-assignments", response_model=list[RoleAssignmentOut])
+def list_role_assignments(db: Session = Depends(get_db)):
+    """列出组织角色 → 人员映射"""
+    rows = db.query(RoleAssignment).order_by(RoleAssignment.sort_order, RoleAssignment.id).all()
+    out = []
+    for r in rows:
+        user = db.get(User, r.user_id) if r.user_id else None
+        out.append(RoleAssignmentOut(
+            id=r.id, role_code=r.role_code, role_name=r.role_name,
+            user_id=r.user_id, user_name=user.name if user else None,
+            sort_order=r.sort_order,
+        ))
+    return out
+
+
+@router.patch("/role-assignments/{role_code}", response_model=RoleAssignmentOut)
+def update_role_assignment(role_code: str, body: RoleAssignmentUpdate, db: Session = Depends(get_db)):
+    """配置某角色由哪个人员担任"""
+    r = db.query(RoleAssignment).filter(RoleAssignment.role_code == role_code).first()
+    if not r:
+        raise HTTPException(404, "角色不存在")
+    if body.user_id is not None:
+        if not db.get(User, body.user_id):
+            raise HTTPException(404, "人员不存在")
+        r.user_id = body.user_id
+        db.commit()
+        db.refresh(r)
+    user = db.get(User, r.user_id) if r.user_id else None
+    return RoleAssignmentOut(
+        id=r.id, role_code=r.role_code, role_name=r.role_name,
+        user_id=r.user_id, user_name=user.name if user else None,
+        sort_order=r.sort_order,
+    )

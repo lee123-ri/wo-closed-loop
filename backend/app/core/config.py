@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     dingtalk_oa_template_id: str = ""
     dingtalk_corp_id: str = ""
     dingtalk_callback_url: str = "http://localhost:8000/api/auth/dingtalk/callback"
+    dingtalk_callback_token: str = ""   # 事件订阅 Token
+    dingtalk_callback_aes_key: str = "" # 事件订阅 AES Key（43位Base64）
 
     # OSS（Phase 2）
     oss_endpoint: str = ""
@@ -50,6 +52,12 @@ class Settings(BaseSettings):
     # LLM（Phase 4）
     dashscope_api_key: str = ""
     llm_model: str = "qwen-plus"
+
+    # 判断Agent（Phase 5）
+    judgment_agent_url: str = "http://localhost:8080"
+    judgment_agent_token: str = ""
+    judgment_timeout: int = 10
+    judgment_enabled: bool = True
 
     # CORS
     cors_origins: str = "http://localhost:5173,http://localhost:3000"

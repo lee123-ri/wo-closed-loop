@@ -51,7 +51,7 @@ pending(待派发)→approving → dispatched(已派发)→executing→verifying
 ### D. 优先级与 SLA（3档）
 | 优先级 | 截止天数 | 到期前预警 | 违约后升级 |
 |---|---|---|---|
-| P1 | 2天 | 4h | 24h |
+| P1 | 1天 | 4h | 24h |
 | P2 | 3天 | 24h | 72h |
 | P3 | 7天 | 48h | 168h |
 （注：运营计划 agent 用 P0/P1/P2）

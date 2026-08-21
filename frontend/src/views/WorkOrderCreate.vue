@@ -1,7 +1,7 @@
 <template>
   <div class="wo-create">
     <div class="header">
-      <div><h1>新建工单</h1><div class="meta">手动创建 · 从 Excel 导入</div></div>
+      <div><h1>新建工单 <span style="color:red;font-size:12px">v2</span></h1><div class="meta">手动创建 · 从 Excel 导入</div></div>
     </div>
 
     <div class="tabs">
@@ -52,14 +52,21 @@
         </div>
         <div class="form-group">
           <label><span class="req">*</span>责任人</label>
-          <select v-model="form.person_id">
-            <option v-for="u in availablePersons" :key="u.id" :value="u.id">{{ u.name }}</option>
-          </select>
+          <SearchableSelect v-model="form.person_id" :options="allUsers" placeholder="搜索姓名…" />
         </div>
         <div class="form-group">
           <label><span class="req">*</span>审批人</label>
-          <select v-model="form.approver_id">
-            <option v-for="u in approvers" :key="u.id" :value="u.id">{{ u.name }}</option>
+          <SearchableSelect v-model="form.approver_id" :options="allUsers" placeholder="搜索姓名…" />
+        </div>
+        <div class="form-group">
+          <label>计划开始</label>
+          <input type="date" v-model="form.planned_start_date" />
+        </div>
+        <div class="form-group">
+          <label>区域</label>
+          <select v-model="form.region">
+            <option value="">—</option>
+            <option v-for="r in REGIONS" :key="r" :value="r">{{ r }}</option>
           </select>
         </div>
         <div class="form-group">
@@ -80,7 +87,7 @@
       <div class="card-hd"><h3>📊 从 Excel/CSV 导入</h3><span class="count">支持列：标题/项目/责任人/截止日期/类型/描述/行动</span></div>
       <div class="upload-area" @dragover.prevent @drop.prevent="onDrop">
         <input type="file" accept=".csv,.xlsx,.xls" @change="onFilePick" ref="fileInput" hidden />
-        <div v-if="!tableResult" @click="$refs.fileInput.click()" class="upload-prompt">
+        <div v-if="!tableResult" @click="fileInput?.click()" class="upload-prompt">
           📁 点击选择文件，或拖拽到此处
         </div>
         <div v-else class="upload-result">
@@ -99,8 +106,11 @@ import { useRouter } from "vue-router";
 import { createWorkOrder } from "@/api/workorders";
 import { getProjectsAll, getSources, getWoTypes, getUsersAll, getPersonProjectMap, type ConfigItem } from "@/api/config";
 import { importTable } from "@/api/imports";
+import SearchableSelect from "@/components/SearchableSelect.vue";
 
 const router = useRouter();
+
+const REGIONS = ["华北", "华中", "华东", "华南", "西北", "西南", "东北"];
 const submitting = ref(false);
 const tab = ref<"manual" | "excel">("manual");
 
@@ -118,14 +128,9 @@ const form = reactive({
   title: "", reason: "", action: "",
   person_id: undefined as number | undefined,
   approver_id: undefined as number | undefined,
+  planned_start_date: "",
   deadline: "",
-});
-const approvers = computed(() => allUsers.value.filter((u) => u.role === "approver" || u.role === "admin"));
-const availablePersons = computed(() => {
-  const projId = form.project_id;
-  if (!projId) return allUsers.value.filter((u) => u.role === "executor");
-  const entry = personMap.value.find((p) => p.project_id === projId);
-  return entry ? entry.persons.map((pp: any) => ({ id: pp.id, name: pp.name })) : allUsers.value.filter((u) => u.role === "executor");
+  region: "",
 });
 
 async function onProjectChange() {
@@ -151,7 +156,10 @@ async function submitManual() {
     await createWorkOrder({
       title: form.title, reason: form.reason || undefined, action: form.action,
       project_id: form.project_id, type_id: form.type_id, source_code: form.source_code,
-      priority: form.priority, person_id: form.person_id, approver_id: form.approver_id, deadline: form.deadline,
+      priority: form.priority, person_id: form.person_id, approver_id: form.approver_id,
+      region: form.region || undefined,
+      planned_start_date: form.planned_start_date || undefined,
+      deadline: form.deadline,
     });
     router.push("/work-orders");
   } catch (e: any) { alert("提交失败：" + e.message); }
@@ -163,7 +171,6 @@ onMounted(async () => {
   projects.value = p; sources.value = s; woTypes.value = t; allUsers.value = u; personMap.value = pm;
   if (p.length) form.project_id = p[0].id;
   if (t.length) form.type_id = t[0].id;
-  if (approvers.value.length) form.approver_id = approvers.value[0].id;
   onProjectChange(); autoDeadline();
 });
 

@@ -62,6 +62,7 @@ kubectl apply -f docker/k8s.yaml
 kubectl rollout status deploy/wo-backend
 kubectl rollout status deploy/wo-worker
 kubectl rollout status deploy/wo-scheduler
+kubectl rollout status deploy/wo-judgment-agent
 kubectl rollout status deploy/wo-frontend
 ```
 
@@ -91,6 +92,10 @@ curl -I https://你的域名/health | grep -iE 'x-frame|x-content-type|strict-tr
 # 钉钉凭证状态
 curl https://你的域名/api/dingtalk/status
 # 期望：app_key/oa_template 等全 true
+
+# 判断Agent 健康检查
+kubectl exec -it deploy/wo-backend -- curl -s http://wo-judgment-agent:8080/health
+# 期望：{"status": "ok"}
 ```
 
 浏览器访问 `https://你的域名`：
@@ -140,5 +145,5 @@ kubectl exec -it deploy/wo-backend -- python -c \
 - [x] SQL 参数化（ORM，无拼接）
 - [x] 密码 bcrypt 哈希
 - [x] JWT 鉴权
-- [ ] 钉钉回调验签（生产需配 aes_key，当前简化）
+- [x] 钉钉回调验签（生产需配 aes_key）
 - [ ] 定期轮换 JWT_SECRET

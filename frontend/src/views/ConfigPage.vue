@@ -71,6 +71,40 @@
       </table>
     </div>
 
+    <!-- 区域PMO -->
+    <div class="card">
+      <div class="card-hd"><h3>📍 区域PMO配置</h3><span class="count">异常指标工单默认责任人</span></div>
+      <div class="region-pmo-grid">
+        <div v-for="r in REGIONS" :key="r" class="region-pmo-row">
+          <span class="region-label">{{ r }}</span>
+          <SearchableSelect
+            :model-value="regionPMO[r]?.user_id"
+            :options="allUsers"
+            placeholder="输入姓名搜索…"
+            class="region-pmo-select"
+            @update:model-value="(v: number | undefined) => onRegionPMOChange(r, v)"
+          />
+        </div>
+      </div>
+    </div>
+
+    <!-- 角色人员配置 -->
+    <div class="card">
+      <div class="card-hd"><h3>👤 角色人员配置</h3><span class="count">审批流按角色引用，人名在此配置</span></div>
+      <div class="region-pmo-grid">
+        <div v-for="r in roleAssignments" :key="r.role_code" class="region-pmo-row">
+          <span class="region-label"><b>{{ r.role_name }}</b><code class="role-code">{{ r.role_code }}</code></span>
+          <SearchableSelect
+            :model-value="r.user_id"
+            :options="allUsers"
+            placeholder="输入姓名搜索…"
+            class="region-pmo-select"
+            @update:model-value="(v: number | undefined) => onRoleChange(r.role_code, v)"
+          />
+        </div>
+      </div>
+    </div>
+
     <!-- 审批流 -->
     <div class="card">
       <div class="card-hd"><h3>🔄 审批流</h3><span class="count">双击节点编辑</span></div>
@@ -90,13 +124,46 @@
 
     <!-- 工单类型编辑弹窗 -->
     <div v-if="typeModal.open" class="modal-mask" @click.self="typeModal.open = false">
-      <div class="modal">
+      <div class="modal modal-wide">
         <h3>{{ typeModal.editing ? '编辑' : '新增' }}工单类型</h3>
-        <div class="form-group"><label>编码</label><input v-model="typeModal.type_code" :disabled="!!typeModal.editing" /></div>
-        <div class="form-group"><label>名称</label><input v-model="typeModal.name" /></div>
-        <div class="form-group"><label>说明</label><input v-model="typeModal.desc" /></div>
-        <div class="form-group"><label>审批人</label><select v-model="typeModal.default_approver_id"><option :value="undefined">无</option><option v-for="u in approvers" :key="u.id" :value="u.id">{{ u.name }}</option></select></div>
-        <div class="form-group"><label>优先级</label><select v-model="typeModal.default_priority"><option value="P1">P1</option><option value="P2">P2</option><option value="P3">P3</option></select></div>
+        <div class="modal-body-scroll">
+          <!-- 基本信息 -->
+          <h4 class="modal-section-title">基本信息</h4>
+          <div class="form-row">
+            <div class="form-group"><label>编码</label><input v-model="typeModal.type_code" :disabled="!!typeModal.editing" /></div>
+            <div class="form-group"><label>名称</label><input v-model="typeModal.name" /></div>
+          </div>
+          <div class="form-group"><label>说明</label><input v-model="typeModal.desc" /></div>
+          <div class="form-row">
+            <div class="form-group"><label>审批人</label><select v-model="typeModal.default_approver_id"><option :value="undefined">无</option><option v-for="u in approvers" :key="u.id" :value="u.id">{{ u.name }}</option></select></div>
+            <div class="form-group"><label>优先级</label><select v-model="typeModal.default_priority"><option value="P1">P1</option><option value="P2">P2</option><option value="P3">P3</option></select></div>
+          </div>
+
+          <!-- SOP 知识库 -->
+          <h4 class="modal-section-title">📋 SOP 知识库</h4>
+          <div class="form-group"><label>指引编号</label><input v-model="typeModal.guidance_ref" placeholder="如 YWSYB-GLZY-012" /></div>
+          <div class="form-group"><label>目的</label><textarea v-model="typeModal.sop_purpose" rows="2" placeholder="规范XX的全流程管控"></textarea></div>
+          <div class="form-group"><label>流程</label><textarea v-model="typeModal.sop_scope" rows="2" placeholder="描述工作流程和环节"></textarea></div>
+          <div class="form-group">
+            <label>标准步骤（JSON 格式）</label>
+            <textarea v-model="typeModal.sop_steps" rows="6" placeholder='[{"step":1,"action":"...","standard":"...","role":"..."}]'></textarea>
+            <span class="form-hint">JSON 数组，每项含 step/action/standard/role</span>
+          </div>
+          <div class="form-group"><label>验收标准</label><textarea v-model="typeModal.sop_acceptance" rows="2" placeholder="描述验收标准"></textarea></div>
+          <div class="form-group">
+            <label>升级规则（JSON 格式）</label>
+            <textarea v-model="typeModal.sop_escalation" rows="3" placeholder='{"timeout_hours":24,"action":"升级至XX","target":"XX"}'></textarea>
+            <span class="form-hint">JSON 对象，含 timeout_hours/action/target</span>
+          </div>
+          <div class="form-group">
+            <label>关联指引（JSON 格式）</label>
+            <textarea v-model="typeModal.sop_related_guidance" rows="3" placeholder='[{"ref":"YWSYB-GLZY-001","title":"XX指引"}]'></textarea>
+            <span class="form-hint">JSON 数组，每项含 ref/title</span>
+          </div>
+          <div class="form-group">
+            <label class="checkbox-label"><input type="checkbox" v-model="typeModal.sop_backfill_required" /> 要求回填</label>
+          </div>
+        </div>
         <div class="modal-actions"><button class="btn btn-out" @click="typeModal.open = false">取消</button><button class="btn btn-pri" @click="saveType">保存</button></div>
       </div>
     </div>
@@ -136,29 +203,82 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
-import { getSources, getStatuses, getProjects, getUsers, getPriorityRules, getSla, getApprovalFlows } from "@/api/config";
+import { getSources, getStatuses, getProjects, getUsers, getUsersAll, getPriorityRules, getSla, getApprovalFlows, getRegionPMOs, getRoleAssignments } from "@/api/config";
 import * as CC from "@/api/config-crud";
+import { setRegionPMO, deleteRegionPMO, updateRoleAssignment } from "@/api/config";
+import SearchableSelect from "@/components/SearchableSelect.vue";
 import { priorityLabel, priorityTag } from "@/utils/wo-display";
 
+const REGIONS = ["华北", "华中", "华东", "华南", "西北", "西南", "东北"];
 const sources = ref<any[]>([]);
 const statuses = ref<any[]>([]);
 const users = ref<any[]>([]);
+const allUsers = ref<any[]>([]);
 const approvers = computed(() => users.value.filter((u) => u.role === "approver" || u.role === "admin"));
 const woTypes = ref<any[]>([]);
 const priorityRules = ref<any[]>([]);
 const slaList = ref<any[]>([]);
 const approvalFlows = ref<any[]>([]);
+const regionPMO = reactive<Record<string, any>>({});
+const roleAssignments = ref<any[]>([]);
 
 function userName(id: number | null) { return id ? users.value.find((u) => u.id === id)?.name || "—" : "—"; }
 
-// 工单类型弹窗
-const typeModal = reactive({ open: false, editing: null as any, type_code: "", name: "", desc: "", default_approver_id: undefined as number | undefined, default_priority: "P2" });
-function openType() { typeModal.editing = null; typeModal.type_code = ""; typeModal.name = ""; typeModal.desc = ""; typeModal.default_approver_id = undefined; typeModal.default_priority = "P2"; typeModal.open = true; }
-function editType(t: any) { typeModal.editing = t; typeModal.type_code = t.type_code; typeModal.name = t.name; typeModal.desc = t.desc || ""; typeModal.default_approver_id = t.default_approver_id; typeModal.default_priority = t.default_priority; typeModal.open = true; }
+// 工单类型弹窗（含 SOP 字段）
+const typeModal = reactive({
+  open: false, editing: null as any,
+  type_code: "", name: "", desc: "", default_approver_id: undefined as number | undefined, default_priority: "P2",
+  // SOP 字段
+  guidance_ref: "",
+  sop_purpose: "",
+  sop_scope: "",
+  sop_steps: "",
+  sop_acceptance: "",
+  sop_escalation: "",
+  sop_related_guidance: "",
+  sop_backfill_required: true,
+});
+function openType() {
+  typeModal.editing = null;
+  typeModal.type_code = ""; typeModal.name = ""; typeModal.desc = "";
+  typeModal.default_approver_id = undefined; typeModal.default_priority = "P2";
+  typeModal.guidance_ref = ""; typeModal.sop_purpose = ""; typeModal.sop_scope = "";
+  typeModal.sop_steps = ""; typeModal.sop_acceptance = ""; typeModal.sop_escalation = "";
+  typeModal.sop_related_guidance = ""; typeModal.sop_backfill_required = true;
+  typeModal.open = true;
+}
+function editType(t: any) {
+  typeModal.editing = t;
+  typeModal.type_code = t.type_code; typeModal.name = t.name; typeModal.desc = t.desc || "";
+  typeModal.default_approver_id = t.default_approver_id; typeModal.default_priority = t.default_priority;
+  typeModal.guidance_ref = t.guidance_ref || "";
+  typeModal.sop_purpose = t.sop_purpose || "";
+  typeModal.sop_scope = t.sop_scope || "";
+  typeModal.sop_steps = t.sop_steps ? JSON.stringify(t.sop_steps, null, 2) : "";
+  typeModal.sop_acceptance = t.sop_acceptance || "";
+  typeModal.sop_escalation = t.sop_escalation ? JSON.stringify(t.sop_escalation, null, 2) : "";
+  typeModal.sop_related_guidance = t.sop_related_guidance ? JSON.stringify(t.sop_related_guidance, null, 2) : "";
+  typeModal.sop_backfill_required = t.sop_backfill_required !== false;
+  typeModal.open = true;
+}
 async function saveType() {
   try {
-    if (typeModal.editing) await CC.updateWoType(typeModal.editing.id, { name: typeModal.name, desc: typeModal.desc, default_approver_id: typeModal.default_approver_id, default_priority: typeModal.default_priority });
-    else await CC.addWoType({ type_code: typeModal.type_code, name: typeModal.name, desc: typeModal.desc, default_approver_id: typeModal.default_approver_id, default_priority: typeModal.default_priority });
+    const data: any = {
+      name: typeModal.name, desc: typeModal.desc,
+      default_approver_id: typeModal.default_approver_id, default_priority: typeModal.default_priority,
+      type_code: typeModal.type_code,
+      guidance_ref: typeModal.guidance_ref || null,
+      sop_purpose: typeModal.sop_purpose || null,
+      sop_scope: typeModal.sop_scope || null,
+      sop_acceptance: typeModal.sop_acceptance || null,
+      sop_backfill_required: typeModal.sop_backfill_required,
+    };
+    // 解析 JSON 字段
+    try { data.sop_steps = typeModal.sop_steps ? JSON.parse(typeModal.sop_steps) : null; } catch { alert("标准步骤 JSON 格式错误"); return; }
+    try { data.sop_escalation = typeModal.sop_escalation ? JSON.parse(typeModal.sop_escalation) : null; } catch { alert("升级规则 JSON 格式错误"); return; }
+    try { data.sop_related_guidance = typeModal.sop_related_guidance ? JSON.parse(typeModal.sop_related_guidance) : null; } catch { alert("关联指引 JSON 格式错误"); return; }
+    if (typeModal.editing) await CC.updateWoType(typeModal.editing.id, data);
+    else await CC.addWoType(data);
     typeModal.open = false; await loadAll();
   } catch (e: any) { alert(e.message); }
 }
@@ -211,6 +331,46 @@ async function loadAll() {
     getSources(), getStatuses(), getUsers(), CC.getWoTypesFull(), getPriorityRules(), getSla(), getApprovalFlows(),
   ]);
   sources.value = s; statuses.value = st; users.value = u; woTypes.value = wt; priorityRules.value = pr; slaList.value = sla; approvalFlows.value = flows;
+  // 加载全部用户（用于区域PMO选择）
+  try {
+    allUsers.value = await getUsersAll();
+  } catch { allUsers.value = u; }
+  // 加载区域PMO配置（失败不影响页面）
+  try {
+    const rpmo = await getRegionPMOs();
+    for (const r of REGIONS) {
+      regionPMO[r] = rpmo.find((x: any) => x.region === r) || null;
+    }
+  } catch { /* 接口可能尚未部署 */ }
+  // 加载角色→人员配置（失败不影响页面）
+  try {
+    roleAssignments.value = await getRoleAssignments();
+  } catch { /* 接口可能尚未部署 */ }
+}
+async function onRegionPMOChange(region: string, userId: number | undefined) {
+  if (userId) {
+    // 设置 PMO
+    try {
+      const result = await setRegionPMO({ region, user_id: userId });
+      regionPMO[region] = result;
+    } catch (e: any) { alert("保存失败：" + e.message); }
+  } else {
+    // 清除 PMO
+    const existing = regionPMO[region];
+    if (existing?.id) {
+      try {
+        await deleteRegionPMO(existing.id);
+        regionPMO[region] = null;
+      } catch (e: any) { alert("删除失败：" + e.message); }
+    }
+  }
+}
+async function onRoleChange(code: string, userId: number | undefined) {
+  try {
+    const result = await updateRoleAssignment(code, { user_id: userId ?? null });
+    const idx = roleAssignments.value.findIndex((r) => r.role_code === code);
+    if (idx >= 0) roleAssignments.value[idx] = result;
+  } catch (e: any) { alert("保存失败：" + e.message); }
 }
 onMounted(loadAll);
 </script>
@@ -240,10 +400,23 @@ td { padding: 9px 12px; border-bottom: 1px solid var(--border); } .desc { color:
 .node-timeout { font-size: 10px; color: var(--muted); }
 .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
 .modal { background: #fff; border-radius: 12px; padding: 24px; width: 420px; max-width: 90vw; max-height: 85vh; overflow-y: auto; }
-.modal h3 { font-size: 16px; margin-bottom: 16px; } .form-group { margin-bottom: 12px; }
+.modal-wide { width: 640px; }
+.modal h3 { font-size: 16px; margin-bottom: 16px; }
+.modal-section-title { font-size: 13px; font-weight: 700; color: var(--brand); margin: 16px 0 10px; padding-top: 12px; border-top: 1px solid var(--border); }
+.form-group { margin-bottom: 12px; }
 .form-group label { display: block; font-size: 12px; font-weight: 600; color: #4b5563; margin-bottom: 4px; }
-.form-group input, .form-group select { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+.form-group input, .form-group select, .form-group textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+.form-group textarea { font-family: monospace; resize: vertical; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-hint { font-size: 10px; color: var(--muted); margin-top: 2px; display: block; }
+.checkbox-label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; font-weight: 400; }
+.checkbox-label input { width: auto; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.modal-body-scroll { max-height: 60vh; overflow-y: auto; padding-right: 4px; }
+.region-pmo-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.region-pmo-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #f8fafc; border-radius: 8px; border: 1px solid var(--border); }
+.region-label { font-weight: 700; font-size: 13px; min-width: 40px; flex-shrink: 0; }
+.region-pmo-select { flex: 1; min-width: 0; }
 .tag { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
 .tag-blue { background: #eff6ff; color: var(--brand); } .tag-amber { background: #fffbeb; color: var(--amber); } .tag-red { background: #fef2f2; color: var(--red); }
 .btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; }

@@ -33,7 +33,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
-import { getDingTalkLoginUrl, dingtalkCallback, getPermissions } from "@/api/auth";
+import { getDingTalkLoginUrl, dingtalkCallback, getPermissions, type LoginResult } from "@/api/auth";
 import { useUserStore } from "@/stores/user";
 import http from "@/api/http";
 
@@ -66,7 +66,7 @@ async function doDevLogin() {
   loading.value = true;
   try {
     // 开发环境：直接创建 token
-    const res = await http.post("/auth/dev-login", {
+    const res = await http.post<any, LoginResult>("/auth/dev-login", {
       user_id: devUser.value.id,
       name: devUser.value.name,
       role: devUser.value.role,

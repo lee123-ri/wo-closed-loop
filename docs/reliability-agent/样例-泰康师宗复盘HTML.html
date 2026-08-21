@@ -1,0 +1,221 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<title>泰康师宗 FLE50指标异常处置模拟与复盘</title>
+<style>
+:root{--blue:#1f4e8c;--line:#e3e6ea;--red:#d9453a;--green:#0f6e56;--orange:#b9770e;--sub:#606266}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Microsoft YaHei","PingFang SC",sans-serif;background:#f5f7fa;color:#303133;padding:24px;max-width:1100px;margin:0 auto}
+h1{font-size:20px;color:var(--blue);margin-bottom:4px}
+.meta{font-size:12px;color:var(--sub);margin-bottom:16px}
+h2{font-size:16px;color:var(--blue);margin:22px 0 10px;padding-left:9px;border-left:4px solid var(--blue)}
+h3{font-size:14px;margin-bottom:6px}
+table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px;background:#fff}
+th,td{border:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top}
+th{background:#f0f4f9}
+.note{font-size:12px;color:var(--sub);background:#fbfcfe;border-left:3px solid var(--line);padding:8px 12px;margin:8px 0;line-height:1.7}
+.key{font-size:13px;background:#eef7f2;border-left:4px solid var(--green);padding:10px 14px;margin:10px 0;line-height:1.9}
+.warn{background:#fff8e6;border-left-color:var(--orange)}
+.order{background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin-bottom:10px;border-left:5px solid var(--blue)}
+.order.urgent{border-left-color:var(--red)}
+.order h3{font-size:13.5px;color:var(--blue);margin-bottom:8px}
+.order.urgent h3{color:var(--red)}
+.smarts{display:grid;grid-template-columns:84px 1fr;gap:4px 10px;font-size:12.5px}
+.smarts b{color:var(--blue)}
+.pill{display:inline-block;background:#eef3fa;color:var(--blue);border-radius:10px;padding:1px 10px;font-size:12px;margin-right:6px}
+.ok{color:var(--green);font-weight:700}.part{color:var(--orange);font-weight:700}.no{color:var(--red);font-weight:700}
+</style></head><body>
+<h1>泰康师宗 FLE50 指标异常处置模拟与复盘</h1>
+<div class="meta">目的：<b>模拟发工单、验证工单正确性，为正式发工单做准备</b>｜ 流程：指标异常 → 原因分析 → 下发工单（模拟）→ 复盘分析（工单 vs 现场实际工作）｜ 规则：SOP v3.0 ｜ 数据：EAM停机日志 2026-01~07-11 ｜ 生成：2026-08-19</div>
+
+<h2>第一部分　指标异常：FLE50 月度曲线</h2>
+<svg viewBox="0 0 900 300" width="100%" style="background:#fff;border:1px solid #e3e6ea;border-radius:8px"><line x1="55" y1="258" x2="880" y2="258" stroke="#eef1f4"/><text x="49" y="262" font-size="11" fill="#909399" text-anchor="end">0</text><line x1="55" y1="201" x2="880" y2="201" stroke="#eef1f4"/><text x="49" y="205" font-size="11" fill="#909399" text-anchor="end">4</text><line x1="55" y1="144" x2="880" y2="144" stroke="#eef1f4"/><text x="49" y="148" font-size="11" fill="#909399" text-anchor="end">8</text><line x1="55" y1="87" x2="880" y2="87" stroke="#eef1f4"/><text x="49" y="91" font-size="11" fill="#909399" text-anchor="end">12</text><line x1="55" y1="30" x2="880" y2="30" stroke="#eef1f4"/><text x="49" y="34" font-size="11" fill="#909399" text-anchor="end">16</text><rect x="55" y="187" width="825" height="71" fill="#0f6e56" opacity="0.05"/><line x1="55" y1="187" x2="880" y2="187" stroke="#d9453a" stroke-width="1.5" stroke-dasharray="6,4"/><text x="876" y="182" font-size="11" fill="#d9453a" text-anchor="end">阈值 5（指标库V3.0）</text><polyline points="113.9,223.7 231.8,240.6 349.6,232.3 467.5,119.8 585.4,58.1 703.2,200.6 821.1,246.6" fill="none" stroke="#1f4e8c" stroke-width="2.5"/><circle cx="113.9" cy="223.7" r="4.5" fill="#0f6e56"/><text x="113.9" y="213.7" font-size="12" font-weight="700" fill="#0f6e56" text-anchor="middle">2.41</text><text x="113.9" y="276" font-size="12" fill="#606266" text-anchor="middle">1月</text><circle cx="231.8" cy="240.6" r="4.5" fill="#0f6e56"/><text x="231.8" y="230.6" font-size="12" font-weight="700" fill="#0f6e56" text-anchor="middle">1.22</text><text x="231.8" y="276" font-size="12" fill="#606266" text-anchor="middle">2月</text><circle cx="349.6" cy="232.3" r="4.5" fill="#0f6e56"/><text x="349.6" y="222.3" font-size="12" font-weight="700" fill="#0f6e56" text-anchor="middle">1.8</text><text x="349.6" y="276" font-size="12" fill="#606266" text-anchor="middle">3月</text><circle cx="467.5" cy="119.8" r="4.5" fill="#d9453a"/><text x="467.5" y="109.8" font-size="12" font-weight="700" fill="#d9453a" text-anchor="middle">9.7</text><text x="467.5" y="276" font-size="12" fill="#606266" text-anchor="middle">4月</text><circle cx="585.4" cy="58.1" r="4.5" fill="#d9453a"/><text x="585.4" y="48.1" font-size="12" font-weight="700" fill="#d9453a" text-anchor="middle">14.03</text><text x="585.4" y="276" font-size="12" fill="#606266" text-anchor="middle">5月</text><circle cx="703.2" cy="200.6" r="4.5" fill="#0f6e56"/><text x="703.2" y="190.6" font-size="12" font-weight="700" fill="#0f6e56" text-anchor="middle">4.03</text><text x="703.2" y="276" font-size="12" fill="#606266" text-anchor="middle">6月</text><circle cx="821.1" cy="246.6" r="4.5" fill="#0f6e56"/><text x="821.1" y="236.6" font-size="12" font-weight="700" fill="#0f6e56" text-anchor="middle">0.8</text><text x="821.1" y="276" font-size="12" fill="#606266" text-anchor="middle">7月</text><text x="467.5" y="44" font-size="11" fill="#d9453a" text-anchor="middle">异常：变桨电气类多发</text><text x="585.4" y="58" font-size="11" fill="#d9453a" text-anchor="middle">异常：变频大事件+变桨</text><text x="703.2" y="44" font-size="11" fill="#0f6e56" text-anchor="middle">回落正常</text></svg>
+<div class="note">4~5月 FLE50 = 9.70 / 14.03，超阈值5（告警）→ 触发处置流程；6~7月回落至 4.03 / 0.80，回到正常范围。FLE50 为<b>风机故障维修指标</b>（仅含非计划停机的故障损失电量）。</div>
+
+<h2>第二部分　原因分析（机位×系统×具体问题 + 共性/偶发定性）</h2>
+
+<div class="key"><b>定性判定标准</b>：<b>共性问题</b>＝跨机位同类问题（同一部件/同一机理出现在 ≥2 台机组）或同机位同类问题反复（≥3 次）——指向系统性原因（设计/批次/维护规程缺陷），处置方式为专项整改/普查/培训；<b>偶发问题</b>＝单点一次性事件（处置后未再发）——指向个体失效，处置方式为单次维修+超时复盘。</div>
+
+<h3>2.1 4月问题清单（故障损失 41.9 万kWh，31条记录）</h3>
+<table>
+<tr><th>机位</th><th>系统</th><th>具体问题</th><th>损失</th><th>次数</th><th>定性</th><th>定性依据</th></tr>
+<tr><td>3#集电线F14</td><td>变桨系统</td><td>变桨驱动器（变频器）·润滑油泵失效</td><td class="num">10.7万</td><td class="num">2</td><td><b style="color:#d9453a">共性</b></td><td>变桨润滑回路问题当月涉及 <b>8 台机</b>（见2.3聚合）</td></tr>
+<tr><td>I#集电线F02</td><td>齿轮箱系统</td><td>过滤器滤芯阻塞</td><td class="num">4.6万</td><td class="num">1</td><td><b style="color:#d9453a">共性</b></td><td>滤芯阻塞跨 <b>4 台机</b>（F02/F46/F14/F13）</td></tr>
+<tr><td>8#集电线F36</td><td>变桨系统</td><td>液压管路（油泵电机线路）</td><td class="num">4.2万</td><td class="num">1</td><td><b style="color:#d9453a">共性</b></td><td>液压管路跨 2 台机（F36/F15），且属润滑回路</td></tr>
+<tr><td>2#集电线F07</td><td>变桨系统</td><td>变桨电机·润滑分配器堵塞</td><td class="num">3.7万</td><td class="num">2</td><td><b style="color:#d9453a">共性</b></td><td>同机位连续2日同部件 + 润滑回路跨机位</td></tr>
+<tr><td>10#集电线F46</td><td>齿轮箱系统</td><td>过滤器滤芯阻塞</td><td class="num">2.9万</td><td class="num">1</td><td><b style="color:#d9453a">共性</b></td><td>滤芯阻塞跨 4 台机</td></tr>
+<tr><td>9#集电线F45</td><td>润滑系统</td><td>变桨润滑泵</td><td class="num">2.2万</td><td class="num">1</td><td><b style="color:#d9453a">共性</b></td><td>润滑泵跨 4 台机（F45/F47/F38/F48）</td></tr>
+<tr><td>I#集电线F03</td><td>主控系统</td><td>主控柜UPS反复告警</td><td class="num">1.9万</td><td class="num">2</td><td><b style="color:#d9453a">共性</b></td><td>同机位反复（全期4次）+ UPS跨2台机6次</td></tr>
+<tr><td>9#集电线F41</td><td>变桨系统</td><td>变桨制动器</td><td class="num">1.5万</td><td class="num">1</td><td><b style="color:#d9453a">共性</b></td><td>制动器跨 3 台机（F41/F32/F31）</td></tr>
+</table>
+<div class="note">4月定性结论：<b>全部为共性问题</b>——并非孤立散发，而是润滑回路、滤芯、UPS、制动器等同类缺陷在多台机组的集中暴露。</div>
+
+<h3>2.2 5月问题清单（故障损失 62.6 万kWh，23条记录）</h3>
+<table>
+<tr><th>机位</th><th>系统</th><th>具体问题</th><th>损失</th><th>次数</th><th>定性</th><th>定性依据</th></tr>
+<tr><td>3#集电线F15</td><td>变频系统</td><td>变频柜PLC·停机384.2h超大事件</td><td class="num">42.3万</td><td class="num">1</td><td><b style="color:#0f6e56">偶发</b></td><td>单起超大事件（占月67.5%），一次性闭环后未再发；变频PLC虽跨4台出现，但其余均为小额</td></tr>
+<tr><td>9#集电线F41</td><td>变桨系统</td><td>变桨柜PLC模块·滑环损坏更换</td><td class="num">7.3万</td><td class="num">1</td><td><b style="color:#0f6e56">偶发</b></td><td>单发，换件后未再发</td></tr>
+<tr><td>1#集电线F06</td><td>联轴器及液压刹车</td><td>刹车位置传感器（IFM接近开关）</td><td class="num">4.6万</td><td class="num">1</td><td><b style="color:#0f6e56">偶发</b></td><td>单发，换件后未再发</td></tr>
+<tr><td>3#集电线F14</td><td>变桨系统</td><td>电源模块·Profibus通讯线屏蔽层反复磨破</td><td class="num">4.1万</td><td class="num">4</td><td><b style="color:#d9453a">共性</b></td><td>同机位同一问题<b>反复4次</b>（重接→封补→闪断→封补）+ F14全期故障10次（问题机组）</td></tr>
+<tr><td>2#集电线F09</td><td>变频系统</td><td>变频柜电源模块/PLC反复</td><td class="num">0.9万</td><td class="num">3</td><td><b style="color:#d9453a">共性</b></td><td>同机位反复3次</td></tr>
+<tr><td>I#集电线F03</td><td>主控系统</td><td>主控柜UPS反复告警</td><td class="num">0.0万</td><td class="num">2</td><td><b style="color:#d9453a">共性</b></td><td>同机位全期4次</td></tr>
+<tr><td>2#集电线F08</td><td>变桨系统</td><td>桨叶螺栓断裂卡滞无法回桨</td><td class="num">0.6万</td><td class="num">1</td><td><b style="color:#d9453a">共性</b></td><td>与该项目叶片螺栓批量断裂背景相关（计划性停机通道同期大量螺栓更换记录）</td></tr>
+</table>
+
+<h3>2.3 共性问题聚合（跨机位同类，4~5月合并视图）</h3>
+<table>
+<tr><th>共性问题</th><th>涉及机位</th><th>次数</th><th>损失</th><th>指向的系统性原因</th></tr>
+<tr><td><b>变桨润滑回路</b>（分配器/润滑泵/油泵/液压管路）</td><td>F45/F07/F14/F36/F15/F47/F38/F48 <b>共8台</b></td><td class="num">11</td><td class="num">20.9万</td><td>润滑回路维护规程或部件批次缺陷（堵塞/泵失效/管路多点发）</td></tr>
+<tr><td><b>齿轮箱过滤器滤芯阻塞</b></td><td>F02/F46/F14/F13 <b>共4台</b></td><td class="num">4</td><td class="num">8.8万</td><td>油液污染或滤芯更换周期不匹配</td></tr>
+<tr><td><b>变桨柜PLC模块</b></td><td>F41/F14/F08/F13 <b>共4台</b></td><td class="num">4</td><td class="num">9.9万</td><td>PLC模块批次或通讯回路缺陷</td></tr>
+<tr><td><b>变频柜PLC</b>（剔除F15单事件后）</td><td>F15/F18/F09/F14 <b>共4台</b></td><td class="num">5</td><td class="num">43.3万（其中F15单起42.3万）</td><td>变频PLC有共性苗头，但主损失为F15独立超大事件</td></tr>
+<tr><td><b>主控柜UPS反复告警</b></td><td>F03(4次)/F23(2次)</td><td class="num">6</td><td class="num">2.1万</td><td>UPS批次老化/告警阈值/充电回路</td></tr>
+<tr><td><b>变桨制动器</b></td><td>F41/F32/F31 <b>共3台</b></td><td class="num">3</td><td class="num">2.7万</td><td>制动器批次/调整规程</td></tr>
+</table>
+
+<h3>2.4 定性总结</h3>
+<div class="key">
+<b>共性问题是 4~5 月超标的主体</b>：润滑回路（8台/20.9万）、滤芯（4台/8.8万）、变桨PLC（4台/9.9万）、UPS（2台/6次）、制动器（3台）等同类缺陷跨机位集中暴露——指向<b>维护规程与部件批次的系统性短板</b>，而非运气不好。<br>
+<b>偶发问题仅 3 项</b>：F15 变频柜PLC超大事件（42.3万，占5月67.5%）、F41 滑环、F06 传感器——均一次性闭环。<br>
+<b>处置含义</b>：共性问题 → 专项整改/全场普查/针对性培训（B/C类工单）；偶发超时 → 复盘分析报告+整改通知（A类工单）。
+</div>
+
+<h2>第三部分　下发工单（模拟，共 9 张：超时复盘5 + 高频专项2 + 共性督办1 + 紧急确认1）</h2>
+<div class="note">工单分型逻辑（复盘验证后修订）：<b>超时故障</b>→被监管方（远景）出具复盘分析报告 + 下达整改通知，防止同类超时再发；<b>高频故障</b>→根因排查 + 针对该项目运维人员的专项培训，加快处理效率；<b>跨机位共性缺陷</b>→整改督办（全场普查）；<b>紧急确认类</b>→现场确认记录督办。每张工单精确到机位与该事件具体事实，责任方＝远景执行、我方监督验收。</div>
+<div class='order'><h3><span class='pill'>超时·复盘+整改</span>泰康师宗·3#集电线F15风机·变频柜PLC超时故障复盘与整改通知</h3>
+<div class='smarts'>
+<b>S 具体任务</b><span>要求远景就 F15 变频柜PLC故障（停机384.2h、有效处理时长256.2h，超疑难24h标准10倍以上）<b>出具复盘分析报告</b>：①故障根因（PLC何故障、为何需箱变送电与直流母线电压测量后才恢复）；②256.2h的耗时构成拆解（诊断、备件等待、维修各段时长）；③未按24h标准完成的原因；④防止同类故障再次超时的具体措施。同时<b>下达整改通知</b>，明确整改项。</span>
+<b>M 目标值</b><span>复盘报告完整覆盖根因/耗时构成/超时原因/防再发措施四项；同类故障有效处理时长≤24h（不含夜间22:00-06:00）</span>
+<b>A 完成标志</b><span>远景提交正式复盘分析报告并经我方评审通过；整改通知所列措施全部落实并经我方现场验证</span>
+<b>R 责任方</b><span>执行＝<b>远景能源</b>（被监管方，风机维护责任主体）；监管＝<b>我方项目监督岗</b>（评审、验收、闭环）</span>
+<b>T 时限</b><span>复盘报告 <b>7日内</b>提交；整改措施按整改通知载明期限执行，我方逐项验收</span>
+<b>依据事件</b><span style="color:#606266;font-size:12px">2026-05-07 F15 变频柜PLC：停机384.2h（扣夜间128h后有效256.2h），损失42.3万kWh，占5月总损失67.5%</span>
+</div></div>
+<div class='order'><h3><span class='pill'>超时·复盘+整改</span>泰康师宗·9#集电线F41风机·变桨滑环更换超时复盘</h3>
+<div class='smarts'>
+<b>S 具体任务</b><span>要求远景就 F41 变桨柜PLC模块故障（有效处理46.1h，超疑难24h标准22.1h）出具复盘分析：①滑环损坏（PROSPER-21-30A）的根因；②66h停机中诊断与备件等待各占多少；③备件（远景自研滑环）供应为何耗时；④同类滑环问题的快速处置流程。</span>
+<b>M 目标值</b><span>复盘报告四项内容齐全；同类换件故障有效处理时长≤12h（非常规，不含夜间）</span>
+<b>A 完成标志</b><span>复盘报告评审通过；防再发措施落实</span>
+<b>R 责任方</b><span>执行＝<b>远景能源</b>（被监管方，风机维护责任主体）；监管＝<b>我方项目监督岗</b>（评审、验收、闭环）</span>
+<b>T 时限</b><span>复盘报告 7日内提交</span>
+<b>依据事件</b><span style="color:#606266;font-size:12px">2026-05-03 F41 变桨柜PLC模块：停机66.0h（有效46.1h），损失7.3万kWh；处理=更换变桨滑环（远景自研，1件）</span>
+</div></div>
+<div class='order'><h3><span class='pill'>超时·复盘+整改</span>泰康师宗·2#集电线F08风机·桨叶螺栓断裂卡滞超时复盘</h3>
+<div class='smarts'>
+<b>S 具体任务</b><span>要求远景就 F08 桨叶螺栓断裂卡滞致无法回桨（有效处理32.0h，超非常规12h标准20.0h）出具复盘分析：①螺栓断裂根因（与该项目叶片螺栓批量断裂背景的关系）；②断丝取出作业的耗时构成；③与同项目叶片螺栓普查/更换计划的衔接。</span>
+<b>M 目标值</b><span>复盘报告齐全；同类机械卡滞故障有效处理时长≤12h（不含夜间）</span>
+<b>A 完成标志</b><span>复盘报告评审通过</span>
+<b>R 责任方</b><span>执行＝<b>远景能源</b>（被监管方，风机维护责任主体）；监管＝<b>我方项目监督岗</b>（评审、验收、闭环）</span>
+<b>T 时限</b><span>复盘报告 7日内提交</span>
+<b>依据事件</b><span style="color:#606266;font-size:12px">2026-05-08 F08 变桨柜PLC模块：停机43.0h（有效32.0h），"A桨叶螺栓断裂卡滞导致无法回桨，断丝取出后恢复"（EAM原文）</span>
+</div></div>
+<div class='order'><h3><span class='pill'>超时·复盘+整改</span>泰康师宗·3#集电线F14风机·齿轮箱滤芯更换超时复盘</h3>
+<div class='smarts'>
+<b>S 具体任务</b><span>要求远景就 F14 齿轮箱过滤器滤芯更换（有效处理32.0h，超疑难24h标准8.0h）出具复盘分析：①滤芯阻塞的成因与油液状态；②例行更换为何耗时32h；③滤芯（NP-240409011）备件库存保障。</span>
+<b>M 目标值</b><span>同类例行换件有效处理时长≤12h（不含夜间）</span>
+<b>A 完成标志</b><span>复盘报告评审通过</span>
+<b>R 责任方</b><span>执行＝<b>远景能源</b>（被监管方，风机维护责任主体）；监管＝<b>我方项目监督岗</b>（评审、验收、闭环）</span>
+<b>T 时限</b><span>复盘报告 7日内提交</span>
+<b>依据事件</b><span style="color:#606266;font-size:12px">2026-04-17 F14 齿轮箱过滤器滤芯：停机48.1h（扣夜间16.1h后有效32.0h），处理=更换滤芯（万和，1个）</span>
+</div></div>
+<div class='order'><h3><span class='pill'>超时·复盘+整改</span>泰康师宗·3#集电线F14风机·变桨润滑油泵更换超时复盘</h3>
+<div class='smarts'>
+<b>S 具体任务</b><span>要求远景就 F14 变桨驱动器（变频器）故障（有效处理23.6h，超非常规12h标准11.6h）出具复盘分析：①润滑油泵失效根因；②更换作业耗时构成；③该泵与同日变桨柜接触器故障（4-03）的关联性排查。</span>
+<b>M 目标值</b><span>同类换件有效处理时长≤12h（不含夜间）</span>
+<b>A 完成标志</b><span>复盘报告评审通过</span>
+<b>R 责任方</b><span>执行＝<b>远景能源</b>（被监管方，风机维护责任主体）；监管＝<b>我方项目监督岗</b>（评审、验收、闭环）</span>
+<b>T 时限</b><span>复盘报告 7日内提交</span>
+<b>依据事件</b><span style="color:#606266;font-size:12px">2026-04-09 F14 变桨驱动器（变频器）：停机31.6h（有效23.6h），损失10.2万kWh，处理=更换变桨润滑油泵</span>
+</div></div>
+<div class='order'><h3><span class='pill'>高频·排查+培训</span>泰康师宗·3#集电线F14风机·问题机组根因排查与专项培训</h3>
+<div class='smarts'>
+<b>S 具体任务</b><span>F14 机组 4~5月故障 <b>10 次</b>（变桨驱动器/电源模块/PLC模块/变频电源模块/齿轮箱滤芯多系统反复，其中 Profibus 通讯线屏蔽层磨破同一问题 5-13重接→5-15封补→5-20闪断→5-24再封补 <b>反复4次</b>）。要求远景：①对 F14 开展整机电气系统根因排查（重点：Profibus 通讯线布线与固定方式缺陷、端子排接头磨损）；②针对该项目运维人员开展<b>变桨通讯系统专项培训</b>（通讯回路结构、屏蔽层检查要点、一次修好处置标准），加快处理效率。</span>
+<b>M 目标值</b><span>F14 次月故障次数 ≤2 次；变桨通讯类故障单次有效处理时长 ≤12h（不含夜间）；同类通讯问题不得出现第2次返工</span>
+<b>A 完成标志</b><span>远景提交 F14 根因排查报告（含布线整改记录）；专项培训签到与考核记录；次月 F14 EAM 故障记录验证</span>
+<b>R 责任方</b><span>执行＝<b>远景能源</b>（被监管方，风机维护责任主体）；监管＝<b>我方项目监督岗</b>（评审、验收、闭环）</span>
+<b>T 时限</b><span>根因排查 14日内完成；专项培训 14日内完成；效果以次月数据验证</span>
+<b>依据事件</b><span style="color:#606266;font-size:12px">F14 机组 2026-04~05 故障10次：变桨电源模块×5、驱动器×2、PLC模块、柜接触器、变频电源模块、齿轮箱滤芯</span>
+</div></div>
+<div class='order'><h3><span class='pill'>高频·培训</span>泰康师宗·主控柜UPS高频故障专项培训（I#F03、5#F23机位）</h3>
+<div class='smarts'>
+<b>S 具体任务</b><span>主控柜UPS故障 4~5月在同一批机位反复发生（I#集电线F03 4次、5#集电线F23 2次，处理均为充放电测试+复位）。要求远景：①排查该项目UPS集中告警的原因（批次寿命/充电回路/告警阈值设置）；②对该项目运维人员开展 UPS 故障专项培训（告警模式识别、充放电测试标准、更换判据），加快处理效率、减少无效复位。</span>
+<b>M 目标值</b><span>UPS类故障单次有效处理时长 ≤6h（常规，不含夜间）；重复复位（同一机位月内≥2次同类告警）降为0</span>
+<b>A 完成标志</b><span>专项培训记录；次月同机位 UPS 重复告警记录为0</span>
+<b>R 责任方</b><span>执行＝<b>远景能源</b>（被监管方，风机维护责任主体）；监管＝<b>我方项目监督岗</b>（评审、验收、闭环）</span>
+<b>T 时限</b><span>培训 14日内完成</span>
+<b>依据事件</b><span style="color:#606266;font-size:12px">I#F03 主控柜UPS：4-12、4-25、5-16等4次；5#F23：4月2次；处理均为"充放电测试，各项指示灯正常，复位后故障消除"</span>
+</div></div>
+<div class='order'><h3><span class='pill'>共性·整改督办</span>泰康师宗·变桨驱动DO控制回路1号线虚接·共性缺陷整改督办</h3>
+<div class='smarts'>
+<b>S 具体任务</b><span>变桨驱动 DO 控制回路 1 号线虚接已在 3 台机组出现（9#F45 6-06、8#F38 6-08、8#F35 7-06），属同一线路设计/施工的共性缺陷。要求远景：①对<b>全场机组</b>开展 DO 控制回路1号线接线状态普查（紧固度、绝缘、走线）；②提交缺陷根因说明（设计/施工/批次）与整改方案；③对已发3台机整改效果复核。</span>
+<b>M 目标值</b><span>全场普查覆盖率100%；普查后该类故障零新发</span>
+<b>A 完成标志</b><span>远景提交普查记录（逐机位签字）与缺陷根因说明；次月起 DO 控制回路类故障 EAM 记录为0</span>
+<b>R 责任方</b><span>执行＝<b>远景能源</b>（被监管方，风机维护责任主体）；监管＝<b>我方项目监督岗</b>（评审、验收、闭环）</span>
+<b>T 时限</b><span>全场普查 30日内完成；根因说明 14日内提交</span>
+<b>依据事件</b><span style="color:#606266;font-size:12px">9#F45（6-06）、8#F38（6-08）、8#F35（7-06）三条EAM记录均为"变桨驱动DO控制回路1号线虚接，整改后故障消除"</span>
+</div></div>
+<div class='order'><h3><span class='pill'>紧急·现场确认</span>泰康师宗·安全链/振动类故障现场确认（4~5月共4条）</h3>
+<div class='smarts'>
+<b>S 具体任务</b><span>对 4~5月安全链（3条）与振动（1条）故障，要求远景落实"必须现场确认"要求：逐条提供到场确认记录（确认人、确认时间、机组状态、是否需后续处置）——可以不修，但必须确认。</span>
+<b>M 目标值</b><span>4条记录现场确认率100%；每条均有书面确认记录</span>
+<b>A 完成标志</b><span>远景提交逐条现场确认记录（含现场照片/状态描述），我方核对EAM记录一致性</span>
+<b>R 责任方</b><span>执行＝<b>远景能源</b>（被监管方，风机维护责任主体）；监管＝<b>我方项目监督岗</b>（评审、验收、闭环）</span>
+<b>T 时限</b><span>即时（接报后第一时间到场确认）；确认记录 24h内补录EAM</span>
+<b>依据事件</b><span style="color:#606266;font-size:12px">4-04 F37 机舱/振动传感器；4-27、5-01、5-14 F14 等安全链误报/告警记录</span>
+</div></div>
+
+<h2>第四部分　复盘分析：关键事件 → 改变 → 不再发生（事件维度）</h2>
+<div class="key"><b>复盘方法（事件维度）</b>：锁定 4~5 月指标突升的<b>关键事件</b>（机位×故障，按损失电量排序）→ 追踪每台机组<b>后来被改变了什么</b> → 验证同类事件<b>后来是否再没发生</b>。叶片维修/叶片在线监测在计划性停机通道，与 FLE50 无因果，不纳入复盘。</div>
+
+<h3>4.1 4月关键事件（41.9万kWh，多台散发、一次性换件解决）</h3>
+<table>
+<tr><th>占比</th><th>机位</th><th>故障</th><th>损失</th><th>改变（EAM证据）</th><th>6~7月同类再发？</th></tr>
+<tr><td class="num"><b>25.6%</b></td><td>3#集电线F14</td><td>变桨驱动器（变频器）</td><td class="num">10.7万/2次</td><td>4-09 更换变桨润滑油泵</td><td class="ok">✅ 未再发</td></tr>
+<tr><td class="num">11.0%</td><td>I#集电线F02</td><td>齿轮箱过滤器滤芯</td><td class="num">4.6万</td><td>4-10 更换滤芯</td><td class="ok">✅ 未再发</td></tr>
+<tr><td class="num">10.0%</td><td>8#集电线F36</td><td>变桨液压管路</td><td class="num">4.2万</td><td>4-10 厂家检查油泵电机线路/感应器，处理恢复</td><td class="ok">✅ 未再发</td></tr>
+<tr><td class="num">8.9%</td><td>2#集电线F07</td><td>变桨电机</td><td class="num">3.7万/2次</td><td>4-07 分配器堵塞排气过渡 → 4-08 <b>更换分配器</b></td><td class="ok">✅ 未再发</td></tr>
+<tr><td class="num">6.8%</td><td>10#集电线F46</td><td>齿轮箱过滤器滤芯</td><td class="num">2.9万</td><td>4-13 更换滤芯（厂家到场宣贯风险点）</td><td class="ok">✅ 未再发</td></tr>
+</table>
+<div class="note">4月特征：<b>多台机组、多种部件的散发事件</b>（滤芯×2台、变桨类×4台），每个事件均一次性维修/换件后闭环。前5事件合计占62%。</div>
+
+<h3>4.2 5月关键事件（62.6万kWh，一单超大+一次性换件+一处反复）</h3>
+<table>
+<tr><th>占比</th><th>机位</th><th>故障</th><th>损失</th><th>改变（EAM证据）</th><th>6~7月同类再发？</th></tr>
+<tr><td class="num"><b>67.5%</b></td><td>3#集电线F15</td><td>变频柜PLC</td><td class="num">42.3万/1次/384h</td><td>5-07 箱变送电+直流母线电压测量无异常后恢复（一次性疑难事件）</td><td class="ok">✅ 未再发</td></tr>
+<tr><td class="num">11.7%</td><td>9#集电线F41</td><td>变桨柜PLC模块</td><td class="num">7.3万/1次/66h</td><td>5-03 <b>更换变桨滑环</b>（PROSPER-21-30A，远景自研）</td><td class="ok">✅ 未再发</td></tr>
+<tr><td class="num">7.4%</td><td>1#集电线F06</td><td>刹车位置传感器</td><td class="num">4.6万</td><td>5-22 更换高速风轮锁IFM接近开关传感器</td><td class="ok">✅ 未再发</td></tr>
+<tr><td class="num">6.5%</td><td>3#集电线F14</td><td>变桨电源模块</td><td class="num">4.1万/4次</td><td>5-13 通讯线重接 → 5-15 Profibus屏蔽层封补 → 5-20 闪断 → <b>5-24 再封补后压住</b>（同一问题反复4次）</td><td class="ok">✅ 5-24后未再发</td></tr>
+</table>
+<div class="note">5月特征：<b>一单超大（F15变频 67.5%）+ 两个一次性换件（F41滑环、F06传感器）+ F14通讯线反复4次才压住</b>。前4项合计占93%。</div>
+
+<h3>4.3 跨机位共性缺陷的批量整改（"针对性技改"形态）</h3>
+<table>
+<tr><th>时间</th><th>机位</th><th>共性缺陷</th><th>动作</th></tr>
+<tr><td>6-06</td><td>9#集电线F45</td><td rowspan="3"><b>变桨驱动DO控制回路1号线虚接</b>（同一线路设计/施工共性问题，涉及3台机组）</td><td rowspan="3">整改后故障消除（EAM原文×3）</td></tr>
+<tr><td>6-08</td><td>8#集电线F38</td></tr>
+<tr><td>7-06</td><td>8#集电线F35</td></tr>
+</table>
+
+<h3>4.4 复盘结论：指标升降的真实机理</h3>
+<div class="key">
+<b>上升（4~5月）＝关键事件集中发生</b>：4月为多台散发换件事件（滤芯/油泵/分配器/液压管路）；5月为 F15 变频超大单事件（67.5%）+ F41/F06 一次性换件 + F14 通讯线反复。<br>
+<b>下降（6~7月）＝事件逐个一次性闭环 + 共性缺陷批量整改后无新发</b>：<br>
+① 绝大多数关键事件是<b>一次性维修/换件解决</b>（换滤芯/油泵/分配器/滑环/传感器），解决后同类故障<b>再没发生</b>——这是"一次性解决疑难故障"形态；<br>
+② <b>变桨DO控制回路1号线虚接</b>是跨3台机的共性缺陷，6~7月批量整改——这是"针对性技改/维护"形态，但范围是涉及缺陷的机组而非全场；<br>
+③ F14 通讯线问题经4次处理（重接→封补→封补）于5-24压住——提示<b>同类故障反复≥3次时，一次性封补不够，应升级为根因排查</b>（与此前"F14问题机组"发现一致）。<br>
+<b>未发现</b>"全场统一技改/统一维护"导致回落的证据；叶片类工作（大修/在线监测）在计划性停机通道，与 FLE50 升降无因果（按既定口径）。
+</div>
+
+<h3>4.5 对"定位问题逻辑"的规则启示</h3>
+<div class="note warn">
+① <b>事件维度（机位×故障）是复盘主线</b>：系统维度聚类（变桨/变频/主控）能发现跨机位共性缺陷（DO回路、Profibus通讯线），但会掩盖"一单超大"（F15占67.5%）与"问题机组"（F14）的结构——<b>正式规则中，Top问题应同时按两个维度输出：事件榜（机位×故障按损失排序）+ 共性榜（跨机位同类缺陷）</b>。<br>
+② <b>"不再发生"验证应成为工单闭环标准</b>：每个关键事件的工单，完成标志建议统一为"该机位同类故障 N 周内零发生"。<br>
+③ <b>反复故障升级规则</b>：同机位同类故障 ≥3 次（如F14通讯线），应升级为根因排查工单，而非重复处置。
+</div>
+
+<h2>第五部分　指标升降原因结论（事件维度修正版）</h2>
+<table>
+<tr><th></th><th>原因（事件维度，仅故障维修通道）</th></tr>
+<tr><td><b>上升<br>(4~5月)</b></td><td>关键事件集中发生：4月=多台散发换件事件（F14变桨驱动器10.7万、F02/F46齿轮箱滤芯7.5万、F36液压管路4.2万、F07变桨电机3.7万）；5月=F15变频柜PLC超大单事件42.3万(67.5%)+F41滑环7.3万+F06传感器4.6万+F14通讯线反复4.1万</td></tr>
+<tr><td><b>下降<br>(6~7月)</b></td><td>①关键事件逐个一次性闭环（换件后同类故障均未再发）；②跨机位共性缺陷（变桨DO控制回路1号线虚接，F45/F38/F35）批量整改；③无新发大事件。非"全场统一技改/维护"所致</td></tr>
+</table>
+<div class="note warn"><b>口径说明</b>：叶片维修/叶片在线监测等在计划性停机通道，与 FLE50 无因果，不纳入因果链。</div>
+</body></html>
