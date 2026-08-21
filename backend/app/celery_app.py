@@ -35,4 +35,8 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.daily_reminder",
         "schedule": 1800.0,  # 每30分钟检查（仅9:00-9:59执行）
     },
+    "judgment-reminder": {
+        "task": "app.tasks.judgment_reminder_scan",
+        "schedule": 3600.0,  # 每小时检查（仅9:00-9:59执行，判定日前1天提醒）
+    },
 }
