@@ -188,10 +188,10 @@ async def oa_callback(
         from datetime import date as _date
         if to == "closed":
             wo.completed_date = _date.today()
+            # 回写钉钉表单「执行结论/执行附件」到工单（表单改动同步）
+            _sync_oa_results(wo, db, body.get("formComponentValues") or [])
             if not wo.conclusion:
                 wo.conclusion = "钉钉OA审批通过·闭环"
-            # 闭环时拉取执行人上传的附件
-            _sync_attachments(wo, db)
     db.commit()
     return {"success": True, "status": wo.status}
 
@@ -242,28 +242,57 @@ def _status_note(to: str) -> str:
     }.get(to, "状态推进")
 
 
-def _sync_attachments(wo: WorkOrder, db: Session):
-    """从钉钉审批单表单拉取执行附件，转存 attachments 表。无凭证时跳过。"""
-    try:
-        from app.services import dingtalk
-        from app.models import Attachment
-        info = dingtalk.query_oa_approval(wo.oa_id)
-        if not info:
-            return
-        for fv in (info.get("formComponentValues") or []):
-            if fv.get("name") in ("执行附件", "附件") and fv.get("value"):
-                # value 可能是附件 URL 或 JSON 数组
-                files = fv["value"] if isinstance(fv["value"], list) else [{"url": fv["value"], "name": "执行附件"}]
-                for f in files:
-                    oss_key = f.get("url", "")  # 真实场景：下载转存 OSS 后替换为 key
-                    exists = db.query(Attachment).filter_by(work_order_id=wo.id, oss_key=oss_key).first()
-                    if not exists:
-                        db.add(Attachment(
-                            work_order_id=wo.id, filename=f.get("name", "执行附件"),
-                            oss_key=oss_key, size=0,
-                        ))
-    except Exception as e:
-        print(f"[dingtalk] 附件同步跳过: {e}")
+def _sync_oa_results(wo: WorkOrder, db: Session, form_values: list | None = None):
+    """闭环时回写钉钉表单内容：执行结论 → conclusion，执行附件 → attachments。
+
+    form_values 优先用回调 body 里的 formComponentValues；未取到结论/附件时
+    再查钉钉实例兜底（回调 body 有时只含当前节点字段）。
+    """
+    from app.services import dingtalk
+    from app.models import Attachment
+
+    def extract(fvs):
+        conclusion = None
+        files = []
+        for fv in (fvs or []):
+            name = fv.get("name") or ""
+            value = fv.get("value")
+            if not value:
+                continue
+            if name == "执行结论":
+                if isinstance(value, list):
+                    value = "\n".join(
+                        (v.get("text", "") if isinstance(v, dict) else str(v)) for v in value
+                    )
+                conclusion = str(value).strip()
+            elif name in ("执行佐证", "执行附件", "附件"):
+                if not isinstance(value, list):
+                    value = [{"url": value, "name": "执行附件"}]
+                files = value
+        return conclusion, files
+
+    conclusion, files = extract(form_values)
+    if not conclusion and not files:
+        try:
+            info = dingtalk.query_oa_approval(wo.oa_id)
+            c2, f2 = extract((info or {}).get("formComponentValues"))
+            if not conclusion:
+                conclusion = c2
+            if not files:
+                files = f2
+        except Exception as e:
+            print(f"[dingtalk] 查询 OA 实例兜底跳过: {e}")
+
+    if conclusion:
+        wo.conclusion = conclusion
+    for f in files or []:
+        oss_key = (f.get("url") or "") if isinstance(f, dict) else str(f)
+        fname = (f.get("name") or "执行附件") if isinstance(f, dict) else "执行附件"
+        exists = db.query(Attachment).filter_by(work_order_id=wo.id, oss_key=oss_key).first()
+        if not exists and oss_key:
+            db.add(Attachment(
+                work_order_id=wo.id, filename=fname, oss_key=oss_key, size=0,
+            ))
 
 
 @router.get("/status")
