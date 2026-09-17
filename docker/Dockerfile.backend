@@ -1,17 +1,27 @@
-# 后端镜像
+# 后端镜像（构建上下文 = 仓库根目录：docker build -f docker/Dockerfile.backend .）
 FROM python:3.13-slim
 
 ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 WORKDIR /app
 
-# 系统依赖（psycopg 编译）
+# 系统依赖（psycopg 编译）+ Node（dws CLI 用）
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential libpq-dev curl && rm -rf /var/lib/apt/lists/*
+    build-essential libpq-dev curl ca-certificates gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && npm config set registry https://registry.npmmirror.com \
+    && npm install -g dingtalk-workspace-cli \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple --trusted-host pypi.tuna.tsinghua.edu.cn
 
-COPY . .
+COPY backend/ .
+COPY docker/entrypoint-backend.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+# workers=1：lifespan 内有 OA 轮询器与钉钉 Stream 后台线程，
+# 多 worker 会重复起连接；横向扩容靠 replicas（同步逻辑已幂等）
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

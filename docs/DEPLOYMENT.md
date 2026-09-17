@@ -1,4 +1,4 @@
-# 部署 Runbook · 软工单闭环管理系统
+# 部署 Runbook · 工单管理平台
 
 > 从零到 ACK 上线运行的全流程。按顺序执行。
 
@@ -11,19 +11,22 @@
 
 ## 1. 准备镜像
 
+> 构建上下文统一为**仓库根目录**（Dockerfile 内已按 `backend/`、`frontend/` 前缀 COPY）。
+
 ```bash
-# 后端
-docker build -t registry.cn-hangzhou.aliyuncs.com/<命名空间>/wo-backend:0.5.0 -f docker/Dockerfile.backend .
+# 后端（内置 Node + dws CLI，用于钉盘/AI表格数据同步）
+docker build -t registry.cn-hangzhou.aliyuncs.com/<命名空间>/wo-backend:0.6.0 -f docker/Dockerfile.backend .
 
 # 前端
-docker build -t registry.cn-hangzhou.aliyuncs.com/<命名空间>/wo-frontend:0.5.0 -f docker/Dockerfile.frontend .
+docker build -t registry.cn-hangzhou.aliyuncs.com/<命名空间>/wo-frontend:0.6.0 -f docker/Dockerfile.frontend .
 
 # 推送
-docker push registry.cn-hangzhou.aliyuncs.com/<命名空间>/wo-backend:0.5.0
-docker push registry.cn-hangzhou.aliyuncs.com/<命名空间>/wo-frontend:0.5.0
+docker push registry.cn-hangzhou.aliyuncs.com/<命名空间>/wo-backend:0.6.0
+docker push registry.cn-hangzhou.aliyuncs.com/<命名空间>/wo-frontend:0.6.0
 ```
 
 > 在 ACK 控制台创建容器镜像服务（ACR）命名空间，替换 `<命名空间>`。
+> 判断 Agent（wo-judgment-agent）v1 不部署，k8s.yaml 中已注释，镜像就绪后取消注释。
 
 ## 2. 创建云资源
 
@@ -37,20 +40,54 @@ docker push registry.cn-hangzhou.aliyuncs.com/<命名空间>/wo-frontend:0.5.0
 
 ## 3. 注入凭证（Secret）
 
+> 配置项说明见 `backend/.env.production.example`。JWT_SECRET 生成：`openssl rand -hex 32`
+
 ```bash
 kubectl create secret generic wo-secrets \
   --from-literal=DATABASE_URL='postgresql+psycopg://wo:<密码>@<RDS内网地址>:5432/wo_closed_loop' \
   --from-literal=REDIS_URL='redis://<Tair内网地址>:6379/0' \
-  --from-literal=JWT_SECRET='<随机64字符>' \
+  --from-literal=JWT_SECRET='<openssl rand -hex 32>' \
+  --from-literal=APP_ENV='production' \
+  --from-literal=AUTO_SEED='false' \
   --from-literal=DINGTALK_APP_KEY='<钉钉AppKey>' \
   --from-literal=DINGTALK_APP_SECRET='<钉钉AppSecret>' \
-  --from-literal=DINGTALK_AGENT_ID='<AgentId>' \
+  --from-literal=DINGTALK_AGENT_ID='<企业内部应用AgentId，工作通知用>' \
+  --from-literal=DINGTALK_ROBOT_WEBHOOK='<群机器人webhook，可选>' \
+  --from-literal=DINGTALK_ROBOT_SECRET='<群机器人加签secret，可选>' \
   --from-literal=DINGTALK_OA_TEMPLATE_ID='<审批模板processCode>' \
   --from-literal=DINGTALK_CORP_ID='<企业ID>' \
+  --from-literal=DINGTALK_LOGIN_REDIRECT_URI='https://你的域名/login' \
+  --from-literal=FRONTEND_BASE_URL='https://你的域名' \
+  --from-literal=LOGIN_ADMIN_ONLY='true' \
   --from-literal=DASHSCOPE_API_KEY='<百炼key，可选>' \
   --from-literal=CORS_ORIGINS='https://你的域名' \
-  --from-literal=APP_ENV='production'
+  --from-literal=JUDGMENT_ENABLED='false'
 ```
+
+### 3.1 dws 凭证（钉盘 / AI表格数据源，必需）
+
+数据池两个自动来源（钉盘年度运营计划「非EAM」行、AI表格异常数据）通过
+`dws`（dingtalk-workspace-cli）读取，镜像已内置，运行时需要**个人凭证包**：
+
+```bash
+# 1. 在 Mac 上导出凭证包（如已过期需先 dws login 重新授权）
+DWS_DISABLE_KEYCHAIN=1 dws auth export -o ~/Documents/work/dws-auth.tar.gz
+
+# 2. 注入集群（文件名必须是 dws-auth.tar.gz）
+kubectl create secret generic wo-dws-auth \
+  --from-file=dws-auth.tar.gz=$HOME/Documents/work/dws-auth.tar.gz
+```
+
+容器启动时自动 `dws auth import`（见 docker/entrypoint-backend.sh）。
+**凭证 refresh token 约 30 天过期**，过期后重复上面两步并重启：
+
+```bash
+kubectl rollout restart deploy/wo-backend deploy/wo-worker deploy/wo-scheduler
+```
+
+验证：登录后调 `GET /api/pool/dws-status`，`authenticated: true` 即就绪；
+手动触发入口：`POST /api/pool/sync-drive`（钉盘年度计划→非EAM工单）、
+`POST /api/pool/sync-aitable`（AI表格异常→数据池）、`POST /api/pool/sync-full`（全链路）。
 
 ## 4. 部署到 ACK
 
@@ -68,9 +105,8 @@ kubectl rollout status deploy/wo-frontend
 ## 5. 数据库初始化（一次性）
 
 ```bash
-# 进入后端 Pod 执行迁移 + 种子
+# 进入后端 Pod 执行迁移；生产库不灌演示种子数据
 kubectl exec -it deploy/wo-backend -- alembic upgrade head
-kubectl exec -it deploy/wo-backend -- python -m app.seed
 ```
 
 ## 6. 配置钉钉回调
@@ -88,16 +124,19 @@ curl https://你的域名/health
 # 安全头检查
 curl -I https://你的域名/health | grep -iE 'x-frame|x-content-type|strict-transport'
 
-# 钉钉凭证状态
-curl https://你的域名/api/dingtalk/status
+# 钉钉凭证状态（需登录 token，或跳过）
+# /api/dingtalk/status 需登录：先登录拿 token
 # 期望：app_key/oa_template 等全 true
+
+# 数据源就绪状态（需登录）
+# GET /api/pool/dws-status → authenticated: true
 ```
 
 浏览器访问 `https://你的域名`：
 - 工作台显示数据
 - /dingtalk 页凭证卡片全绿
 - /config 页可改配置
-- 派发工单后钉钉收到通知/OA审批
+- 派发工单后责任人钉钉收到「工作通知」卡片（需 DINGTALK_AGENT_ID + 应用工作通知权限）；配置了群机器人 webhook 则群内 @ 责任人
 
 ## 8. 运维
 
@@ -140,5 +179,5 @@ kubectl exec -it deploy/wo-backend -- python -c \
 - [x] SQL 参数化（ORM，无拼接）
 - [x] 密码 bcrypt 哈希
 - [x] JWT 鉴权
-- [ ] 钉钉回调验签（生产需配 aes_key，当前简化）
+- [x] 钉钉回调验签（生产需配 aes_key）
 - [ ] 定期轮换 JWT_SECRET

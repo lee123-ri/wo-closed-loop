@@ -1,0 +1,17 @@
+{
+  "processCode": "PROC-DD7BF4A0-0102-4A4E-B3D1-7BE5FE8F42AF",
+  "createdAt": "2026-08-13",
+  "fieldMapping": {
+    "工单编号": "TextField-K2AD4O5B",
+    "项目名称": "TextField_1QGCEOMI5BKW",
+    "工单类型": "DDSelectField_XQFBCVFYWUTC",
+    "触发原因": "TextareaField_SG1XBBO1BTA8",
+    "行动要求": "TextareaField_1XZUBAS9SW9HC",
+    "责任人": "InnerContactField_KMXLJ63RDB0G",
+    "审批人": "InnerContactField_35YBN4HMVKOW",
+    "截止时间": "DDDateField_ETPZKF5YE2GW",
+    "工单记录附件": "DDAttachment_1I2YMU3UL8CU8",
+    "执行结论": "TextareaField_1RWZPSOTPU0OW"
+  },
+  "note": "责任人/审批人字段值格式为数组: [\"dingtalk_userId\"]"
+}

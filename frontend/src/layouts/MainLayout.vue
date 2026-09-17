@@ -3,8 +3,8 @@
     <!-- 侧边栏 -->
     <t-aside :width="collapsed ? '64px' : '232px'" class="app-aside">
       <div class="logo" :class="{ collapsed }">
-        <span class="logo-mark">◆</span>
-        <span v-if="!collapsed" class="logo-text">软工单闭环管理</span>
+        <t-icon name="task" class="logo-mark" />
+        <span v-if="!collapsed" class="logo-text">工单管理</span>
       </div>
       <t-menu
         :value="activeMenu"
@@ -13,16 +13,16 @@
         @change="onMenuChange"
       >
         <t-submenu v-for="group in menuGroups" :key="group.label" :value="group.label" :title="group.label">
-          <template #icon><span class="menu-icon">{{ group.icon }}</span></template>
+          <template #icon><t-icon :name="group.icon" class="menu-icon" /></template>
           <t-menu-item v-for="item in group.items" :key="item.path" :value="item.path">
-            <template #icon><span class="menu-icon">{{ item.icon }}</span></template>
+            <template #icon><t-icon :name="item.icon" class="menu-icon" /></template>
             {{ item.title }}
           </t-menu-item>
         </t-submenu>
       </t-menu>
       <div v-if="!collapsed" class="aside-footer">
         <div class="sync-status">
-          <span class="dot online"></span> 软工单闭环管理平台
+          工单管理平台
         </div>
       </div>
     </t-aside>
@@ -32,28 +32,53 @@
       <t-header class="app-header">
         <div class="header-left">
           <t-button theme="default" variant="text" shape="square" @click="collapsed = !collapsed">
-            <template #icon><span class="fold-icon">{{ collapsed ? '☰' : '◁' }}</span></template>
+            <template #icon><t-icon :name="collapsed ? 'menu-unfold' : 'menu-fold'" /></template>
           </t-button>
           <t-breadcrumb :max-item="4">
-            <t-breadcrumb-item>软工单闭环管理</t-breadcrumb-item>
-            <t-breadcrumb-item>{{ currentTitle }}</t-breadcrumb-item>
+            <t-breadcrumb-item v-for="(item, i) in breadcrumbs" :key="i" :to="i < breadcrumbs.length - 1 ? item.path : undefined">
+              {{ item.title }}
+            </t-breadcrumb-item>
           </t-breadcrumb>
         </div>
         <div class="header-right">
-          <t-tooltip content="刷新工作台数据">
+          <t-tooltip content="重新载入当前页面">
             <t-button theme="default" variant="text" shape="square" @click="reload">
-              <template #icon><span>↻</span></template>
+              <template #icon><t-icon name="refresh" /></template>
             </t-button>
           </t-tooltip>
-          <t-badge :count="overdueCount" :offset="[-2, 6]">
-            <t-button theme="default" variant="text" shape="square">
-              <template #icon><span>🔔</span></template>
-            </t-button>
-          </t-badge>
+          <t-popup v-model="popupVisible" trigger="click" placement="bottom-right" :overlay-inner-style="{ padding: 0 }" :show-arrow="false">
+            <t-badge :count="overdueCount" :offset="[-2, 6]">
+              <t-button theme="default" variant="text" shape="square">
+                <template #icon><t-icon name="notification" /></template>
+              </t-button>
+            </t-badge>
+            <template #content>
+              <div class="notif-panel">
+                <div class="notif-head">消息通知</div>
+                <div v-if="!overdueItems.length && !todoItems.length" class="notif-empty">暂无逾期或待办工单</div>
+                <template v-else>
+                  <div v-if="overdueItems.length" class="notif-group">
+                    <div class="notif-group-title overdue">逾期工单（{{ overdueItems.length }}）</div>
+                    <div v-for="it in overdueItems" :key="it.id" class="notif-item" @click="openWorkOrder(it.id)">
+                      <span class="notif-code">{{ it.code }}</span>
+                      <span class="notif-title">{{ it.title }}</span>
+                      <span class="notif-meta">逾期 {{ it.overdue_days }} 天 · {{ it.person || "未派发" }}</span>
+                    </div>
+                  </div>
+                  <div v-if="todoItems.length" class="notif-group">
+                    <div class="notif-group-title">待办工单（{{ todoItems.length }}）</div>
+                    <div v-for="it in todoItems" :key="it.id" class="notif-item" @click="openWorkOrder(it.id)">
+                      <span class="notif-code">{{ it.code }}</span>
+                      <span class="notif-title">{{ it.title }}</span>
+                      <span class="notif-meta">{{ statusLabel(it.status) }} · {{ it.person || "未派发" }}</span>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </template>
+          </t-popup>
           <t-divider layout="vertical" />
-          <span class="env-tag" :class="env">{{ env }}</span>
           <span class="user-name">{{ store.user?.name || "管理员" }}</span>
-          <t-avatar size="32px">{{ (store.user?.name || "管")[0] }}</t-avatar>
           <t-button theme="default" variant="text" size="small" @click="doLogout">退出</t-button>
         </div>
       </t-header>
@@ -61,7 +86,9 @@
       <!-- 内容区 -->
       <t-content class="app-content">
         <router-view v-if="!refreshing" v-slot="{ Component }">
-          <component :is="Component" />
+          <keep-alive include="WorkOrderList,DataPool,ClosedRecords,ProjectManage,UserManagement">
+            <component :is="Component" />
+          </keep-alive>
         </router-view>
       </t-content>
     </t-layout>
@@ -72,7 +99,9 @@
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { getDashboardStats } from "@/api/dashboard";
+import { statusLabel } from "@/utils/wo-display";
 import { useUserStore } from "@/stores/user";
+import { MENU_GROUPS, FLAT_MENUS } from "@/menu";
 
 const route = useRoute();
 const router = useRouter();
@@ -80,71 +109,19 @@ const store = useUserStore();
 const collapsed = ref(false);
 const refreshing = ref(false);
 const overdueCount = ref(0);
+const overdueItems = ref<any[]>([]);
+const todoItems = ref<any[]>([]);
+const popupVisible = ref(false);
 
-const menus = computed(() => [
-  { path: "/", icon: "▣", title: "管理看板" },
-  { path: "/my", icon: "👤", title: "我的工单" },
-  { path: "/work-orders", icon: "☰", title: "工单列表" },
-  { path: "/create", icon: "＋", title: "新建工单" },
-  { path: "/pool", icon: "◫", title: "数据池" },
-  { path: "/closed", icon: "☑", title: "闭环记录" },
-  { path: "/projects", icon: "◈", title: "项目管理" },
-  { path: "/sop", icon: "📖", title: "SOP知识库" },
-  { path: "/users", icon: "👥", title: "用户管理" },
-  { path: "/config", icon: "⚙", title: "规则配置" },
-  { path: "/audit-log", icon: "📋", title: "操作日志" },
-]);
+const menus = computed(() => FLAT_MENUS);
 
-const allMenuGroups = [
-  {
-    label: "工作台",
-    icon: "▣",
-    items: [
-      { path: "/", icon: "▣", title: "管理看板" },
-      { path: "/my", icon: "👤", title: "我的工单" },
-    ],
-  },
-  {
-    label: "工单管理",
-    icon: "☰",
-    items: [
-      { path: "/work-orders", icon: "☰", title: "工单列表" },
-      { path: "/create", icon: "＋", title: "新建工单" },
-      { path: "/closed", icon: "☑", title: "闭环记录" },
-    ],
-  },
-  {
-    label: "基础数据",
-    icon: "◈",
-    items: [
-      { path: "/projects", icon: "◈", title: "项目管理" },
-      { path: "/pool", icon: "◫", title: "数据池" },
-      { path: "/sop", icon: "📖", title: "SOP知识库" },
-    ],
-  },
-  {
-    label: "系统设置",
-    icon: "⚙",
-    items: [
-      { path: "/users", icon: "👥", title: "用户管理" },
-      { path: "/config", icon: "⚙", title: "规则配置" },
-      { path: "/audit-log", icon: "📋", title: "操作日志" },
-    ],
-  },
-];
-
-// 按角色过滤菜单
-const menuGroups = computed(() => {
-  if (store.isAdmin || store.isApprover) return allMenuGroups;
-  return allMenuGroups
-    .map((g) => ({
-      ...g,
-      items: g.items.filter((item) => {
-        return store.canAccessMenu(g.label, item.title);
-      }),
-    }))
-    .filter((g) => g.items.length > 0);
-});
+// 按角色过滤菜单（admin 恒全量，其余角色按已保存的菜单权限配置过滤）
+const menuGroups = computed(() =>
+  MENU_GROUPS.map((g) => ({
+    ...g,
+    items: g.items.filter((item) => store.canAccessMenu(g.label, item.title)),
+  })).filter((g) => g.items.length > 0)
+);
 
 const activeMenu = computed(() => {
   // 精确匹配或前缀
@@ -155,8 +132,29 @@ const activeMenu = computed(() => {
   return prefix?.path ?? "/";
 });
 
-const currentTitle = computed(() => (route.meta.title as string) || "工作台");
-const env = import.meta.env.MODE || "development";
+// 动态面包屑
+const breadcrumbs = computed(() => {
+  const crumbs: { title: string; path: string }[] = [];
+  const path = route.path;
+  // 首页不加面包屑
+  if (path === "/" || path === "") return crumbs;
+
+  // 从 matched 中获取层级：matched[0] 是 MainLayout，后续是子路由
+  const matched = route.matched;
+  // 找父级页面：路径前缀匹配的菜单项
+  const parentPath = "/" + path.split("/").slice(1, -1).join("/");
+  if (parentPath !== "/" && parentPath !== path) {
+    const parentMenu = menus.value.find((m) => m.path === parentPath);
+    if (parentMenu) {
+      crumbs.push({ title: parentMenu.title, path: parentPath });
+    }
+  }
+  // 当前页
+  if (route.meta.title) {
+    crumbs.push({ title: route.meta.title as string, path: path });
+  }
+  return crumbs;
+});
 
 function onMenuChange(path: string) {
   router.push(path);
@@ -165,6 +163,11 @@ function onMenuChange(path: string) {
 function doLogout() {
   store.logout();
   router.push("/login");
+}
+
+function openWorkOrder(id: number) {
+  popupVisible.value = false;
+  router.push(`/work-orders/${id}`);
 }
 
 async function reload() {
@@ -176,6 +179,8 @@ onMounted(async () => {
   try {
     const s = await getDashboardStats();
     overdueCount.value = s.overdue;
+    overdueItems.value = s.overdue_items || [];
+    todoItems.value = s.todo_items || [];
   } catch {
     /* ignore */
   }
@@ -183,7 +188,8 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.app-layout { height: 100vh; }
+.app-layout { height: 100vh; width: 100%; min-width: 0; overflow: hidden; }
+.app-layout :deep(.t-layout) { min-width: 0; }
 .app-aside {
   background: var(--sidebar-bg);
   transition: width 0.2s;
@@ -223,14 +229,27 @@ onMounted(async () => {
 .header-left { display: flex; align-items: center; gap: 12px; }
 .header-right { display: flex; align-items: center; gap: 10px; }
 .fold-icon { font-size: 16px; }
-.env-tag { font-size: 10px; padding: 1px 6px; border-radius: 3px; background: #f0f0f0; color: #8c8c8c; }
-.env-tag.development { background: #fff3e0; color: var(--amber); }
-.env-tag.production { background: #e8f7ef; color: var(--green); }
 .user-name { font-size: 13px; color: var(--text); }
+
+.notif-panel { width: 320px; max-height: 380px; overflow-y: auto; background: var(--card); border-radius: 6px; }
+.notif-head { padding: 10px 14px; font-size: 13px; font-weight: 600; border-bottom: 1px solid var(--border); }
+.notif-empty { padding: 20px 14px; color: var(--muted); font-size: 12px; text-align: center; }
+.notif-group { padding: 6px 0; }
+.notif-group + .notif-group { border-top: 1px dashed var(--border); }
+.notif-group-title { padding: 6px 14px; font-size: 11px; color: var(--muted); font-weight: 600; }
+.notif-group-title.overdue { color: var(--red); }
+.notif-item { display: flex; align-items: center; gap: 8px; padding: 6px 14px; cursor: pointer; font-size: 12px; }
+.notif-item:hover { background: var(--bg); }
+.notif-code { color: #5b9bff; font-weight: 600; white-space: nowrap; }
+.notif-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notif-meta { color: var(--muted); font-size: 11px; white-space: nowrap; }
 
 .app-content {
   padding: 20px;
+  min-width: 0;
+  max-width: 100%;
   overflow-y: auto;
+  overflow-x: hidden;
   background: var(--bg);
 }
 </style>

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from app.core.database import get_db
-from app.models import Attachment, EscalationLog, NotificationLog, StatusLog, WorkOrder
+from app.models import Attachment, EscalationLog, NotificationLog, StatusLog, WorkOrder, AgentImportBatch
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -21,15 +21,16 @@ def clear_transactional_data(db: Session = Depends(get_db)):
     保留：users, projects, config_definitions, workorder_type_kb, sla_definitions,
          approval_flows, notification_policies, priority_rules, parsing_rules
     """
-    # 按外键依赖顺序删除
-    for model in [NotificationLog, EscalationLog, Attachment, StatusLog, WorkOrder]:
+    # 按外键依赖顺序删除（含可靠性Agent导入批次，重置后即可重导重测）
+    for model in [NotificationLog, EscalationLog, Attachment, StatusLog, WorkOrder, AgentImportBatch]:
         db.query(model).delete()
     db.commit()
     # 重置自增序列（PG）
     db.execute(text("SELECT setval('work_orders_id_seq', 1, false)"))
     db.execute(text("SELECT setval('status_log_id_seq', 1, false)"))
+    db.execute(text("SELECT setval('agent_import_batches_id_seq', 1, false)"))
     db.commit()
-    return {"cleared": ["work_orders", "status_log", "notification_log", "escalation_log", "attachments"], "kept": ["users", "projects", "config", "rules", "sla", "approval_flows"]}
+    return {"cleared": ["work_orders", "status_log", "notification_log", "escalation_log", "attachments", "agent_import_batches"], "kept": ["users", "projects", "config", "rules", "sla", "approval_flows"]}
 
 
 @router.get("/stats")

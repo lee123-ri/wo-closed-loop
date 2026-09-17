@@ -27,9 +27,57 @@ export const parseMinutes = (text: string) =>
 export const importTable = (file: File) => {
   const fd = new FormData();
   fd.append("file", file);
-  return http.post<any, { created: number; errors: string[]; total: number }>("/import/table", fd, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
+  return http.post<any, { created: number; errors: string[]; total: number }>("/import/table", fd);
+};
+
+export interface ImportPreviewRow {
+  line: number;
+  title: string;
+  reason?: string;
+  action?: string;
+  project_name?: string;
+  project_id?: number | null;
+  project_label?: string | null;
+  person_name?: string;
+  person_ok?: boolean;
+  type_name?: string;
+  type_ok?: boolean;
+  priority: string;
+  deadline: string;
+  ok: boolean;
+  error?: string | null;
+  raw: Record<string, string>;
+}
+
+export interface ImportPreviewResult {
+  total: number;
+  ok_count: number;
+  err_count: number;
+  rows: ImportPreviewRow[];
+}
+
+/** 上传 CSV/Excel → 解析预览（不落库），供「确认录入」勾选 */
+export const importTablePreview = (file: File) => {
+  const fd = new FormData();
+  fd.append("file", file);
+  return http.post<any, ImportPreviewResult>("/import/table/preview", fd);
+};
+
+/** 确认录入：把预览里勾选的行（raw）提交落库 */
+export const importTableConfirm = (rows: Record<string, string>[]) =>
+  http.post<any, { created: number; errors: string[]; total: number }>("/import/table/confirm", { rows });
+
+/** 下载导入模板（xlsx），触发浏览器保存 */
+export const downloadTemplate = async () => {
+  const blob = (await http.get("/import/template", { responseType: "blob" })) as unknown as Blob;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "工单导入模板.xlsx";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 };
 
 export const importMinutesBatch = (items: any[]) =>
@@ -49,3 +97,30 @@ export const importMinutesBatch = (items: any[]) =>
       })
     )
   );
+
+// ── 可靠性Agent 复盘 HTML 导入 ──────────────────────────
+
+export interface AgentHtmlWorkOrder {
+  workorder_id: string;
+  code: string;
+  status: string;
+  unmapped: string[];
+  task_count?: number;
+}
+
+export interface AgentHtmlImportResult {
+  created: number;
+  skipped_duplicate: number;
+  total: number;
+  batch_key?: string;
+  already_imported?: boolean;
+  message?: string;
+  parsed_count?: number;
+  project?: string;
+  trigger?: { indicator?: string; period?: string };
+  results: AgentHtmlWorkOrder[];
+}
+
+/** 上传「指标异常处置SOP」复盘 HTML → 后端解析并生成待派发草稿工单 */
+export const importAgentHtml = (html: string) =>
+  http.post<any, AgentHtmlImportResult>("/import/agent-html", { html });

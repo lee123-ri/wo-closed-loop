@@ -1,14 +1,18 @@
 """项目模型"""
-from sqlalchemy import String
+from sqlalchemy import CheckConstraint, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 from app.models.base import TimestampMixin
+from app.services.region_map import region_check_sql
 
 
 class Project(TimestampMixin, Base):
     __tablename__ = "projects"
-    __table_args__ = {"comment": "电站项目"}
+    __table_args__ = (
+        CheckConstraint(region_check_sql(), name="ck_projects_region"),
+        {"comment": "电站项目"},
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, comment="项目编码")

@@ -4,6 +4,7 @@ __pycache__/
 .venv/
 *.egg-info/
 .env
+frontend/.env.development
 
 # Node
 node_modules/
@@ -22,3 +23,14 @@ frontend/dist/
 
 # Logs
 *.log
+backend/logs/
+
+# 本地运行/构建产物
+*.rdb
+*.tsbuildinfo
+
+# 本机凭据、备份和交付包
+backend/.env.bak
+backup_*.sql
+*.tar.gz
+.claude/

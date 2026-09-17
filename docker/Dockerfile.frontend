@@ -1,9 +1,9 @@
-# 前端构建 + Nginx 镜像
+# 前端构建 + Nginx 镜像（构建上下文 = 仓库根目录：docker build -f docker/Dockerfile.frontend .）
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY package.json package-lock.json* ./
+COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm config set registry https://registry.npmmirror.com && npm install
-COPY . .
+COPY frontend/ .
 RUN npm run build
 
 FROM nginx:alpine

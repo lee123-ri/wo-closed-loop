@@ -1,0 +1,32 @@
+{
+  "run_id": "20260917-141734",
+  "version": "v0.6.0",
+  "environment": "local workspace; isolated wo_closed_loop_test database; outbound DingTalk credentials disabled",
+  "layers": {
+    "L1_structure": {
+      "checks": ["git diff --check", "alembic heads", "alembic upgrade head against a disposable test database", "npm run build"],
+      "result": "pass",
+      "migration_head": "h002_add_alert_flow",
+      "note": "Frontend build still warns about large chunks"
+    },
+    "L2_backend": {
+      "command": "cd backend && DATABASE_URL=<independent test database> python -m pytest -q --tb=short --show-capture=no",
+      "result": "pass",
+      "passed": 206
+    },
+    "L3_browser": {
+      "command": "cd frontend && npm run test:ui",
+      "result": "pass",
+      "passed": 12
+    },
+    "L4_instance": {
+      "result": "pass",
+      "scope": "prior local read-only browser verification against isolated test database",
+      "read_only_pages_opened": 12,
+      "browser_runtime_errors": 0,
+      "need_backfill_dashboard_count": 3,
+      "need_backfill_filtered_total": 3
+    }
+  },
+  "not_verified": ["Production deployment", "Live DingTalk OA and outbound notifications"]
+}

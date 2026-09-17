@@ -12,6 +12,9 @@ export interface ConfigItem {
 
 export const getSources = () => http.get<any, ConfigItem[]>("/config/sources");
 export const getStatuses = () => http.get<any, ConfigItem[]>("/config/statuses");
+export const getAnomalyCategories = () => http.get<any, ConfigItem[]>("/config/anomaly-categories");
+export const updateAnomalyCategory = (id: number, data: { name?: string; default_person_name?: string | null; agent?: string | null }) =>
+  http.patch<any, ConfigItem>(`/config/anomaly-categories/${id}`, data);
 export const getWoTypes = () => http.get<any, ConfigItem[]>("/config/work-order-types");
 export const getWoTypesFull = () => http.get<any, any[]>("/config/work-order-types-full");
 export const getProjects = () => http.get<any, any[]>("/config/projects");
@@ -22,3 +25,19 @@ export const getPriorityRules = () => http.get<any, any[]>("/config/priority-rul
 export const getSla = () => http.get<any, any[]>("/config/sla");
 export const getApprovalFlows = () => http.get<any, any[]>("/config/approval-flows");
 export const getPersonProjectMap = () => http.get<any, any[]>("/config/person-project-map");
+export const getRegionPMOs = () => http.get<any, any[]>("/config/region-pmos");
+export const setRegionPMO = (data: { region: string; user_id: number }) => http.post<any, any>("/config/region-pmos", data);
+export const deleteRegionPMO = (id: number) => http.delete(`/config/region-pmos/${id}`);
+export const getRoleAssignments = () => http.get<any, any[]>("/config/role-assignments");
+export const updateRoleAssignment = (roleCode: string, data: { user_id: number | null }) => http.patch<any, any>(`/config/role-assignments/${roleCode}`, data);
+
+export interface DingtalkStatus {
+  app_key: boolean;
+  app_secret: boolean;
+  agent: boolean;
+  oa_template: boolean;
+  corp: boolean;
+  callback_token: boolean;
+  callback_aes_key: boolean;
+}
+export const getDingtalkStatus = () => http.get<any, DingtalkStatus>("/dingtalk/status");

@@ -3,7 +3,7 @@
 # 存数据库 config 表，通过管理后台编辑，不写死在此文件
 
 system:
-  app_name: 软工单闭环管理系统
+  app_name: 工单管理平台
   timezone: Asia/Shanghai
   date_format: YYYY-MM-DD
   default_page_size: 20
@@ -18,6 +18,20 @@ seed:
     - { code: alert,   name: 监视告警, color: "#dc2626" }
     - { code: meeting, name: 判定会,   color: "#d97706" }
     - { code: manual,  name: 手动,     color: "#7c3aed" }
+    - { code: external, name: 外部接入, color: "#059669" }
+
+  # 异常指标大类（source=alert 的细分维度，与 DataPoolItem.metric_type 对齐）
+  # 每类配置默认责任人 default_person_name 与对应分析 Agent agent
+  # （agent 暂留空，判断 Agent 就绪后逐一接入；默认责任人先统一金惠良，后台可改）
+  anomaly_categories:
+    - { code: power_gen,    name: 发电量异常, color: "#dc2626", default_person_name: 金惠良, agent: "" }
+    - { code: curtailment,  name: 限电量异常, color: "#d97706", default_person_name: 金惠良, agent: "" }
+    - { code: dual_rule,    name: 双细则异常, color: "#7c3aed", default_person_name: 徐林杰, agent: "" }
+    - { code: reliability,  name: 设备可靠性, color: "#ea580c", default_person_name: 金惠良, agent: "" }
+    - { code: info_quality, name: 信息化使用, color: "#2563eb", default_person_name: 金惠良, agent: "" }
+    - { code: contract,     name: 应签未签,   color: "#0891b2", default_person_name: 金惠良, agent: "" }
+    - { code: cost,         name: 成本费用,   color: "#059669", default_person_name: 金惠良, agent: "" }
+    - { code: satisfaction, name: 客户满意度, color: "#db2777", default_person_name: 金惠良, agent: "" }
 
   # 工单状态机（code -> 允许的下一状态 code 列表）
   statuses:
@@ -29,6 +43,7 @@ seed:
     closed:    { name: 已闭环, color: green,  next: [] }
     overdue:   { name: 已逾期, color: red,    next: [executing, verifying, closed] }
     rejected:  { name: 已驳回, color: gray,   next: [] }
+    judging:   { name: 判断中, color: purple, next: [closed] }
 
   # SLA 定义（按优先级，截止天数）
   sla:

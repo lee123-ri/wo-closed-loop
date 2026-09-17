@@ -39,6 +39,7 @@ export const useUserStore = defineStore("user", () => {
   }
 
   function canAccessMenu(group: string, item: string): boolean {
+    if (user.value?.role === "admin") return true; // 超管恒可见
     if (!permissions.value) return true; // 权限未加载时允许
     const g = permissions.value.menu_groups[group];
     if (!g) return false;
@@ -48,6 +49,7 @@ export const useUserStore = defineStore("user", () => {
   }
 
   function canDo(action: string): boolean {
+    if (user.value?.role === "admin") return true;
     if (!permissions.value) return true;
     const act = permissions.value.actions[action];
     if (!act) return false;

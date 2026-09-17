@@ -29,6 +29,15 @@ spec:
           readinessProbe:
             httpGet: { path: /health, port: 8000 }
             initialDelaySeconds: 5
+          volumeMounts:
+            - name: dws-auth
+              mountPath: /secrets
+              readOnly: true
+      volumes:
+        - name: dws-auth
+          secret:
+            secretName: wo-dws-auth   # kubectl create secret generic wo-dws-auth --from-file=dws-auth.tar.gz=<凭证包路径>
+            optional: true            # 未创建时不阻塞启动，仅钉盘/AI表格同步不可用
 ---
 apiVersion: v1
 kind: Service
@@ -68,6 +77,53 @@ spec:
   selector: { app: wo-frontend }
   ports: [{ port: 80, targetPort: 80 }]
 ---
+# 判断Agent Deployment + Service（v1 不部署：外部团队镜像未交付；
+# 后端 JUDGMENT_ENABLED=false 时走降级日志兜底。镜像就绪后取消注释并重启。）
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: wo-judgment-agent
+#   labels: { app: wo-judgment-agent }
+# spec:
+#   replicas: 2
+#   selector:
+#     matchLabels: { app: wo-judgment-agent }
+#   template:
+#     metadata:
+#       labels: { app: wo-judgment-agent }
+#     spec:
+#       containers:
+#         - name: agent
+#           image: registry.cn-hangzhou.aliyuncs.com/wo/wo-judgment-agent:latest
+#           ports: [{ containerPort: 8080 }]
+#           env:
+#             - name: LLM_API_KEY
+#               valueFrom:
+#                 secretKeyRef:
+#                   name: wo-secrets
+#                   key: DASHSCOPE_API_KEY
+#             - name: LLM_MODEL
+#               value: "qwen-max"
+#           resources:
+#             requests: { cpu: "500m", memory: "512Mi" }
+#             limits: { cpu: "2", memory: "2Gi" }
+#           livenessProbe:
+#             httpGet: { path: /health, port: 8080 }
+#             initialDelaySeconds: 15
+#             periodSeconds: 10
+#           readinessProbe:
+#             httpGet: { path: /health, port: 8080 }
+#             initialDelaySeconds: 5
+#             periodSeconds: 5
+# ---
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: wo-judgment-agent
+# spec:
+#   selector: { app: wo-judgment-agent }
+#   ports: [{ port: 8080, targetPort: 8080 }]
+---
 # Celery Worker（异步通知、OA 发起）
 apiVersion: apps/v1
 kind: Deployment
@@ -85,7 +141,8 @@ spec:
       containers:
         - name: worker
           image: registry.cn-hangzhou.aliyuncs.com/wo/wo-backend:latest
-          command: ["celery", "-A", "app.celery_app", "worker", "-l", "info", "--concurrency=4"]
+          command: ["/entrypoint.sh"]
+          args: ["celery", "-A", "app.celery_app", "worker", "-l", "info", "--concurrency=4"]
           envFrom:
             - secretRef: { name: wo-secrets }
           env:
@@ -94,6 +151,15 @@ spec:
           resources:
             requests: { cpu: "200m", memory: "256Mi" }
             limits: { cpu: "1000m", memory: "1Gi" }
+          volumeMounts:
+            - name: dws-auth
+              mountPath: /secrets
+              readOnly: true
+      volumes:
+        - name: dws-auth
+          secret:
+            secretName: wo-dws-auth
+            optional: true
           # 无需就绪探针，Celery 自带健康检查
 ---
 # Celery Beat（定时任务：SLA 扫描、升级扫描）
@@ -113,7 +179,8 @@ spec:
       containers:
         - name: scheduler
           image: registry.cn-hangzhou.aliyuncs.com/wo/wo-backend:latest
-          command: ["celery", "-A", "app.celery_app", "beat", "-l", "info"]
+          command: ["/entrypoint.sh"]
+          args: ["celery", "-A", "app.celery_app", "beat", "-l", "info"]
           envFrom:
             - secretRef: { name: wo-secrets }
           env:
@@ -122,6 +189,15 @@ spec:
           resources:
             requests: { cpu: "100m", memory: "128Mi" }
             limits: { cpu: "500m", memory: "256Mi" }
+          volumeMounts:
+            - name: dws-auth
+              mountPath: /secrets
+              readOnly: true
+      volumes:
+        - name: dws-auth
+          secret:
+            secretName: wo-dws-auth
+            optional: true
 ---
 # 配置项：外部化（钉钉 key、DB 连接等敏感信息进 Secret）
 apiVersion: v1
@@ -134,17 +210,26 @@ stringData:
   DATABASE_URL: "postgresql+psycopg://wo:CHANGE_ME@rds-host:5432/wo_closed_loop"
   REDIS_URL: "redis://tair-host:6379/0"
   JWT_SECRET: "CHANGE_ME_TO_RANDOM_64_CHARS"
+  APP_ENV: "production"
+  AUTO_SEED: "false"                  # 生产禁止自动灌演示数据
   DINGTALK_APP_KEY: ""
   DINGTALK_APP_SECRET: ""
   DINGTALK_AGENT_ID: ""
   DINGTALK_OA_TEMPLATE_ID: ""
   DINGTALK_CORP_ID: ""
+  DINGTALK_CALLBACK_URL: "https://wo.example.com/api/auth/dingtalk/callback"  # 必须改为线上 HTTPS 域名
+  DINGTALK_CALLBACK_TOKEN: ""
+  DINGTALK_CALLBACK_AES_KEY: ""
   DASHSCOPE_API_KEY: ""
   OSS_ENDPOINT: ""
   OSS_BUCKET: ""
   OSS_ACCESS_KEY_ID: ""
   OSS_ACCESS_KEY_SECRET: ""
   CORS_ORIGINS: "https://wo.example.com"
+  JUDGMENT_AGENT_URL: "http://wo-judgment-agent:8080"
+  JUDGMENT_AGENT_TOKEN: ""
+  JUDGMENT_TIMEOUT: "10"
+  JUDGMENT_ENABLED: "false"           # v1 判断Agent不部署，走降级日志；镜像就绪后改 true
 ---
 # Ingress（对接 ALB）
 apiVersion: networking.k8s.io/v1

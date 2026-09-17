@@ -40,7 +40,7 @@ git push origin feature/描述
 
 ## 当前版本
 
-**v0.5.0** — 2026-08-12
+**v0.6.0** — 2026-09-17（代码发布；生产部署另行验收）
 
 ## 发布流程
 
@@ -48,6 +48,6 @@ git push origin feature/描述
 # 发布时打 tag
 git checkout main
 git pull origin main
-git tag v0.6.0
-git push origin v0.6.0
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```

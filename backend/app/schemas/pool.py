@@ -13,6 +13,7 @@ class PoolItemCreate(BaseModel):
     title: str = Field(..., max_length=512)
     project_name: str | None = None
     person_name: str | None = None
+    priority: str | None = None
     deadline: date | None = None
     description: str | None = None
     metric_type: str | None = None
@@ -27,6 +28,7 @@ class PoolItemUpdate(BaseModel):
     title: str | None = None
     project_name: str | None = None
     person_name: str | None = None
+    priority: str | None = None
     deadline: date | None = None
     description: str | None = None
     metric_type: str | None = None
@@ -45,6 +47,7 @@ class PoolItemOut(BaseModel):
     title: str
     project_name: str | None = None
     person_name: str | None = None
+    priority: str | None = None
     deadline: date | None = None
     description: str | None = None
     metric_type: str | None = None
@@ -97,6 +100,9 @@ class BackfillRequest(BaseModel):
     new_wo_title: str | None = None
     new_wo_deadline: date | None = None
     new_wo_person_name: str | None = None
+    # 判断Agent 结果确认（PMO对Agent建议的回应）
+    accept_judgment: bool | None = None  # None=还没判断, True=接受建议, False=原样创建
+    override_judgment: bool = False  # True=强制跳过判断/覆盖驳回
 
 
 class BackfillOut(BaseModel):
@@ -105,3 +111,8 @@ class BackfillOut(BaseModel):
     action: str | None = None
     triggered_wo_id: int | None = None
     backfilled_at: datetime
+    # 判断Agent 结果
+    verdict: str | None = None  # approved_suggested|approved_as_is|rejected|no_action_needed|degraded
+    judgment_reasoning: str | None = None
+    judgment_suggestions: dict[str, Any] | None = None
+    judgment_confidence: float | None = None

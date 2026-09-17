@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.api.auth import require_auth
 from app.models import ConfigDefinition, WorkOrder, Project, User, WorkOrderTypeKB
 from app.schemas.workorder import DashboardStats
 
@@ -82,7 +83,7 @@ def get_stats(db: Session = Depends(get_db)):
     todo_raw = [w for w in all_wos if w.status != "closed"]
     todo_raw.sort(key=lambda w: (w.status != "overdue", w.deadline or date.max))
     todo_items = []
-    for w in todo_raw[:10]:
+    for w in todo_raw[:100]:  # 扩大取数范围，前端分页
         person = db.get(User, w.person_id) if w.person_id else None
         todo_items.append({
             "id": w.id, "code": w.code, "title": w.title, "status": w.status,
@@ -139,6 +140,40 @@ def get_person_dashboard(user_id: int, db: Session = Depends(get_db)):
     }
 
 
+# ── 我的工单（行级范围聚合，Phase 3.5）────────────────
+
+@router.get("/mine")
+def get_my_dashboard(db: Session = Depends(get_db), user: User = Depends(require_auth)):
+    """「我的工单」统计卡：按登录人行级范围聚合。
+
+    admin→全部；区域 PMO→其负责区域；其余→本人（责任人/审批人）。
+    返回 scope 供前端展示口径（all/region/self）。
+    """
+    from app.services.scope import visible_scope, apply_scope_to_query
+
+    scope = visible_scope(db, user)
+    wos = db.execute(apply_scope_to_query(select(WorkOrder), db, user)).scalars().all()
+
+    total = len(wos)
+    pending = sum(1 for w in wos if w.status in ("pending", "approving"))
+    executing = sum(1 for w in wos if w.status in ("dispatched", "executing"))
+    verifying = sum(1 for w in wos if w.status == "verifying")
+    overdue = sum(1 for w in wos if w.status == "overdue")
+    closed = sum(1 for w in wos if w.status == "closed")
+    need_backfill = sum(1 for w in wos if w.status in ("dispatched", "executing") and w.backfill_status != "filled")
+
+    scope_label = "all" if scope is None else ("region" if "regions" in scope else "self")
+    return {
+        "user": {"id": user.id, "name": user.name, "role": user.role},
+        "scope": scope_label,
+        "stats": {
+            "total": total, "pending": pending, "executing": executing,
+            "verifying": verifying, "overdue": overdue, "closed": closed,
+            "need_backfill": need_backfill,
+        },
+    }
+
+
 # ── 工单日历（Phase 3.5）───────────────────────────────
 
 @router.get("/calendar")
@@ -147,7 +182,9 @@ def get_calendar(
     month: int = Query(..., ge=1, le=12),
     person_id: int | None = None,
     project_id: int | None = None,
+    mine: bool = Query(False, description="true=按登录人行级范围过滤（我的工单页）"),
     db: Session = Depends(get_db),
+    user: User = Depends(require_auth),
 ):
     """工单日历视图：按月份返回工单的 deadline 分布"""
     from datetime import date as _date
@@ -162,7 +199,10 @@ def get_calendar(
         WorkOrder.deadline <= end,
         WorkOrder.status != "closed",
     )
-    if person_id:
+    if mine:
+        from app.services.scope import apply_scope_to_query
+        q = apply_scope_to_query(q, db, user)
+    elif person_id:
         q = q.where(WorkOrder.person_id == person_id)
     if project_id:
         q = q.where(WorkOrder.project_id == project_id)

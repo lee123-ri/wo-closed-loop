@@ -149,16 +149,51 @@ def generate_all(pool_type: str | None = None, db: Session = Depends(get_db)):
 
 # ── AI表格同步 ────────────────────────────────────────
 
+@router.get("/dws-status")
+def dws_status_endpoint():
+    """dws CLI 就绪状态（钉盘/AI表格同步的前置条件）"""
+    from app.services.dws_client import dws_status
+    return dws_status()
+
+
 @router.post("/sync-aitable")
 def sync_aitable_endpoint(full: bool = True, db: Session = Depends(get_db)):
-    """从三个 AI 表格同步数据到数据池"""
+    """从三个 AI 表格同步数据到数据池（手动触发）"""
     from app.services.aitable import sync_anomaly_to_pool, sync_non_eam_to_pool
     a = sync_anomaly_to_pool(full=full)
     n = sync_non_eam_to_pool(full=full)
     return {
-        "anomaly": {"synced": a["synced"], "total": a["total"]},
-        "non_eam": {"synced": n["synced"], "total": n["total"]},
+        "anomaly": {"synced": a["synced"], "total": a["total"], "errors": a.get("errors", [])[:5]},
+        "non_eam": {"synced": n["synced"], "total": n["total"], "errors": n.get("errors", [])[:5]},
     }
+
+
+@router.post("/sync-dual-rule")
+def sync_dual_rule_endpoint(full: bool = False, db: Session = Depends(get_db)):
+    """「双细则异常」表 → 直接生成工单（手动触发；不经过数据池）"""
+    from app.services.aitable import sync_dual_rule_to_workorders
+    d = sync_dual_rule_to_workorders(full=full)
+    return {"dual_rule": {"synced": d["synced"], "total": d["total"], "errors": d.get("errors", [])[:5]}}
+
+
+@router.post("/sync-drive")
+def sync_drive_endpoint(db: Session = Depends(get_db)):
+    """钉盘「年度运营计划」非EAM行 → 工单（手动触发）"""
+    from app.services.drive_workorder_import import import_drive_workorder_versions
+    try:
+        return import_drive_workorder_versions()
+    except RuntimeError as e:
+        raise HTTPException(503, str(e))
+
+
+@router.post("/sync-full")
+def sync_full_endpoint(db: Session = Depends(get_db)):
+    """一键同步全链路：AITable→数据池→生成工单 + 钉盘「工单版」xlsx→工单。"""
+    from app.services.aitable import full_sync
+    try:
+        return full_sync()
+    except Exception as e:
+        raise HTTPException(502, f"同步失败: {e}")
 
 
 @router.post("/sync-project-map")
