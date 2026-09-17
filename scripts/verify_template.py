@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-验证软工单OA审批模板是否可用
+验证工单OA审批模板是否可用
 
 用法：
   python3 verify_template.py
@@ -10,12 +10,35 @@
 
 import argparse
 import json
+import os
 import subprocess
 import sys
+from pathlib import Path
 
-# 用 cockpit 平台凭证
-APP_KEY = "ding1ikpdp8hvarwxoi2"
-APP_SECRET = "OqWQbDHrpCtMb-3im7Q1nqqU05tGvIGeZdshAbz7cDHgHzlCjojbjBM3KPl0EXkM"
+
+# 凭证从环境变量或 backend/.env 读取（不硬编码，避免密钥进 git）
+ENV_FILE = Path(__file__).resolve().parent.parent / "backend" / ".env"
+
+
+def _load_credentials() -> tuple[str, str]:
+    key = os.environ.get("DINGTALK_APP_KEY", "")
+    secret = os.environ.get("DINGTALK_APP_SECRET", "")
+    if key and secret:
+        return key, secret
+    try:
+        if ENV_FILE.exists():
+            for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line.startswith("DINGTALK_APP_KEY="):
+                    key = line.split("=", 1)[1].strip()
+                elif line.startswith("DINGTALK_APP_SECRET="):
+                    secret = line.split("=", 1)[1].strip()
+    except Exception:
+        pass
+    return key, secret
+
+
+APP_KEY, APP_SECRET = _load_credentials()
 
 
 def search_forms(keyword: str) -> list:
@@ -105,13 +128,13 @@ def test_initiate(process_code: str) -> bool:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="验证软工单OA审批模板")
+    parser = argparse.ArgumentParser(description="验证工单OA审批模板")
     parser.add_argument("--process-code", type=str, help="指定模板ID进行验证")
     parser.add_argument("--test", action="store_true", help="测试发起审批实例")
     args = parser.parse_args()
 
     print("=" * 60)
-    print("🔍 软工单OA审批模板验证")
+    print("🔍 工单OA审批模板验证")
     print("=" * 60)
 
     if args.process_code:
@@ -119,14 +142,14 @@ def main():
         print(f"\n📋 使用指定模板ID: {process_code}")
     else:
         # 搜索模板
-        print("\n📋 搜索「软工单」相关模板...")
-        forms = search_forms("软工单")
+        print("\n📋 搜索「工单」相关模板...")
+        forms = search_forms("工单")
         if not forms:
-            print("⚠️ 未找到「软工单」相关模板，尝试搜索「工单」...")
+            print("⚠️ 未找到「工单」相关模板，尝试搜索「工单」...")
             forms = search_forms("工单")
 
         if not forms:
-            print("\n❌ 未找到软工单审批模板")
+            print("\n❌ 未找到工单审批模板")
             print("\n可能原因：")
             print("  1. 模板尚未创建")
             print("  2. 当前用户没有该模板的发起权限")

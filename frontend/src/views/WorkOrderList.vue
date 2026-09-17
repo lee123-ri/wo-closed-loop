@@ -3,11 +3,20 @@
     <div class="page-header">
       <div>
         <h1>工单列表</h1>
-        <p class="meta">全部工单 · 筛选查询</p>
+        <p class="meta">全部工单 · 宽表工作台 · 就地流转</p>
       </div>
       <t-space>
+        <t-button theme="default" variant="outline" :disabled="!selectedRowKeys.length" @click="batchDispatch">
+          📤 批量派发<template v-if="selectedRowKeys.length">({{ selectedRowKeys.length }})</template>
+        </t-button>
+        <t-button theme="default" variant="outline" :disabled="!selectedRowKeys.length" @click="batchReset">
+          批量重置<template v-if="selectedRowKeys.length">({{ selectedRowKeys.length }})</template>
+        </t-button>
+        <t-button theme="default" variant="outline" :disabled="!selectedRowKeys.length" @click="exportSelectedCSV">
+          导出选中<template v-if="selectedRowKeys.length">({{ selectedRowKeys.length }})</template>
+        </t-button>
         <t-button theme="default" variant="outline" @click="openAgentHtmlImport">🖇️ 导入 Agent 复盘 HTML</t-button>
-        <t-button theme="default" variant="outline" @click="exportCSV">导出 CSV</t-button>
+        <t-button theme="default" variant="outline" @click="exportCSV(list.items)">导出当前页 CSV</t-button>
         <t-button theme="primary" @click="router.push('/create')">＋ 新建工单</t-button>
       </t-space>
     </div>
@@ -15,112 +24,41 @@
     <t-card>
       <!-- 筛选 -->
       <div class="filters">
-        <t-input v-model="filters.search" placeholder="搜索工单标题..." clearable @change="reload" style="width:200px" />
-        <t-select v-model="filters.project_id" placeholder="项目" clearable @change="reload" style="width:160px">
-          <t-option v-for="p in projects" :key="p.id" :value="p.id" :label="p.name" />
+        <t-input v-model="filters.search" placeholder="搜索工单标题..." clearable @change="applyFilters" @enter="applyFilters" style="width:200px" />
+        <t-select v-model="filters.project_id" placeholder="项目" clearable filterable @change="applyFilters" style="width:180px">
+          <t-option v-for="p in projectOptions" :key="p.id" :value="p.id" :label="p.name" />
         </t-select>
-        <t-select v-model="filters.region" placeholder="区域" clearable @change="reload" style="width:120px">
+        <t-select v-model="filters.region" placeholder="区域" clearable @change="applyFilters" style="width:120px">
           <t-option v-for="r in regions" :key="r" :value="r" :label="r" />
         </t-select>
-        <t-select v-model="filters.source_code" placeholder="来源" clearable @change="reload" style="width:120px">
+        <t-select v-model="filters.source_code" placeholder="来源" clearable @change="applyFilters" style="width:120px">
           <t-option v-for="s in sources" :key="s.code" :value="s.code" :label="s.name" />
         </t-select>
-        <t-select v-model="filters.status" placeholder="状态" clearable @change="reload" style="width:120px">
+        <t-select v-model="filters.status" placeholder="状态" clearable @change="applyFilters" style="width:120px">
           <t-option v-for="s in statuses" :key="s.code" :value="s.code" :label="s.name" />
         </t-select>
-        <t-select v-model="filters.priority" placeholder="优先级" clearable @change="reload" style="width:120px">
+        <t-select v-model="filters.priority" placeholder="优先级" clearable @change="applyFilters" style="width:120px">
           <t-option value="P1" label="P1 紧急" />
           <t-option value="P2" label="P2 普通" />
           <t-option value="P3" label="P3 低优先" />
         </t-select>
-        <t-input v-model="filters.person_name" placeholder="责任人搜索" @change="reload" style="width:160px" clearable />
+        <t-input v-model="filters.person_name" placeholder="责任人搜索" @change="applyFilters" @enter="applyFilters" style="width:160px" clearable />
         <t-button theme="default" variant="outline" @click="resetFilters">重置</t-button>
       </div>
 
-      <t-table
-        :data="list.items"
-        :columns="columns"
-        row-key="id"
+      <WorkbenchTable
+        :items="list.items"
         :loading="loading"
-        hover
+        :total="list.total"
+        :page="page"
+        :page-size="pageSize"
+        :users="allUsers"
+        v-model:selected-row-keys="selectedRowKeys"
         @row-click="goDetail"
-        :pagination="pagination"
+        @reload="reload"
         @page-change="onPageChange"
-        size="small"
-        cell-empty-content="—"
-      >
-        <template #code="{ row }">
-          <t-link theme="primary" hover="color">{{ row.code }}</t-link>
-        </template>
-        <template #source_code="{ row }">
-          <span class="src-tag" :class="sourceTagClass(row.source_code)">{{ sourceLabel(row.source_code) }}</span>
-        </template>
-        <template #priority="{ row }">
-          <t-tag :theme="priorityTheme(row.priority)" size="small">{{ priorityLabel(row.priority) }}</t-tag>
-        </template>
-        <template #status="{ row }">
-          <t-tag :theme="statusTheme(row.status)" size="small">{{ statusLabel(row.status) }}</t-tag>
-        </template>
-        <template #deadline="{ row }">
-          <span :style="{ color: row.status === 'overdue' ? 'var(--red)' : '' }">{{ row.deadline }}</span>
-        </template>
-        <template #escalation="{ row }">
-          <t-tag v-if="row.escalation_level > 0" :theme="row.escalation_level >= 3 ? 'danger' : 'warning'" size="small">
-            {{ escLabel[row.escalation_level] }}
-          </t-tag>
-          <span v-else>—</span>
-        </template>
-        <template #action="{ row }">
-          <t-button
-            v-if="row.status === 'pending' || row.status === 'approving'"
-            size="small"
-            theme="primary"
-            variant="outline"
-            :loading="dispatching[row.id]"
-            @click.stop="doDispatch(row)"
-          >发起审批</t-button>
-          <t-button
-            v-if="row.status !== 'pending'"
-            size="small"
-            theme="default"
-            variant="outline"
-            @click.stop="doReset(row)"
-          >重置</t-button>
-        </template>
-      </t-table>
+      />
     </t-card>
-
-    <!-- 派发确认对话框 -->
-    <t-dialog
-      v-model:visible="dispatchDialog.visible"
-      header="确认派发工单"
-      :confirm-btn="{ content: '确认派发', loading: dispatchDialog.submitting }"
-      :cancel-btn="'取消'"
-      @confirm="confirmDispatch"
-      @cancel="cancelDispatch"
-      width="560"
-    >
-      <div class="dispatch-info" v-if="dispatchDialog.wo">
-        <div class="di-row"><span class="di-label">工单编号</span><span>{{ dispatchDialog.wo.code }}</span></div>
-        <div class="di-row"><span class="di-label">标题</span><span>{{ dispatchDialog.wo.title }}</span></div>
-        <div class="di-row"><span class="di-label">项目</span><span>{{ dispatchDialog.wo.project_name || "—" }}</span></div>
-        <div class="di-row"><span class="di-label">区域</span><span>{{ dispatchDialog.wo.region || "—" }}</span></div>
-        <div class="di-row"><span class="di-label">来源</span><span>{{ sourceLabel(dispatchDialog.wo.source_code) }}</span></div>
-        <div class="di-row"><span class="di-label">类型</span><span>{{ dispatchDialog.wo.type_name || "—" }}</span></div>
-        <div class="di-row"><span class="di-label">计划开始</span><span>{{ dispatchDialog.wo.planned_start_date || "—" }}</span></div>
-        <div class="di-row"><span class="di-label">截止日期</span><span>{{ dispatchDialog.wo.deadline || "—" }}</span></div>
-        <div class="di-row"><span class="di-label">触发原因</span><span class="di-wrap">{{ dispatchDialog.wo.reason || "—" }}</span></div>
-        <div class="di-row"><span class="di-label">行动要求</span><span class="di-wrap">{{ dispatchDialog.wo.action || "—" }}</span></div>
-        <div class="di-row di-edit">
-          <span class="di-label">责任人</span>
-          <t-select v-model="dispatchDialog.person_id" placeholder="输入姓名搜索责任人" filterable clearable style="width:280px" :options="executorOptions" />
-        </div>
-        <div class="di-row di-edit">
-          <span class="di-label">审批人</span>
-          <t-select v-model="dispatchDialog.approver_id" placeholder="输入姓名搜索审批人" filterable clearable style="width:280px" :options="approverOptions" />
-        </div>
-      </div>
-    </t-dialog>
 
     <!-- 导入 Agent 复盘 HTML 对话框 -->
     <t-dialog v-model:visible="agentImport.visible" header="导入 Agent 复盘 HTML" :footer="false" width="760">
@@ -166,41 +104,36 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { toast, confirmDialog } from "@/utils/feedback";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { listWorkOrders, transitionWorkOrder, updateWorkOrder, type WorkOrderList } from "@/api/workorders";
-import { getProjects, getSources, getStatuses, getUsersAll, type ConfigItem } from "@/api/config";
+import { listWorkOrders, transitionWorkOrder, type WorkOrderList } from "@/api/workorders";
+import { getSources, getStatuses, getUsersAll, type ConfigItem } from "@/api/config";
 import { importAgentHtml, type AgentHtmlImportResult } from "@/api/imports";
-import {
-  statusLabel, statusTheme, priorityLabel, priorityTheme,
-  sourceLabel, sourceTagClass, escLabel,
-} from "@/utils/wo-display";
+import { statusLabel, sourceLabel } from "@/utils/wo-display";
+import WorkbenchTable from "@/components/WorkbenchTable.vue";
+import { downloadCsv } from "@/utils/csv";
+import dayjs from "dayjs";
 
 defineOptions({ name: "WorkOrderList" });
 
 const route = useRoute();
 const router = useRouter();
 const loading = ref(false);
+let reloadSeq = 0;
 const list = ref<WorkOrderList>({ items: [], total: 0, page: 1, page_size: 20 });
-const projects = ref<any[]>([]);
 const sources = ref<ConfigItem[]>([]);
 const statuses = ref<ConfigItem[]>([]);
 const regions = ["华北", "华中", "华东", "华南", "西北", "西南", "东北"];
 const page = ref(1);
 const pageSize = ref(20);
-
-const filters = reactive<any>({ project_id: undefined, source_code: undefined, status: undefined, priority: undefined, person_name: undefined, search: undefined });
-const dispatching = reactive<Record<number, boolean>>({});
 const allUsers = ref<any[]>([]);
-const executors = ref<any[]>([]);
-const approvers = ref<any[]>([]);
-const dispatchDialog = reactive({
-  visible: false,
-  submitting: false,
-  wo: null as any,
-  person_id: undefined as number | undefined,
-  approver_id: undefined as number | undefined,
-});
+const selectedRowKeys = ref<(string | number)[]>([]);
+
+const filters = reactive<any>({ project_id: undefined, region: undefined, source_code: undefined, status: undefined, priority: undefined, person_name: undefined, search: undefined });
+
+// 项目下拉只列当前列表里真实出现过的项目（后端按列表范围已去重 + 按区域收窄）
+const projectOptions = computed(() => list.value.project_options || []);
 
 const agentImport = reactive({
   visible: false,
@@ -211,16 +144,89 @@ const agentImport = reactive({
 });
 const agentHtmlInput = ref<HTMLInputElement | null>(null);
 
+async function reload() {
+  const seq = ++reloadSeq;
+  loading.value = true;
+  try {
+    const params: any = { page: page.value, page_size: pageSize.value };
+    for (const [k, v] of Object.entries(filters)) {
+      if (v !== undefined && v !== "" && v !== null) params[k] = v;
+    }
+    const res = await listWorkOrders(params);
+    if (seq !== reloadSeq) return;
+    list.value = res;
+    // 下拉来源已改为「列表内项目」：若已选项目在新结果里不存在（如切换区域后），清掉并重拉一次
+    if (filters.project_id && !(res.project_options || []).some((p: any) => p.id === filters.project_id)) {
+      filters.project_id = undefined;
+      page.value = 1;
+      return reload();
+    }
+    selectedRowKeys.value = [];
+    if (res.items.length === 0 && res.total > 0 && page.value > 1) {
+      page.value = 1;
+      return reload();
+    }
+  } catch (e: any) {
+    if (seq === reloadSeq) toast.error("工单列表加载失败：" + (e.message || "未知错误"));
+  } finally {
+    if (seq === reloadSeq) loading.value = false;
+  }
+}
+function applyFilters() { page.value = 1; reload(); }
+function onPageChange(p: any) { page.value = p.current; pageSize.value = p.pageSize; reload(); }
+function resetFilters() { Object.keys(filters).forEach((k) => (filters[k] = undefined)); page.value = 1; reload(); }
+function goDetail(row: any) { if (row && row.id) router.push(`/work-orders/${row.id}`); }
+
+/* ---------- 批量操作 ---------- */
+function selectedRows(): any[] {
+  const set = new Set(selectedRowKeys.value.map(String));
+  return list.value.items.filter((r) => set.has(String(r.id)));
+}
+async function batchDispatch() {
+  const rows = selectedRows().filter((r) => r.status === "pending" || r.status === "approving");
+  if (!rows.length) { toast.warning("请在「待派发/审批中」的工单里勾选"); return; }
+  if (!(await confirmDialog(`确认批量派发 ${rows.length} 条工单？`))) return;
+  let ok = 0, fail = 0;
+  for (const r of rows) {
+    try { await transitionWorkOrder(r.id, "dispatch"); ok++; } catch { fail++; }
+  }
+  toast.success(`批量派发完成：成功 ${ok}${fail ? "，失败 " + fail : ""}`);
+  if (ok) reload();
+}
+async function batchReset() {
+  const rows = selectedRows();
+  if (!rows.length) { toast.warning("请先勾选工单"); return; }
+  if (!(await confirmDialog(`确认把勾选的 ${rows.length} 条工单重置为「待派发」？`))) return;
+  let ok = 0, fail = 0;
+  for (const r of rows) {
+    try { await transitionWorkOrder(r.id, "reset"); ok++; } catch { fail++; }
+  }
+  toast.success(`批量重置完成：成功 ${ok}${fail ? "，失败 " + fail : ""}`);
+  if (ok) reload();
+}
+
+/* ---------- 导出 ---------- */
+function exportCSV(rows: any[]) {
+  if (!rows.length) { toast.warning("当前没有可导出的工单"); return; }
+  const head = ["编号", "项目", "区域", "标题", "触发原因", "行动要求", "类型", "优先级", "责任人", "审批人", "计划开始", "截止", "状态", "来源"];
+  const data = rows.map((w) => [w.code, w.project_name, w.region, w.title, w.reason, w.action,
+    w.type_name, w.priority, w.person_name, w.approver_name, w.planned_start_date,
+    w.deadline, statusLabel(w.status), sourceLabel(w.source_code)]);
+  downloadCsv([head, ...data], `工单列表_${dayjs().format("YYYY-MM-DD")}.csv`);
+}
+function exportSelectedCSV() {
+  const rows = selectedRows();
+  if (!rows.length) { toast.warning("请先勾选工单"); return; }
+  exportCSV(rows);
+}
+
+/* ---------- 导入 Agent HTML ---------- */
 function openAgentHtmlImport() {
   agentImport.result = null;
   agentImport.filename = "";
   agentImport.visible = true;
 }
-
-function pickAgentHtmlFile() {
-  agentHtmlInput.value?.click();
-}
-
+function pickAgentHtmlFile() { agentHtmlInput.value?.click(); }
 function onAgentHtmlFile(e: Event) {
   const f = (e.target as HTMLInputElement).files?.[0];
   if (!f) return;
@@ -231,182 +237,51 @@ function onAgentHtmlFile(e: Event) {
   };
   reader.readAsText(f, "utf-8");
 }
-
 async function submitAgentHtml() {
-  if (!agentImport.html.trim()) {
-    alert("请先粘贴或选择 HTML 文件");
-    return;
-  }
+  if (!agentImport.html.trim()) { toast.warning("请先粘贴或选择 HTML 文件"); return; }
   agentImport.submitting = true;
   try {
     agentImport.result = await importAgentHtml(agentImport.html);
     await reload();
   } catch (e: any) {
-    alert("导入失败：" + (e.message || "未知错误"));
+    toast.error("导入失败：" + (e.message || "未知错误"));
   } finally {
     agentImport.submitting = false;
   }
 }
 
-const executorOptions = computed(() =>
-  executors.value.map((u: any) => ({
-    value: u.id,
-    label: `${u.name}${u.department ? ' · ' + u.department : ''}`,
-  }))
-);
-
-const approverOptions = computed(() =>
-  approvers.value.map((u: any) => ({
-    value: u.id,
-    label: `${u.name}${u.department ? ' · ' + u.department : ''}`,
-  }))
-);
-
-const pagination = reactive({
-  current: 1, pageSize: 20, total: 0, showJumper: true, showPageSize: true,
-  pageSizeOptions: [10, 20, 50],
-});
-
-const columns = [
-  { colKey: "code", title: "编号", width: 130 },
-  { colKey: "source_code", title: "来源", width: 90 },
-  { colKey: "project_name", title: "项目", width: 160, ellipsis: true },
-  { colKey: "region", title: "区域", width: 100 },
-  { colKey: "title", title: "标题", minWidth: 200, ellipsis: true },
-  { colKey: "type_name", title: "类型", width: 90 },
-  { colKey: "priority", title: "优先级", width: 100 },
-  { colKey: "person_name", title: "责任人", width: 90 },
-  { colKey: "approver_name", title: "审批人", width: 90 },
-  { colKey: "planned_start_date", title: "计划开始", width: 110 },
-  { colKey: "deadline", title: "截止", width: 110 },
-  { colKey: "status", title: "状态", width: 90 },
-  { colKey: "escalation", title: "告警", width: 90 },
-  { colKey: "action", title: "操作", width: 110, fixed: "right" },
-];
-
-async function reload() {
-  loading.value = true;
-  try {
-    const params: any = { page: page.value, page_size: pageSize.value };
-    for (const [k, v] of Object.entries(filters)) {
-      if (v !== undefined && v !== "" && v !== null) params[k] = v;
-    }
-    list.value = await listWorkOrders(params);
-    pagination.total = list.value.total;
-    pagination.current = page.value;
-  } catch (e: any) { console.error(e); }
-  finally { loading.value = false; }
-}
-
-function onPageChange(p: any) {
-  page.value = p.current;
-  pageSize.value = p.pageSize;
-  reload();
-}
-
-function resetFilters() {
-  Object.keys(filters).forEach((k) => (filters[k] = undefined));
-  page.value = 1; reload();
-}
-
-function goDetail({ row }: any) { router.push(`/work-orders/${row.id}`); }
-
-async function doDispatch(row: any) {
-  // 先获取完整工单信息（含责任人/审批人姓名）
-  try {
-    const { getWorkOrder } = await import("@/api/workorders");
-    const wo = await getWorkOrder(row.id);
-    dispatchDialog.wo = wo;
-    dispatchDialog.person_id = wo.person_id ?? undefined;
-    dispatchDialog.approver_id = wo.approver_id ?? undefined;
-    dispatchDialog.visible = true;
-  } catch (e: any) {
-    alert('获取工单信息失败：' + (e.message || '未知错误'));
-  }
-}
-
-async function confirmDispatch() {
-  const wo = dispatchDialog.wo;
-  if (!wo) return;
-  dispatchDialog.submitting = true;
-  try {
-    // 如果责任人/审批人变了，先更新
-    if (dispatchDialog.person_id !== wo.person_id || dispatchDialog.approver_id !== wo.approver_id) {
-      await updateWorkOrder(wo.id, {
-        person_id: dispatchDialog.person_id,
-        approver_id: dispatchDialog.approver_id,
-      });
-    }
-    // 发起派发
-    await transitionWorkOrder(wo.id, 'dispatch');
-    dispatchDialog.visible = false;
-    await reload();
-  } catch (e: any) {
-    alert('派发失败：' + (e.message || '未知错误'));
-  } finally {
-    dispatchDialog.submitting = false;
-  }
-}
-
-function cancelDispatch() {
-  dispatchDialog.visible = false;
-  dispatchDialog.wo = null;
-}
-
-function exportCSV() {
-  const rows = list.value.items;
-  const head = ["编号", "来源", "项目", "区域", "标题", "类型", "优先级", "责任人", "审批人", "计划开始", "截止", "状态"];
-  const lines = [head.join(",")];
-  for (const w of rows) {
-    lines.push([w.code, sourceLabel(w.source_code), w.project_name || "", w.region || "", `"${w.title}"`, w.type_name || "", w.priority, w.person_name || "", w.approver_name || "", w.planned_start_date || "", w.deadline || "", statusLabel(w.status)].join(","));
-  }
-  const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `工单列表_${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-}
-
-async function doReset(row: any) {
-  if (!confirm(`确认把工单 ${row.code} 重置为「待派发(未发起)」？已发起的审批/执行记录将被清空。`)) return;
-  try {
-    await transitionWorkOrder(row.id, "reset");
-    await reload();
-  } catch (e: any) {
-    alert("重置失败：" + (e.message || "未知错误"));
-  }
-}
-
 onMounted(async () => {
   const q = route.query;
+  if (q.status === "closed") { router.replace("/closed"); return; }
   filters.status = q.status || undefined;
   filters.source_code = q.source_code || undefined;
   filters.priority = q.priority || undefined;
-  const [p, s, st, u] = await Promise.all([getProjects(), getSources(), getStatuses(), getUsersAll()]);
-  projects.value = p; sources.value = s; statuses.value = st;
+  const [s, st, u] = await Promise.all([getSources(), getStatuses(), getUsersAll()]);
+  sources.value = s;
+  statuses.value = st.filter((x: any) => x.code !== "closed");
   allUsers.value = u;
-  // 责任人 = 全员，审批人 = 审批人角色+管理员
-  executors.value = u;
-  approvers.value = u.filter((x: any) => x.role === 'approver' || x.role === 'admin');
   await reload();
 });
+
+watch(
+  () => route.query,
+  (q) => {
+    if (q.status === "closed") { router.replace("/closed"); return; }
+    if (q.status === undefined && q.source_code === undefined && q.priority === undefined) return;
+    filters.status = q.status || undefined;
+    filters.source_code = q.source_code || undefined;
+    filters.priority = q.priority || undefined;
+    page.value = 1;
+    reload();
+  },
+);
 </script>
 
 <style scoped>
-.wo-list .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+.wo-list .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
 .page-header h1 { font-size: var(--fs-h1); font-weight: 700; }
 .meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
 .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
-.src-tag { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 700; }
-.src-plan { background: #dbeafe; color: #1e40af; }
-.src-alert { background: #fee2e2; color: #991b1b; }
-.src-meeting { background: #fef3c7; color: #92400e; }
-.src-manual { background: #e0e7ff; color: #3730a3; }
-.dispatch-info { display: flex; flex-direction: column; gap: 10px; }
-.di-row { display: flex; align-items: center; gap: 12px; font-size: 13px; }
-.di-label { width: 80px; flex-shrink: 0; color: var(--muted); font-weight: 600; }
-.di-wrap { word-break: break-all; line-height: 1.5; }
-.di-edit { padding-top: 8px; border-top: 1px solid var(--border); margin-top: 4px; }
 .agent-import { display: flex; flex-direction: column; gap: 12px; }
 .ai-hint { color: var(--muted); font-size: 12px; margin: 0; }
 .ai-toolbar { display: flex; align-items: center; gap: 10px; }

@@ -1,7 +1,8 @@
 <template>
   <div class="dashboard" v-loading="loading">
+    <PageError v-if="!loading && loadError" title="看板加载失败" :message="loadError" @action="loadStats" />
     <!-- 空状态 -->
-    <t-card v-if="!loading && stats.total === 0" class="empty-card">
+    <t-card v-else-if="!loading && stats.total === 0" class="empty-card">
       <div class="empty-banner">
         <div class="empty-icon">📋</div>
         <div class="empty-title">暂无工单</div>
@@ -10,10 +11,10 @@
       </div>
     </t-card>
 
-    <template v-if="stats.total > 0">
+    <template v-if="!loadError && stats.total > 0">
       <!-- 统计卡片 -->
       <div class="card-row">
-        <t-card v-for="s in statCards" :key="s.key" class="stat-card" :class="s.cls" hover @click="goToList(s.filter)">
+        <t-card v-for="s in statCards" :key="s.key" class="stat-card" :class="s.cls" hover @click="goCard(s)">
           <div class="stat-num" :style="{ color: s.color }">{{ s.value }}</div>
           <div class="stat-lbl">{{ s.label }}</div>
         </t-card>
@@ -114,16 +115,23 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, nextTick } from "vue";
+import { computed, onMounted, onUnmounted, ref, nextTick } from "vue";
 import { useRouter } from "vue-router";
 import { getDashboardStats, type DashboardStats } from "@/api/dashboard";
 import { getTrends } from "@/api/pool";
 import { statusLabel, statusTheme, escLabel } from "@/utils/wo-display";
-import * as echarts from "echarts";
+import PageError from "@/components/PageError.vue";
+import * as echarts from "echarts/core";
+import { LineChart, PieChart } from "echarts/charts";
+import { GridComponent, TooltipComponent, LegendComponent } from "echarts/components";
+import { CanvasRenderer } from "echarts/renderers";
+
+echarts.use([LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
 
 const router = useRouter();
 const stats = ref<DashboardStats>(empty());
 const loading = ref(true);
+const loadError = ref("");
 
 function empty(): DashboardStats {
   return { total: 0, executing: 0, pending_verify: 0, overdue: 0, closed: 0, sla_compliance: 0,
@@ -161,17 +169,31 @@ const srcColor = (c: string) => srcColorMap[c] ?? "#8c8c8c";
 const srcClass = (c: string) => srcClassMap[c] ?? "";
 
 function goToList(f: any) { router.push({ path: "/work-orders", query: f }); }
+function goCard(s: any) {
+  // 已闭环默认归档：看闭环记录页，其余状态卡仍跳主列表筛选
+  if (s.key === "closed") router.push("/closed");
+  else goToList(s.filter);
+}
 function goDetail(id: number) { router.push(`/work-orders/${id}`); }
 
 const trendChart = ref<HTMLDivElement>();
 const typeChart = ref<HTMLDivElement>();
+let trendInstance: ReturnType<typeof echarts.init> | null = null;
+let typeInstance: ReturnType<typeof echarts.init> | null = null;
+function resizeCharts() { trendInstance?.resize(); typeInstance?.resize(); }
+function disposeCharts() {
+  trendInstance?.dispose(); typeInstance?.dispose();
+  trendInstance = null; typeInstance = null;
+}
 
 async function initCharts() {
   await nextTick();
   try {
     const trends = await getTrends();
     if (trendChart.value) {
+      trendInstance?.dispose();
       const c = echarts.init(trendChart.value);
+      trendInstance = c;
       c.setOption({
         tooltip: { trigger: "axis" },
         legend: { data: ["新增", "闭环", "逾期"], bottom: 0 },
@@ -186,7 +208,9 @@ async function initCharts() {
       });
     }
     if (typeChart.value) {
+      typeInstance?.dispose();
       const c = echarts.init(typeChart.value);
+      typeInstance = c;
       c.setOption({
         tooltip: { trigger: "item" },
         series: [{
@@ -199,13 +223,22 @@ async function initCharts() {
   } catch (e) { console.error(e); }
 }
 
-onMounted(async () => {
-  try { stats.value = await getDashboardStats(); }
-  catch (e) { console.error(e); }
-  finally { loading.value = false; }
-  await nextTick();
-  initCharts();
-});
+async function loadStats() {
+  loading.value = true;
+  loadError.value = "";
+  try {
+    stats.value = await getDashboardStats();
+  } catch (e: any) {
+    loadError.value = e?.message || "请检查网络连接后重试";
+    stats.value = empty();
+  } finally {
+    loading.value = false;
+  }
+  if (!loadError.value && stats.value.total > 0) await initCharts();
+}
+
+onMounted(() => { window.addEventListener("resize", resizeCharts); loadStats(); });
+onUnmounted(() => { window.removeEventListener("resize", resizeCharts); disposeCharts(); });
 </script>
 
 <style scoped>

@@ -23,7 +23,7 @@ def seed_users(db) -> dict:
         ("明南辉", "executor"), ("张雷雷", "executor"), ("塔拉", "executor"),
         ("明丹辉", "executor"), ("郭宝记", "executor"), ("陈立超", "executor"), ("周涛", "executor"),
         ("金惠良", "approver"), ("陈亮", "approver"), ("贾兴威", "approver"),
-        ("admin", "admin"),
+        ("李沛东", "admin"),
     ]
     ids = {}
     for name, role in people:
@@ -39,10 +39,10 @@ def seed_users(db) -> dict:
 
 def seed_projects(db, user_ids) -> dict:
     projs = [
-        ("TL-YX", "通辽永兴风电场", "wind", "内蒙古"),
-        ("WA-JZ", "瓮安建中HS300风电场", "wind", "贵州"),
-        ("GZ-EQ", "瓜州二期风电场", "wind", "甘肃"),
-        ("CT-TQ", "城投太旗光伏电站", "pv", "内蒙古"),
+        ("通辽永兴风电场", "wind", "华北"),
+        ("瓮安建中HS300风电场", "wind", "西南"),
+        ("瓜州二期风电场", "wind", "西北"),
+        ("城投太旗光伏电站", "pv", "华北"),
     ]
     # 责任人映射
     mapping = {
@@ -52,10 +52,11 @@ def seed_projects(db, user_ids) -> dict:
         "城投太旗光伏电站": ["张雷雷", "明南辉", "塔拉"],
     }
     ids = {}
-    for code, name, ptype, region in projs:
-        p = db.query(Project).filter(Project.code == code).first()
+    from app.services.project_codes import next_project_code
+    for name, ptype, region in projs:
+        p = db.query(Project).filter(Project.name == name).first()
         if not p:
-            p = Project(code=code, name=name, type=ptype, region=region)
+            p = Project(code=next_project_code(db), name=name, type=ptype, region=region)
             db.add(p)
             db.flush()
         ids[name] = p.id
@@ -111,6 +112,18 @@ def seed_config(db) -> None:
             db.add(ConfigDefinition(
                 category="status", code=code, name=info["name"], color=info.get("color"),
                 sort_order=i, extra={"next": info.get("next", [])},
+            ))
+
+    # 异常指标大类（指标类型 + 默认责任人 + 分析 Agent 指向）
+    for i, c in enumerate(cfg.get("anomaly_categories", [])):
+        if not db.query(ConfigDefinition).filter_by(category="anomaly_type", code=c["code"]).first():
+            db.add(ConfigDefinition(
+                category="anomaly_type", code=c["code"], name=c["name"], color=c.get("color"),
+                sort_order=i,
+                extra={
+                    "default_person_name": c.get("default_person_name"),
+                    "agent": c.get("agent") or "",
+                },
             ))
 
 # ── 工单类型：按 YWSYB-GLZY 真实指引重映射（2026-08-19） ──

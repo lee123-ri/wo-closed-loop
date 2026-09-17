@@ -1,6 +1,18 @@
 """钉钉群成员同步测试"""
+import pytest
+
 from app.api.dingtalk import sync_group_members
 from app.models import Project, User, PersonProjectMap
+
+
+@pytest.fixture(autouse=True)
+def _mock_group_members(monkeypatch):
+    """群成员同步依赖真实钉钉接口，测试用假数据替代（返回含 dingtalk_id/姓名 的成员）"""
+    from app.services import dingtalk as dt
+    monkeypatch.setattr(dt, "get_group_members", lambda cid: [
+        {"name": "测试成员A", "dingtalk_id": "test-dt-001"},
+        {"name": "测试成员B", "dingtalk_id": "test-dt-002"},
+    ])
 
 
 def test_sync_creates_mapping(db):

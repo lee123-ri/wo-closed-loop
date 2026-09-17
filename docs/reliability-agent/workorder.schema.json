@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://wo-closed-loop/reliability-agent/workorder.schema.json",
   "title": "可靠性Agent指标异常处置工单出参契约",
-  "description": "指标异常处置SOP技能(wind-farm-anomaly-sop)输出到软工单平台的工单结构化契约。字段对齐软工单OA审批模板(PROC-DD7BF4A0-0102-4A4E-B3D1-7BE5FE8F42AF)。本 schema 是「Agent 出参」与「软工单平台入库」之间的接口契约。",
+  "description": "指标异常处置SOP技能(wind-farm-anomaly-sop)输出到工单平台的工单结构化契约。字段对齐工单OA审批模板(PROC-DD7BF4A0-0102-4A4E-B3D1-7BE5FE8F42AF)。本 schema 是「Agent 出参」与「工单平台入库」之间的接口契约。",
   "type": "object",
   "required": ["schema_version", "project", "generated_at", "workorders"],
   "properties": {

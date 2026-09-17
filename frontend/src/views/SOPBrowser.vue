@@ -1,6 +1,6 @@
 <template>
   <div class="page">
-    <div class="header"><h1>SOP 知识库</h1><div class="meta">基于 YWSYB-GLZY 系列官方管理指引 · 双击卡片可编辑</div></div>
+    <div class="header"><h1>SOP 知识库</h1><div class="meta">基于 YWSYB-GLZY 系列官方管理指引 · 点击编辑按钮修改</div></div>
     <div class="card" v-for="sop in sops" :key="sop.id" style="margin-bottom:12px">
       <div class="card-hd" @click="sop._open = !sop._open" style="cursor:pointer">
         <h3>{{ sop.name }}</h3>
@@ -26,10 +26,8 @@
     </div>
 
     <!-- SOP 编辑弹窗 -->
-    <div v-if="editModal.open" class="modal-mask" @click.self="editModal.open = false">
-      <div class="modal modal-wide">
-        <h3>编辑 SOP · {{ editModal.name }}</h3>
-        <div class="modal-body-scroll">
+    <t-dialog v-model:visible="editModal.open" :header="'编辑 SOP · ' + editModal.name" width="640" :footer="false">
+      <div class="modal-body-scroll">
           <div class="form-group"><label>指引编号</label><input v-model="editModal.guidance_ref" /></div>
           <div class="form-group"><label>目的</label><textarea v-model="editModal.sop_purpose" rows="2"></textarea></div>
           <div class="form-group"><label>流程</label><textarea v-model="editModal.sop_scope" rows="2"></textarea></div>
@@ -52,14 +50,14 @@
           </div>
         </div>
         <div class="modal-actions">
-          <button class="btn btn-out" @click="editModal.open = false">取消</button>
-          <button class="btn btn-pri" @click="saveEdit" :disabled="saving">{{ saving ? '保存中…' : '保存' }}</button>
+          <t-button variant="outline" @click="editModal.open = false">取消</t-button>
+          <t-button theme="primary" @click="saveEdit" :disabled="saving">{{ saving ? '保存中…' : '保存' }}</t-button>
         </div>
-      </div>
-    </div>
+    </t-dialog>
   </div>
 </template>
 <script setup lang="ts">
+import { toast } from "@/utils/feedback";
 import { onMounted, reactive, ref } from "vue";
 import { getWoTypesFull } from "@/api/config";
 import { updateWoType } from "@/api/config-crud";
@@ -99,13 +97,13 @@ async function saveEdit() {
       sop_acceptance: editModal.sop_acceptance || null,
       sop_backfill_required: editModal.sop_backfill_required,
     };
-    try { data.sop_steps = editModal.sop_steps ? JSON.parse(editModal.sop_steps) : null; } catch { alert("标准步骤 JSON 格式错误"); return; }
-    try { data.sop_escalation = editModal.sop_escalation ? JSON.parse(editModal.sop_escalation) : null; } catch { alert("升级规则 JSON 格式错误"); return; }
-    try { data.sop_related_guidance = editModal.sop_related_guidance ? JSON.parse(editModal.sop_related_guidance) : null; } catch { alert("关联指引 JSON 格式错误"); return; }
+    try { data.sop_steps = editModal.sop_steps ? JSON.parse(editModal.sop_steps) : null; } catch { toast.warning("标准步骤 JSON 格式错误"); return; }
+    try { data.sop_escalation = editModal.sop_escalation ? JSON.parse(editModal.sop_escalation) : null; } catch { toast.warning("升级规则 JSON 格式错误"); return; }
+    try { data.sop_related_guidance = editModal.sop_related_guidance ? JSON.parse(editModal.sop_related_guidance) : null; } catch { toast.warning("关联指引 JSON 格式错误"); return; }
     await updateWoType(editModal.id, data);
     editModal.open = false;
     sops.value = (await getWoTypesFull()).map((s: any) => ({ ...s, _open: s._open ?? false }));
-  } catch (e: any) { alert("保存失败：" + e.message); }
+  } catch (e: any) { toast.error("保存失败：" + e.message); }
   finally { saving.value = false; }
 }
 
@@ -126,10 +124,6 @@ onMounted(async () => { sops.value = (await getWoTypesFull()).map((s: any) => ({
 .sop-related { display: flex; flex-wrap: wrap; gap: 6px; } .sop-ref { font-size: 11px; padding: 3px 8px; background: #eff6ff; color: var(--brand); border-radius: 4px; }
 
 /* 编辑弹窗 */
-.modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
-.modal { background: #fff; border-radius: 12px; padding: 24px; width: 420px; max-width: 90vw; max-height: 85vh; overflow-y: auto; }
-.modal-wide { width: 640px; }
-.modal h3 { font-size: 16px; margin-bottom: 16px; }
 .modal-body-scroll { max-height: 60vh; overflow-y: auto; padding-right: 4px; }
 .form-group { margin-bottom: 12px; }
 .form-group label { display: block; font-size: 12px; font-weight: 600; color: #4b5563; margin-bottom: 4px; }
@@ -140,7 +134,4 @@ onMounted(async () => { sops.value = (await getWoTypesFull()).map((s: any) => ({
 .checkbox-label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; font-weight: 400; }
 .checkbox-label input { width: auto; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
-.btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; }
-.btn-pri { background: var(--brand); color: #fff; } .btn-pri:disabled { opacity: 0.6; }
-.btn-out { background: #fff; color: #4b5563; border: 1px solid var(--border); } .btn-sm { padding: 4px 10px; font-size: 11px; }
 </style>

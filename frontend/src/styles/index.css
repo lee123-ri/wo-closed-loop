@@ -11,7 +11,12 @@
   --green: #2ba471;
   --amber: #e37318;
   --red: #d54941;
+  --blue: #0052d9;          /* stat 卡片蓝 */
   --sidebar-bg: #1d2129;
+
+  /* —— 组件基础变量（卡片圆角/阴影，全站 .card/.stat-card 依赖）—— */
+  --radius: 8px;
+  --shadow: 0 1px 4px rgba(22, 38, 58, 0.08);
 
   /* —— 字号比例（全站统一，禁止散用其他值）—— */
   --fs-display: 28px;   /* 统计大数字 */
@@ -41,6 +46,8 @@ a { color: inherit; text-decoration: none; }
   --td-brand-color-focus: #0052d9;
   --td-brand-color-active: #003cab;
   --td-brand-color-light: #e8f0ff;
+  --td-radius-medium: 8px;
+  --td-radius-large: 8px;
 }
 
 /* 统一页面标题 */
@@ -58,9 +65,30 @@ a { color: inherit; text-decoration: none; }
 .src-alert { background: #fee2e2; color: #991b1b; }
 .src-meeting { background: #fef3c7; color: #92400e; }
 .src-manual { background: #e0e7ff; color: #3730a3; }
+.src-measure { background: #e0f2fe; color: #075985; }
 
 /* 5 等分卡片通用行（替代 t-col，避免 12 栅格无法整除 5） */
 .equal-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
 .equal-row-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 @media (max-width: 900px) { .equal-row, .equal-row-4 { grid-template-columns: repeat(2, 1fr); } }
 
+/* 全局按钮（统一各视图复制粘贴的 .btn 样式，单一定义） */
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 32px; padding: 0 15px; border-radius: 6px; border: 1px solid transparent; cursor: pointer; font: inherit; font-size: var(--fs-body); font-weight: 500; line-height: 1.3; transition: background .15s, border-color .15s, box-shadow .15s; }
+.btn-pri { background: var(--brand); color: #fff; }
+.btn-pri:hover { background: var(--brand-dark); }
+.btn-out { background: #fff; color: #4b5563; border: 1px solid var(--border); }
+.btn-out:hover { background: #f9fafb; }
+.btn-sm { min-height: 28px; padding: 0 9px; font-size: var(--fs-meta); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* 旧页面仍在使用的原生输入框，与 TDesign 使用同一焦点反馈。 */
+:where(.form-group, .task-card-body, .backfill-form) :is(input, select, textarea):not(.t-input__inner):not(.t-textarea__inner):not(.ss-input):not([type="checkbox"]) {
+  font-family: inherit;
+  border-radius: 6px;
+}
+:where(.form-group, .task-card-body, .backfill-form) :is(input, select, textarea):not(.t-input__inner):not(.t-textarea__inner):not(.ss-input):not([type="checkbox"]):focus-visible {
+  outline: 0;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px var(--brand-light);
+}

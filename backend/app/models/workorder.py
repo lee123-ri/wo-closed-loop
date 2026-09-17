@@ -19,6 +19,10 @@ class WorkOrder(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, comment="RW-2026-0001")
+    client_request_id: Mapped[str | None] = mapped_column(
+        String(64), unique=True, nullable=True,
+        comment="外部 API 调用方请求唯一标识（幂等去重）",
+    )
     title: Mapped[str] = mapped_column(String(256), nullable=False)
     reason: Mapped[str | None] = mapped_column(Text, comment="触发原因")
     action: Mapped[str | None] = mapped_column(Text, comment="行动要求")
@@ -30,6 +34,8 @@ class WorkOrder(TimestampMixin, Base):
     approver_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), comment="审批人")
     type_id: Mapped[int | None] = mapped_column(ForeignKey("workorder_type_kb.id"), comment="工单类型")
     source_code: Mapped[str] = mapped_column(String(32), comment="来源 code")
+    metric_type: Mapped[str | None] = mapped_column(String(32), comment="异常指标大类 power_gen|curtailment|dual_rule|reliability|info_quality|contract|cost|satisfaction")
+    alert_phase: Mapped[str | None] = mapped_column(String(32), comment="alert 五阶段：confirming|dispatching|tracking|reexamining|recovered（非alert为None）")
     region: Mapped[str | None] = mapped_column(String(16), comment="区域：华北/华中/华东/华南/西北/西南/东北")
     status: Mapped[str] = mapped_column(String(32), default="pending", comment="状态 code")
     priority: Mapped[str] = mapped_column(String(32), default="P2", comment="P1|P2|P3")
@@ -86,6 +92,36 @@ class AgentImportBatch(TimestampMixin, Base):
     period: Mapped[str | None] = mapped_column(String(64), comment="分析周期，如 2026-04~05")
     source_system: Mapped[str | None] = mapped_column(String(32), default="指标异常处置SOP", comment="产出Agent")
     work_order_codes: Mapped[list | None] = mapped_column(JSONB, comment="本批次生成的工单编号列表")
+
+
+class WorkOrderMeasureLink(TimestampMixin, Base):
+    """异常指标主单 ↔ 措施工单 多对多关联。
+
+    一条异常指标工单能派发多条措施工单；一条措施工单可被多条（同项目同类）异常复用挂载。
+    进度「2/11」与「全部措施闭环→置待复核」都基于此表按 host 侧聚合。
+    """
+    __tablename__ = "work_order_measure_links"
+    __table_args__ = {"comment": "异常主单-措施工单关联（多对多）"}
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    host_wo_id: Mapped[int] = mapped_column(ForeignKey("work_orders.id", ondelete="CASCADE"), index=True, comment="异常指标主单")
+    measure_wo_id: Mapped[int] = mapped_column(ForeignKey("work_orders.id", ondelete="CASCADE"), index=True, comment="措施工单")
+    link_source: Mapped[str] = mapped_column(String(16), default="generated", comment="generated|reused|manual")
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime, comment="解除关联时间（软删）")
+
+
+class AnomalyOccurrence(TimestampMixin, Base):
+    """异常指标主单上的「发生记录」——每次异常发生记一条（含合并进来的同类异常），供指标复核看历史发生次数。"""
+    __tablename__ = "anomaly_occurrences"
+    __table_args__ = {"comment": "异常主单发生记录（合并/多月复用）"}
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    host_wo_id: Mapped[int] = mapped_column(ForeignKey("work_orders.id", ondelete="CASCADE"), index=True)
+    occurred_at: Mapped[date | None] = mapped_column(Date, comment="异常发生日期/月份")
+    metric_type: Mapped[str | None] = mapped_column(String(32))
+    indicator_type: Mapped[str | None] = mapped_column(String(128), comment="异常指标原文")
+    pool_item_id: Mapped[int | None] = mapped_column(ForeignKey("data_pool_items.id"), comment="来源数据池记录（合并进来的那笔）")
+    note: Mapped[str | None] = mapped_column(String(256), comment="如：合并自 RW-xxx / 新建")
 
 
 class StatusLog(TimestampMixin, Base):

@@ -32,11 +32,40 @@ class WorkOrderCreate(WorkOrderBase):
     parent_pool_id: int | None = None  # 来源数据池记录
 
 
+class WorkOrderBasicUpdate(BaseModel):
+    """管理员在详情页编辑「基本信息」（不含 status 等流转/回填字段）。
+
+    字段全部可选；`exclude_unset` 保证仅更新前端显式传入的字段；
+    未传字段保持原值，显式传 null 视为清空对应字段。
+    """
+
+    title: str | None = None
+    reason: str | None = None
+    action: str | None = None
+    conclusion: str | None = None
+    project_id: int | None = None
+    type_id: int | None = None
+    person_id: int | None = None
+    approver_id: int | None = None
+    priority: str | None = None
+    region: str | None = None
+    planned_start_date: date | None = None
+    deadline: date | None = None
+    completed_date: date | None = None
+
+    @field_validator("region")
+    @classmethod
+    def _norm_region(cls, v: str | None) -> str | None:
+        return normalize_region(v)
+
+
 class WorkOrderUpdate(BaseModel):
     title: str | None = None
     reason: str | None = None
     action: str | None = None
     status: str | None = None
+    project_id: int | None = None
+    type_id: int | None = None
     person_id: int | None = None
     approver_id: int | None = None
     priority: str | None = None
@@ -61,6 +90,9 @@ class WorkOrderUpdate(BaseModel):
 class WorkOrderOut(WorkOrderBase):
     id: int
     code: str
+    client_request_id: str | None = None
+    metric_type: str | None = None
+    alert_phase: str | None = None
     status: str
     type_id: int | None
     created_date: date
@@ -97,8 +129,20 @@ class WorkOrderOut(WorkOrderBase):
     judgment_result: dict[str, Any] | None = None
     judgment_requested_at: datetime | None = None
     judgment_completed_at: datetime | None = None
+    # alert 主单措施进度（2/11）
+    measure_progress: dict[str, Any] | None = None
+    # alert 主单发生记录（合并/多月复用）
+    occurrences: list[dict[str, Any]] | None = None
 
     model_config = {"from_attributes": True}
+
+
+class ProjectOption(BaseModel):
+    """工单列表中真实出现过的项目（用于筛选栏下拉，避免列出没有任何工单的项目）。"""
+
+    id: int
+    name: str
+    region: str | None = None
 
 
 class WorkOrderListOut(BaseModel):
@@ -106,6 +150,7 @@ class WorkOrderListOut(BaseModel):
     total: int
     page: int
     page_size: int
+    project_options: list[ProjectOption] = []
 
 
 class StatusLogOut(BaseModel):

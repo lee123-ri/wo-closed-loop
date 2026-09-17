@@ -3,7 +3,7 @@
     <div class="login-card">
       <div class="login-header">
         <div class="logo">◆</div>
-        <h1>软工单闭环管理平台</h1>
+        <h1>工单管理平台</h1>
         <p class="sub">新能源电站运维 · 工单系统</p>
       </div>
 
@@ -12,15 +12,18 @@
           <span class="dt-icon">𝚫</span>
           {{ loading ? "登录中…" : "钉钉账号一键登录" }}
         </button>
+        <p class="login-tip">本平台仅对已登记的管理人员开放</p>
 
-        <div class="divider"><span>开发模式</span></div>
+        <template v-if="devLoginEnabled">
+          <div class="divider"><span>开发模式</span></div>
 
-        <select v-model="devUser" class="dev-select">
-          <option v-for="u in devUsers" :key="u.id" :value="u">{{ u.name }} ({{ u.role }})</option>
-        </select>
-        <button class="btn-dev" @click="doDevLogin" :disabled="loading">
-          {{ loading ? "登录中…" : "开发环境登录" }}
-        </button>
+          <select v-model="devUser" class="dev-select">
+            <option v-for="u in devUsers" :key="u.id" :value="u">{{ u.name }} ({{ u.role }})</option>
+          </select>
+          <button class="btn-dev" @click="doDevLogin" :disabled="loading">
+            {{ loading ? "登录中…" : "开发环境登录" }}
+          </button>
+        </template>
       </div>
 
       <div class="login-footer">
@@ -31,6 +34,7 @@
 </template>
 
 <script setup lang="ts">
+import { toast } from "@/utils/feedback";
 import { onMounted, ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { getDingTalkLoginUrl, dingtalkCallback, getPermissions, type LoginResult } from "@/api/auth";
@@ -42,9 +46,11 @@ const route = useRoute();
 const store = useUserStore();
 const loading = ref(false);
 const devUser = ref<any>(null);
+// 开发登录入口：仅当 VITE_DEV_LOGIN=true 时显示（后端另有开关，双重保险）
+const devLoginEnabled = import.meta.env.VITE_DEV_LOGIN === "true";
 
 const devUsers = [
-  { id: 14, name: "admin", role: "admin" },
+  { id: 14, name: "李沛东", role: "admin" },
   { id: 11, name: "金惠良", role: "approver" },
   { id: 1, name: "王小宁", role: "executor" },
 ];
@@ -56,7 +62,7 @@ async function doDingTalkLogin() {
     const { url } = await getDingTalkLoginUrl(redirect);
     window.location.href = url;
   } catch (e: any) {
-    alert("获取登录链接失败：" + e.message);
+    toast.error("获取登录链接失败：" + e.message);
     loading.value = false;
   }
 }
@@ -76,7 +82,7 @@ async function doDevLogin() {
     const redirect = (route.query.redirect as string) || "/";
     router.push(redirect);
   } catch (e: any) {
-    alert("登录失败：" + e.message);
+    toast.error("登录失败：" + e.message);
   } finally {
     loading.value = false;
   }
@@ -91,18 +97,18 @@ async function loadPermissions() {
 }
 
 onMounted(async () => {
-  // 钉钉 OAuth 回调
-  const code = route.query.code as string;
+  // 钉钉 OAuth 回调（新版授权回跳参数名为 authCode，兼容旧参数 code）
+  const code = (route.query.authCode as string) || (route.query.code as string);
   if (code) {
     loading.value = true;
     try {
-      const redirect_path = (route.query.redirect_path as string) || "/";
+      const redirect_path = (route.query.state as string) || (route.query.redirect_path as string) || "/";
       const res = await dingtalkCallback(code, redirect_path);
       store.setAuth(res.access_token, res.user);
       await loadPermissions();
       router.push(res.redirect_path || "/");
     } catch (e: any) {
-      alert("钉钉登录失败：" + e.message);
+      toast.error("钉钉登录失败：" + e.message);
     } finally {
       loading.value = false;
     }
@@ -166,6 +172,12 @@ onMounted(async () => {
 .btn-dingtalk:hover { background: #0074d9; }
 .btn-dingtalk:disabled { opacity: 0.6; cursor: not-allowed; }
 .dt-icon { font-size: 22px; }
+.login-tip {
+  margin: 12px 0 0;
+  text-align: center;
+  font-size: 12px;
+  color: #94a3b8;
+}
 
 .divider {
   display: flex;
@@ -190,6 +202,19 @@ onMounted(async () => {
   font-size: 14px;
   margin-bottom: 10px;
 }
+.pw-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+.pw-input:focus {
+  outline: none;
+  border-color: #0089ff;
+}
 .btn-dev {
   width: 100%;
   padding: 12px;
@@ -200,6 +225,7 @@ onMounted(async () => {
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
+  margin-bottom: 4px;
 }
 .btn-dev:hover { background: #f1f5f9; }
 

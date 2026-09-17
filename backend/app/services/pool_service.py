@@ -9,12 +9,23 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
-from app.models import DataPoolItem, Project, RegionPMO, User, WorkOrder, WorkOrderTypeKB, StatusLog
+from app.models import ConfigDefinition, DataPoolItem, Project, RegionPMO, User, WorkOrder, WorkOrderTypeKB, StatusLog, WorkOrderMeasureLink, AnomalyOccurrence
 from app.services.priority_service import normalize_priority
 from app.services.roles import resolve_role_user_id
 
 
 # ── 工具函数 ──────────────────────────────────────────────
+
+def _notify_dispatched(wo_ids: list[int]) -> None:
+    """批量为「已派发」工单触发钉钉群提醒（按责任人合并一条，异常吞掉只打日志）。"""
+    if not wo_ids:
+        return
+    try:
+        from app.services.notification_service import trigger_dispatch_group
+        trigger_dispatch_group(wo_ids)
+    except Exception as e:
+        print(f"[pool] 派发通知触发跳过: {e}")
+
 
 def _extract_planned_start(item: DataPoolItem) -> date | None:
     """从数据池原始数据中提取计划开始时间"""
@@ -164,16 +175,23 @@ def generate_from_pool(db: Session, pool_ids: list[int]) -> dict:
     skipped = 0
     errors: list[str] = []
     work_order_ids: list[int] = []
+    dispatched_ids: list[int] = []
 
     # 预加载映射
     projects = {p.name: p for p in db.query(Project).all()}
     users = {u.name: u for u in db.query(User).all()}
-    # 区域 → PMO 映射（用于异常指标默认责任人）
+    # 区域 → PMO 映射（用于异常指标默认责任人兜底）
     region_pmo_map: dict[str, User] = {}
     for rpmo in db.query(RegionPMO).all():
         user = db.get(User, rpmo.user_id)
         if user:
             region_pmo_map[rpmo.region] = user
+    # 异常大类 → 默认责任人（规则配置 config_definitions.category=anomaly_type）
+    metric_default_person: dict[str, str] = {}
+    for cd in db.query(ConfigDefinition).filter_by(category="anomaly_type").all():
+        extra = cd.extra or {}
+        if extra.get("default_person_name"):
+            metric_default_person[cd.code] = extra["default_person_name"]
     # 默认工单类型
     default_type = db.query(WorkOrderTypeKB).order_by(WorkOrderTypeKB.sort_order).first()
     # 默认审批人：优先按角色解析（后台可改人名），兜底用类型缓存的 person id
@@ -187,10 +205,15 @@ def generate_from_pool(db: Session, pool_ids: list[int]) -> dict:
             project = _match_project(item.project_name, projects)
 
             # 匹配责任人
-            # 异常指标类：优先按项目区域查找区域PMO
+            # 异常指标类：优先按「异常大类默认责任人」（规则配置），
+            # 大类未配置再按项目区域 PMO 兜底，最后按异常表整改人姓名匹配
             person = None
-            if item.pool_type == "anomaly" and project and project.region:
-                person = region_pmo_map.get(project.region)
+            if item.pool_type == "anomaly":
+                default_name = metric_default_person.get(item.metric_type)
+                if default_name:
+                    person = _match_person(default_name, users)
+                if not person and project and project.region:
+                    person = region_pmo_map.get(project.region)
             # 如果区域PMO不存在，或非异常类：按姓名匹配
             if not person and item.person_name:
                 person = _match_person(item.person_name, users)
@@ -221,6 +244,7 @@ def generate_from_pool(db: Session, pool_ids: list[int]) -> dict:
                 approver_id=default_approver_id,
                 type_id=default_type.id if default_type else None,
                 source_code=source_code,
+                metric_type=item.metric_type,
                 region=project.region if project and project.region else None,
                 priority=priority,
                 status="dispatched" if item.pool_type == "plan" else "pending",
@@ -236,16 +260,29 @@ def generate_from_pool(db: Session, pool_ids: list[int]) -> dict:
                 work_order_id=wo.id, from_status=None, to_status=wo.status,
                 note=f"{status_note} ({item.pool_type}/{item.source_system})",
             ))
+            # 异常主单：记一条「发生记录」（供指标复核看历史发生次数 / 复用匹配）
+            if item.pool_type == "anomaly":
+                db.add(AnomalyOccurrence(
+                    host_wo_id=wo.id,
+                    occurred_at=date.today(),
+                    metric_type=item.metric_type,
+                    indicator_type=(item.raw_data or {}).get("anomaly_type"),
+                    pool_item_id=item.id,
+                    note="新建",
+                ))
 
             item.status = "generated"
             item.work_order_id = wo.id
             generated += 1
             work_order_ids.append(wo.id)
+            if item.pool_type == "plan":
+                dispatched_ids.append(wo.id)
         except Exception as e:
             skipped += 1
             errors.append(f"记录 {item.id} ({item.title[:30]}): {e}")
 
     db.commit()
+    _notify_dispatched(dispatched_ids)
     return {"generated": generated, "skipped": skipped, "errors": errors, "work_order_ids": work_order_ids}
 
 
@@ -351,6 +388,9 @@ def backfill_work_order(db: Session, wo_id: int, reason: str | None, action: str
 
     db.commit()
     db.refresh(wo)
+    if triggered_wo_id:
+        from app.services.notification_service import trigger_measure_dispatch
+        trigger_measure_dispatch(wo.id, [triggered_wo_id])
 
     result = {
         "work_order_id": wo.id,
@@ -419,6 +459,108 @@ def _create_triggered_wo(
                      note=f"由工单 {parent_wo.code} 判定生成·PMO已审核直接派发"))
     parent_wo.triggered_wo_id = new_wo.id
     return new_wo.id
+
+
+# ── alert 五阶段：措施工单关联 / 进度 / 闭环回写 ─────────
+
+def _link_measure(db: Session, host_wo_id: int, measure_wo_id: int, link_source: str = "generated") -> WorkOrderMeasureLink:
+    """把一条措施工单挂载到异常主单（多对多）。"""
+    link = WorkOrderMeasureLink(host_wo_id=host_wo_id, measure_wo_id=measure_wo_id, link_source=link_source)
+    db.add(link)
+    return link
+
+
+def measure_progress(db: Session, host_wo_id: int) -> dict:
+    """异常主单的措施进度：{closed, total, measures}——2/11 的分母/分子 + 措施工单列表。"""
+    links = db.query(WorkOrderMeasureLink).filter(
+        WorkOrderMeasureLink.host_wo_id == host_wo_id,
+        WorkOrderMeasureLink.removed_at.is_(None),
+    ).all()
+    closed = 0
+    measures: list[dict] = []
+    for l in links:
+        m = db.get(WorkOrder, l.measure_wo_id)
+        if not m:
+            continue
+        if m.status == "closed":
+            closed += 1
+        measures.append({"id": m.id, "code": m.code, "status": m.status, "title": m.title})
+    return {"closed": closed, "total": len(measures), "measures": measures}
+
+
+def _create_measure_from_task(db: Session, host_wo: WorkOrder, task: dict, link_source: str = "generated") -> int:
+    """从一条措施草稿建「待派发(pending)」措施工单并挂载到主单，返回措施工单 ID。"""
+    final_title = (task.get("title") or f"措施执行：{host_wo.title[:200]}")[:256]
+    users = {u.name: u for u in db.query(User).all()}
+    person = None
+    if task.get("person_id"):
+        person = db.get(User, task.get("person_id"))
+    elif task.get("person_name"):
+        person = _match_person(task["person_name"], users)
+    approver = None
+    if task.get("approver_id"):
+        approver = db.get(User, task.get("approver_id"))
+    elif task.get("approver_name"):
+        approver = _match_person(task["approver_name"], users)
+
+    def _to_date(s):
+        s = (s or "").strip()
+        if not s:
+            return None
+        try:
+            return date.fromisoformat(s)
+        except (ValueError, TypeError):
+            return None
+
+    deadline_val = _to_date(task.get("deadline"))
+    planned_start_val = _to_date(task.get("planned_start_date"))
+
+    new_wo = WorkOrder(
+        code=_next_code(db),
+        title=final_title,
+        reason=task.get("reason") or f"由工单 {host_wo.code} 触发",
+        action=task.get("action") or host_wo.backfill_action or final_title,
+        project_id=host_wo.project_id,
+        person_id=person.id if person else host_wo.person_id,
+        approver_id=approver.id if approver else host_wo.approver_id,
+        type_id=task.get("type_id") or host_wo.type_id,
+        region=host_wo.region,
+        source_code="measure",  # 措施工单：来源=措施工单（区别于监视告警主单），走普通 OA 流转
+        metric_type=host_wo.metric_type,
+        priority=task.get("priority") or host_wo.priority,
+        status="pending",  # 待派发：阶段②下发时才转 dispatched
+        created_date=date.today(),
+        planned_start_date=planned_start_val or host_wo.planned_start_date,  # 任务级优先，缺省继承主单
+        deadline=deadline_val or host_wo.deadline,
+    )
+    db.add(new_wo)
+    db.flush()
+    db.add(StatusLog(work_order_id=new_wo.id, from_status=None, to_status="pending",
+                     note=f"由工单 {host_wo.code} 分析确认·措施工单待派发"))
+    _link_measure(db, host_wo.id, new_wo.id, link_source)
+    return new_wo.id
+
+
+def _notify_measure_closed(db: Session, measure_wo: WorkOrder) -> None:
+    """措施工单闭环后：回写所有关联异常主单的进度（2/11），全闭环则自动置「待复核」。"""
+    if not measure_wo or measure_wo.status != "closed":
+        return
+    links = db.query(WorkOrderMeasureLink).filter(
+        WorkOrderMeasureLink.measure_wo_id == measure_wo.id,
+        WorkOrderMeasureLink.removed_at.is_(None),
+    ).all()
+    for l in links:
+        host = db.get(WorkOrder, l.host_wo_id)
+        if not host or host.status == "closed":
+            continue
+        prog = measure_progress(db, host.id)
+        db.add(StatusLog(work_order_id=host.id, from_status=host.status, to_status=host.status,
+                         note=f"措施 {measure_wo.code} 已闭环（{prog['closed']}/{prog['total']}）"))
+        if prog["total"] and prog["closed"] >= prog["total"] and host.alert_phase == "tracking":
+            host.alert_phase = "reexamining"
+            db.add(StatusLog(work_order_id=host.id, from_status=host.status, to_status=host.status,
+                             note="全部措施已闭环·自动进入指标复核"))
+    # 注意：不在此提交，由调用方（transition / apply_oa_event）统一 commit
 
 
 def _next_code(db: Session) -> str:

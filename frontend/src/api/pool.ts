@@ -89,9 +89,7 @@ export const deletePoolItem = (id: number) =>
 export const uploadPoolCSV = (pool_type: string, file: File) => {
   const fd = new FormData();
   fd.append("file", file);
-  return http.post<any, PoolImportResult>(`/pool/upload?pool_type=${pool_type}`, fd, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
+  return http.post<any, PoolImportResult>(`/pool/upload?pool_type=${pool_type}`, fd);
 };
 
 // 批量生成工单
@@ -137,13 +135,13 @@ export const exportJudgment = (wo_id: number) =>
 export const importJudgment = (wo_id: number, data: any) =>
   http.post<any, any>(`/work-orders/${wo_id}/import-judgment`, data);
 
-// 人员看板
-export const getPersonDashboard = (user_id: number) =>
-  http.get<any, any>(`/dashboard/person/${user_id}`);
+// 我的工单（按登录人行级范围聚合统计：admin 全部 / 区域PMO 区域 / 本人）
+export const getMyDashboard = () =>
+  http.get<any, any>("/dashboard/mine");
 
 // 工单日历
-export const getCalendar = (year: number, month: number, person_id?: number, project_id?: number) =>
-  http.get<any, any>("/dashboard/calendar", { params: { year, month, person_id, project_id } });
+export const getCalendar = (year: number, month: number, mine?: boolean, project_id?: number) =>
+  http.get<any, any>("/dashboard/calendar", { params: { year, month, mine, project_id } });
 
 // 趋势数据
 export const getTrends = (months?: number) =>

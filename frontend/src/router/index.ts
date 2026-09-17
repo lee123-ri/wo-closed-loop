@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { useUserStore } from "@/stores/user";
+import { getMe, getPermissions } from "@/api/auth";
+import { MENU_GROUPS, findMenuByPath } from "@/menu";
 
 const router = createRouter({
   history: createWebHistory(),
@@ -37,6 +39,11 @@ const router = createRouter({
 router.beforeEach(async (to, _from, next) => {
   const store = useUserStore();
 
+  // 钉钉授权码落在根路径（回跳地址不带 /login）：先带到登录页换 token，别被守卫冲掉
+  if ((to.query.authCode || to.query.code) && to.path !== "/login") {
+    return next({ path: "/login", query: { ...to.query } });
+  }
+
   // 登录页放行
   if (to.path === "/login") {
     if (store.isLoggedIn) return next("/");
@@ -50,7 +57,6 @@ router.beforeEach(async (to, _from, next) => {
       const token = localStorage.getItem("wo_token");
       if (token) {
         try {
-          const { getMe, getPermissions } = await import("@/api/auth");
           const user = await getMe();
           store.setAuth(token, user);
           store.permissions = await getPermissions();
@@ -62,20 +68,55 @@ router.beforeEach(async (to, _from, next) => {
       return next(`/login?redirect=${to.path}`);
     }
 
-    // 权限检查：管理员和审批人可以访问所有页面
-    if (store.isAdmin || store.isApprover) return next();
+    // 确保权限配置已加载（登录后正常路径已加载；此处兜底一次）
+    if (!store.permissions) {
+      try {
+        store.permissions = await getPermissions();
+      } catch {
+        /* 加载失败保持 fail-open */
+      }
+    }
 
-    // executor 只能访问我的工单、工单详情、闭环记录
-    const allowedPaths = ["/my", "/closed"];
-    if (to.path.startsWith("/work-orders/")) return next(); // 工单详情
-    if (allowedPaths.includes(to.path)) return next();
-    if (to.path === "/" || to.path === "") return next("/my"); // 重定向到我的工单
+    // admin 超管恒放行
+    if (store.isAdmin) return next();
 
-    // 其他页面拒绝
-    return next("/my");
+    // 工单详情对已登录用户放行（详情不在菜单权限里）
+    if (to.path.startsWith("/work-orders/")) return next();
+
+    // 根路径重定向到第一个有权限的菜单
+    if (to.path === "/" || to.path === "") {
+      const first = firstAccessibleMenu();
+      if (!first) {
+        store.logout();
+        return next("/login");
+      }
+      return next(first);
+    }
+
+    // 其余按已保存的菜单权限配置判断
+    const menu = findMenuByPath(to.path);
+    if (menu && store.canAccessMenu(menu.group, menu.title)) return next();
+
+    const failover = firstAccessibleMenu();
+    if (!failover) {
+      store.logout();
+      return next("/login");
+    }
+    return next(failover);
   }
 
   next();
 });
+
+// 取第一个当前角色可访问的菜单路径；无任何权限时返回 null
+function firstAccessibleMenu(): string | null {
+  const store = useUserStore();
+  for (const g of MENU_GROUPS) {
+    for (const item of g.items) {
+      if (store.canAccessMenu(g.label, item.title)) return item.path;
+    }
+  }
+  return null;
+}
 
 export default router;

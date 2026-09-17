@@ -1,5 +1,6 @@
 """Celery 应用配置：异步任务 + 定时任务（SLA 扫描、升级检查）。"""
 from celery import Celery
+from celery.schedules import crontab
 
 from app.core.config import get_settings
 
@@ -34,5 +35,17 @@ celery_app.conf.beat_schedule = {
     "daily-reminder": {
         "task": "app.tasks.daily_reminder",
         "schedule": 1800.0,  # 每30分钟检查（仅9:00-9:59执行）
+    },
+    "sync-anomaly-daily": {
+        "task": "app.tasks.sync_anomaly_daily",
+        "schedule": 300.0,  # 每 5 分钟增量同步异常指标表（只落新增，准实时）
+    },
+    "sync-plan-draft": {
+        "task": "app.tasks.sync_plan_draft",
+        "schedule": 3600.0,  # 每 1 小时轮询钉盘初稿文件夹导入非EAM计划工单（下载解析较重）
+    },
+    "sweep": {
+        "task": "app.tasks.sweep",
+        "schedule": 600.0,  # 每 10 分钟主动巡检：静默失效扫描 → 告警
     },
 }

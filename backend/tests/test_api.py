@@ -2,8 +2,8 @@
 from app.api.admin import clear_transactional_data
 
 
-def test_dashboard_stats(client):
-    r = client.get("/api/dashboard/stats")
+def test_dashboard_stats(client_auth):
+    r = client_auth.get("/api/dashboard/stats")
     assert r.status_code == 200
     d = r.json()
     assert "total" in d
@@ -11,48 +11,48 @@ def test_dashboard_stats(client):
     assert "overdue_items" in d
 
 
-def test_config_sources(client):
-    r = client.get("/api/config/sources")
+def test_config_sources(client_auth):
+    r = client_auth.get("/api/config/sources")
     assert r.status_code == 200
     assert len(r.json()) >= 4  # plan/alert/meeting/manual
 
 
-def test_config_parsing_rules_crud(client):
+def test_config_parsing_rules_crud(client_auth):
     # 新增
-    r = client.post("/api/config/parsing-rules", json={"name": "测试规则X", "pattern": "测试X", "weight": 3})
+    r = client_auth.post("/api/config/parsing-rules", json={"name": "测试规则X", "pattern": "测试X", "weight": 3})
     assert r.status_code == 201
     rid = r.json()["id"]
     # 改权重
-    r2 = client.patch(f"/api/config/parsing-rules/{rid}?weight=5")
+    r2 = client_auth.patch(f"/api/config/parsing-rules/{rid}?weight=5")
     assert r2.json()["weight"] == 5
     # 删除
-    r3 = client.delete(f"/api/config/parsing-rules/{rid}")
+    r3 = client_auth.delete(f"/api/config/parsing-rules/{rid}")
     assert r3.status_code == 204
 
 
-def test_work_order_type_crud(client):
-    r = client.post("/api/config/work-order-types", json={"type_code": "tt", "name": "测试类型", "default_priority": "P3"})
+def test_work_order_type_crud(client_auth):
+    r = client_auth.post("/api/config/work-order-types", json={"type_code": "tt", "name": "测试类型", "default_priority": "P3"})
     assert r.status_code == 201
     tid = r.json()["id"]
-    client.delete(f"/api/config/work-order-types/{tid}")
+    client_auth.delete(f"/api/config/work-order-types/{tid}")
 
 
-def test_sla_update(client):
-    r = client.get("/api/config/sla")
+def test_sla_update(client_auth):
+    r = client_auth.get("/api/config/sla")
     p1 = next(s for s in r.json() if s["priority"] == "P1")
-    r2 = client.patch(f"/api/config/sla/{p1['id']}", json={"deadline_days": 2})
+    r2 = client_auth.patch(f"/api/config/sla/{p1['id']}", json={"deadline_days": 2})
     assert r2.json()["deadline_days"] == 2
 
 
-def test_parse_minutes_api(client):
-    r = client.post("/api/import/parse-minutes", json={"text": "1. 通辽永兴变桨排查 王小宁 8月15日前"})
+def test_parse_minutes_api(client_auth):
+    r = client_auth.post("/api/import/parse-minutes", json={"text": "1. 通辽永兴变桨排查 王小宁 8月15日前"})
     assert r.status_code == 200
     assert r.json()["count"] >= 1
 
 
-def test_clear_data(client, db):
+def test_clear_data(client_auth, db):
     """清空事务数据，配置保留"""
-    r = client.delete("/api/admin/clear-data")
+    r = client_auth.delete("/api/admin/clear-data")
     assert r.status_code == 200
     cleared = r.json()["cleared"]
     assert "work_orders" in cleared

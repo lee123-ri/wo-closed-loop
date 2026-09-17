@@ -1,9 +1,10 @@
 """审计日志"""
-from sqlalchemy import Text
+from datetime import datetime
+
+from sqlalchemy import DateTime, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
-from app.models.base import TimestampMixin
 
 
 class AuditLog(Base):
@@ -17,3 +18,5 @@ class AuditLog(Base):
     target_type: Mapped[str | None] = mapped_column(comment="work_order|config|...")
     target_id: Mapped[int | None] = mapped_column()
     detail: Mapped[str | None] = mapped_column(Text, comment="JSON 详情")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)

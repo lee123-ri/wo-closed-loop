@@ -28,7 +28,7 @@ PROCESS_CODE_FILE = Path(__file__).resolve().parent / ".oa_template_process_code
 
 MANUAL_GUIDE = """
 ╔══════════════════════════════════════════════════════════════════╗
-║              软工单闭环审批 · 钉钉OA模板创建指南                ║
+║              工单闭环审批 · 钉钉OA模板创建指南                ║
 ╚══════════════════════════════════════════════════════════════════╝
 
 【前置条件】
@@ -46,8 +46,8 @@ MANUAL_GUIDE = """
 【第二步：创建新表单】
   点击「创建新表单」→ 选择「普通表单」
 
-  表单名称：软工单闭环审批
-  表单说明：软工单闭环管理 - 责任指派 → 执行佐证 → 审批闭环
+  表单名称：工单闭环审批
+  表单说明：工单管理 - 责任指派 → 执行佐证 → 审批闭环
   分组：建议放在「项目管理」或自建分组
 
 【第三步：配置表单字段】
@@ -105,7 +105,7 @@ MANUAL_GUIDE = """
   发布成功后，记下表单的 processCode（在表单详情页URL中可找到）
 
 【第六步：验证并记录】
-  1. 刷新页面，在表单列表中找到"软工单闭环审批"
+  1. 刷新页面，在表单列表中找到"工单闭环审批"
   2. 记住模板唯一标识（processCode）
   3. 运行验证脚本：
      python3 verify_template.py
@@ -130,8 +130,8 @@ MANUAL_GUIDE = """
 
 
 TEMPLATE_EXPORT = {
-    "template_name": "软工单闭环审批",
-    "template_description": "软工单闭环管理 - 责任指派 → 执行佐证 → 审批闭环",
+    "template_name": "工单闭环审批",
+    "template_description": "工单管理 - 责任指派 → 执行佐证 → 审批闭环",
     "fields": [
         {
             "field_name": "工单编号",
@@ -220,7 +220,7 @@ TEMPLATE_EXPORT = {
 
 
 def main():
-    parser = argparse.ArgumentParser(description="软工单钉钉OA审批模板创建工具")
+    parser = argparse.ArgumentParser(description="工单钉钉OA审批模板创建工具")
     parser.add_argument("--export", action="store_true", help="导出模板配置JSON")
     parser.add_argument("--guide", action="store_true", help="显示创建指南")
     args = parser.parse_args()

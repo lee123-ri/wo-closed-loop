@@ -6,7 +6,7 @@ from app.models.base import TimestampMixin
 from app.models.config import ConfigDefinition, ApprovalFlow, PriorityRule, ParsingRule, SLADefinition, NotificationPolicy, PersonProjectMap, WorkOrderTypeKB, RegionPMO, RoleAssignment
 from app.models.user import User
 from app.models.project import Project
-from app.models.workorder import WorkOrder, StatusLog, Attachment, EscalationLog, NotificationLog, AgentImportBatch
+from app.models.workorder import WorkOrder, StatusLog, Attachment, EscalationLog, NotificationLog, AgentImportBatch, WorkOrderMeasureLink, AnomalyOccurrence
 from app.models.audit import AuditLog
 from app.models.pool import DataPoolItem
 from app.models.judgment import JudgmentDegradationLog
@@ -17,6 +17,7 @@ __all__ = [
     "SLADefinition", "NotificationPolicy", "PersonProjectMap", "WorkOrderTypeKB", "RegionPMO", "RoleAssignment",
     "User", "Project",
     "WorkOrder", "StatusLog", "Attachment", "EscalationLog", "NotificationLog", "AgentImportBatch",
+    "WorkOrderMeasureLink", "AnomalyOccurrence",
     "AuditLog",
     "DataPoolItem",
     "JudgmentDegradationLog",

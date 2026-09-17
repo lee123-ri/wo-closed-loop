@@ -30,6 +30,37 @@ def list_statuses(db: Session = Depends(get_db)):
     return db.query(ConfigDefinition).filter_by(category="status").order_by(ConfigDefinition.sort_order).all()
 
 
+@router.get("/anomaly-categories", response_model=list[ConfigDefinitionOut])
+def list_anomaly_categories(db: Session = Depends(get_db)):
+    """异常指标大类（source=alert 的细分维度），extra 含 default_person_name / agent"""
+    return db.query(ConfigDefinition).filter_by(category="anomaly_type").order_by(ConfigDefinition.sort_order).all()
+
+
+class AnomalyCategoryUpdate(BaseModel):
+    name: str | None = None
+    default_person_name: str | None = None
+    agent: str | None = None
+
+
+@router.patch("/anomaly-categories/{def_id}", response_model=ConfigDefinitionOut)
+def update_anomaly_category(def_id: int, body: AnomalyCategoryUpdate, db: Session = Depends(get_db)):
+    """编辑异常大类的显示名 / 默认责任人 / 分析 Agent（空串清空默认责任人）"""
+    c = db.get(ConfigDefinition, def_id)
+    if not c or c.category != "anomaly_type":
+        raise HTTPException(404, "异常大类不存在")
+    extra = dict(c.extra or {})
+    if body.name is not None:
+        c.name = body.name
+    if body.default_person_name is not None:
+        extra["default_person_name"] = body.default_person_name or None
+    if body.agent is not None:
+        extra["agent"] = body.agent or None
+    c.extra = extra
+    db.commit()
+    db.refresh(c)
+    return c
+
+
 @router.get("/work-order-types", response_model=list[ConfigDefinitionOut])
 def list_wo_types(db: Session = Depends(get_db)):
     """工单类型（从 workorder_type_kb 取）"""
@@ -336,7 +367,7 @@ from app.services.region_map import normalize_region
 
 
 class ProjectCreate(PydanticBase):
-    code: str
+    """编码不在入参里：统一由系统按 PRJ-#### 自动分配（见 services/project_codes）。"""
     name: str
     type: str | None = None
     region: str | None = None
@@ -359,31 +390,59 @@ class ProjectUpdate(PydanticBase):
         return normalize_region(v)
 
 @router.post("/projects", response_model=ProjectOut, status_code=201)
-def create_project(body: ProjectCreate, db: Session = Depends(get_db)):
-    if db.query(Project).filter(Project.code == body.code).first():
-        raise HTTPException(409, "项目编码已存在")
-    p = Project(code=body.code, name=body.name, type=body.type, region=body.region)
+def create_project(body: ProjectCreate, db: Session = Depends(get_db), user: User = Depends(require_auth)):
+    from app.services.project_codes import next_project_code
+    from app.services.audit import log_audit
+    p = Project(code=next_project_code(db), name=body.name, type=body.type, region=body.region)
     db.add(p)
+    db.flush()
+    log_audit(db, actor_id=user.id, action="create", target_type="project", target_id=p.id,
+              detail={"code": p.code, "name": p.name})
     db.commit()
     db.refresh(p)
     return p
 
 @router.patch("/projects/{project_id}", response_model=ProjectOut)
-def update_project(project_id: int, body: ProjectUpdate, db: Session = Depends(get_db)):
+def update_project(project_id: int, body: ProjectUpdate, db: Session = Depends(get_db), user: User = Depends(require_auth)):
+    from app.services.audit import log_audit
     p = db.get(Project, project_id)
     if not p: raise HTTPException(404, "项目不存在")
-    for k, v in body.model_dump(exclude_unset=True).items():
+    changed = body.model_dump(exclude_unset=True)
+    for k, v in changed.items():
         setattr(p, k, v)
+    log_audit(db, actor_id=user.id, action="update", target_type="project", target_id=p.id,
+              detail={"code": p.code, "changed": changed})
     db.commit()
     db.refresh(p)
     return p
 
 @router.delete("/projects/{project_id}", status_code=204)
-def delete_project(project_id: int, db: Session = Depends(get_db)):
+def delete_project(project_id: int, db: Session = Depends(get_db), user: User = Depends(require_auth)):
+    from app.services.audit import log_audit
     p = db.get(Project, project_id)
     if not p: raise HTTPException(404, "项目不存在")
     p.is_active = False
+    log_audit(db, actor_id=user.id, action="disable", target_type="project", target_id=p.id,
+              detail={"code": p.code, "name": p.name})
     db.commit()
+
+
+@router.post("/projects/sync-ledger")
+def sync_project_ledger_endpoint(db: Session = Depends(get_db), user: User = Depends(require_auth)):
+    """从公司 OA（oa.xh-service.com）网页「运维项目台账」同步「执行中/待执行」状态的项目名到本地项目表。
+
+    取法对齐 annual-ops-plan：Playwright 登录 OA → 台账 customid=97 逐页抓表 → 按「项目状态」过滤。
+    凭据走 env OA_BASE_URL / OA_USERNAME / OA_PASSWORD。
+    """
+    from app.services.oa_ledger import sync_project_ledger
+    from app.services.audit import log_audit
+    result = sync_project_ledger()
+    log_audit(db, actor_id=user.id, action="sync_ledger", target_type="project",
+              detail={"synced": result.get("synced"), "updated": result.get("updated"),
+                      "skipped": result.get("skipped"), "total": result.get("total"),
+                      "errors": result.get("errors")})
+    db.commit()
+    return result
 
 
 # ── 操作日志 ──────────────────────────────────────────
@@ -393,9 +452,12 @@ def list_audit_logs(page: int = 1, page_size: int = 50, db: Session = Depends(ge
     from app.models.audit import AuditLog
     total = db.query(AuditLog).count()
     rows = db.query(AuditLog).order_by(AuditLog.id.desc()).offset((page-1)*page_size).limit(page_size).all()
+    actor_ids = {r.actor_id for r in rows if r.actor_id}
+    names = {u.id: u.name for u in db.query(User).filter(User.id.in_(actor_ids)).all()} if actor_ids else {}
     return {
-        "items": [{"id": r.id, "action": r.action, "target": r.target, "target_id": r.target_id,
-                    "detail": r.detail, "operator": r.operator, "created_at": r.created_at.isoformat()} for r in rows],
+        "items": [{"id": r.id, "action": r.action, "target": r.target_type, "target_id": r.target_id,
+                    "detail": r.detail, "operator": names.get(r.actor_id) or "系统",
+                    "created_at": r.created_at.isoformat()} for r in rows],
         "total": total, "page": page, "page_size": page_size,
     }
 

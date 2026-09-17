@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-测试发起软工单OA审批实例
+测试发起工单OA审批实例
 
 在模板创建完成后，运行此脚本测试发起一个测试工单。
 
@@ -23,15 +23,36 @@
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
 
-# 默认凭证（cockpit平台）
-APP_KEY = "ding1ikpdp8hvarwxoi2"
-APP_SECRET = "OqWQbDHrpCtMb-3im7Q1nqqU05tGvIGeZdshAbz7cDHgHzlCjojbjBM3KPl0EXkM"
+# 凭证从环境变量或 backend/.env 读取（不硬编码，避免密钥进 git）
+ENV_FILE = Path(__file__).resolve().parent.parent / "backend" / ".env"
+
+
+def _load_credentials() -> tuple[str, str]:
+    key = os.environ.get("DINGTALK_APP_KEY", "")
+    secret = os.environ.get("DINGTALK_APP_SECRET", "")
+    if key and secret:
+        return key, secret
+    try:
+        if ENV_FILE.exists():
+            for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line.startswith("DINGTALK_APP_KEY="):
+                    key = line.split("=", 1)[1].strip()
+                elif line.startswith("DINGTALK_APP_SECRET="):
+                    secret = line.split("=", 1)[1].strip()
+    except Exception:
+        pass
+    return key, secret
+
+
+APP_KEY, APP_SECRET = _load_credentials()
 
 # 保存的 processCode 文件
 PROCESS_CODE_FILE = Path(__file__).resolve().parent / ".oa_template_process_code.json"
@@ -113,7 +134,7 @@ def initiate_approval(process_code: str, form_data: list) -> str:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="测试发起软工单OA审批")
+    parser = argparse.ArgumentParser(description="测试发起工单OA审批")
     parser.add_argument("--process-code", type=str, help="审批模板ID")
     parser.add_argument("--project", type=str, help="项目名称")
     parser.add_argument("--type", type=str, help="工单类型")
@@ -126,7 +147,7 @@ def main():
     args = parser.parse_args()
 
     print("=" * 60)
-    print("🧪 软工单OA审批发起测试")
+    print("🧪 工单OA审批发起测试")
     print("=" * 60)
 
     # 获取 processCode
@@ -134,7 +155,7 @@ def main():
     if not process_code:
         process_code = load_process_code()
     if not process_code:
-        forms = search_forms("软工单")
+        forms = search_forms("工单")
         if forms:
             process_code = forms[0].get("processCode", forms[0].get("formCode", ""))
 
