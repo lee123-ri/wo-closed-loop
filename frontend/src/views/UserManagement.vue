@@ -6,7 +6,7 @@
 
     <div class="grid2">
       <!-- 用户列表 -->
-      <div class="card user-list-card">
+      <div class="card">
         <div class="card-hd">
           <h3>用户列表</h3>
           <div class="hd-tools">
@@ -21,10 +21,9 @@
             <span class="count">{{ total }} 人</span>
           </div>
         </div>
-        <div class="card-body user-list-body">
+        <div class="card-body">
         <PageError v-if="loadError" title="用户加载失败" :message="loadError" @action="loadUsers" />
         <t-table v-else
-          class="user-table"
           :data="users"
           :columns="columns"
           row-key="id"
@@ -95,7 +94,8 @@ const loadingUsers = ref(false);
 const loadError = ref("");
 let loadSeq = 0;
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
-const pagination = reactive({ current: 1, pageSize: 10, total: 0, showJumper: true, showPageSize: true, pageSizeOptions: [10, 20, 50] });
+// 用户管理保持固定 12 行，避免分页尺寸切换导致左右面板高度跳变。
+const pagination = reactive({ current: 1, pageSize: 12, total: 0, showJumper: true, showPageSize: false });
 const saving = ref(false);
 const roleOptions = [
   { label: "管理员", value: "admin" },
@@ -255,7 +255,6 @@ function doSearch() {
 }
 function onPageChange(p: any) {
   pagination.current = p.current;
-  pagination.pageSize = p.pageSize;
   loadUsers();
 }
 
@@ -278,13 +277,9 @@ onUnmounted(() => { if (searchTimer) clearTimeout(searchTimer); });
 .header h1 { font-size: var(--fs-h1); font-weight: 700; }
 .meta { font-size: 12px; color: var(--muted); }
 
-.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 440px); gap: 20px; align-items: stretch; }
-.card { height: 100%; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); display: flex; flex-direction: column; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 440px); gap: 20px; align-items: start; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); display: flex; flex-direction: column; }
 .card-body { overflow-x: auto; }
-.user-list-body { display: flex; flex: 1; min-height: 0; }
-.user-list-body :deep(.user-table) { display: flex; flex: 1; flex-direction: column; min-height: 0; }
-.user-list-body :deep(.user-table .t-table__content) { flex: 1; min-height: 0; }
-.user-list-body :deep(.user-table .t-table__pagination) { flex: none; }
 .card-hd { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border); flex: none; }
 .card-hd h3 { font-size: 15px; font-weight: 700; }
 .hd-tools { display: flex; align-items: center; gap: 12px; }
