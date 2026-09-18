@@ -199,37 +199,9 @@ spec:
             secretName: wo-dws-auth
             optional: true
 ---
-# 配置项：外部化（钉钉 key、DB 连接等敏感信息进 Secret）
-apiVersion: v1
-kind: Secret
-metadata:
-  name: wo-secrets
-type: Opaque
-stringData:
-  # 真实部署时用 kubectl create secret 或 sealed-secrets 注入
-  DATABASE_URL: "postgresql+psycopg://wo:CHANGE_ME@rds-host:5432/wo_closed_loop"
-  REDIS_URL: "redis://tair-host:6379/0"
-  JWT_SECRET: "CHANGE_ME_TO_RANDOM_64_CHARS"
-  APP_ENV: "production"
-  AUTO_SEED: "false"                  # 生产禁止自动灌演示数据
-  DINGTALK_APP_KEY: ""
-  DINGTALK_APP_SECRET: ""
-  DINGTALK_AGENT_ID: ""
-  DINGTALK_OA_TEMPLATE_ID: ""
-  DINGTALK_CORP_ID: ""
-  DINGTALK_CALLBACK_URL: "https://wo.example.com/api/auth/dingtalk/callback"  # 必须改为线上 HTTPS 域名
-  DINGTALK_CALLBACK_TOKEN: ""
-  DINGTALK_CALLBACK_AES_KEY: ""
-  DASHSCOPE_API_KEY: ""
-  OSS_ENDPOINT: ""
-  OSS_BUCKET: ""
-  OSS_ACCESS_KEY_ID: ""
-  OSS_ACCESS_KEY_SECRET: ""
-  CORS_ORIGINS: "https://wo.example.com"
-  JUDGMENT_AGENT_URL: "http://wo-judgment-agent:8080"
-  JUDGMENT_AGENT_TOKEN: ""
-  JUDGMENT_TIMEOUT: "10"
-  JUDGMENT_ENABLED: "false"           # v1 判断Agent不部署，走降级日志；镜像就绪后改 true
+# 机密配置（wo-secrets）不在此清单定义，必须由 ACK/云效凭据库在部署前创建或更新。
+# 这样 kubectl apply 本文件不会用示例值覆盖线上数据库、钉钉或 JWT 凭据。
+# 所需变量与创建命令见 docs/DEPLOYMENT.md 及 backend/.env.production.example。
 ---
 # Ingress（对接 ALB）
 apiVersion: networking.k8s.io/v1

@@ -59,6 +59,9 @@ kubectl create secret generic wo-secrets \
   --from-literal=DINGTALK_LOGIN_REDIRECT_URI='https://你的域名/login' \
   --from-literal=FRONTEND_BASE_URL='https://你的域名' \
   --from-literal=LOGIN_ADMIN_ONLY='true' \
+  --from-literal=NAME_LOGIN_ENABLED='false' \
+  --from-literal=DEV_LOGIN_ENABLED='false' \
+  --from-literal=AUTO_WORKORDER_IMPORT_ENABLED='false' \
   --from-literal=DASHSCOPE_API_KEY='<百炼key，可选>' \
   --from-literal=CORS_ORIGINS='https://你的域名' \
   --from-literal=JUDGMENT_ENABLED='false'
@@ -152,9 +155,10 @@ kubectl scale deploy/wo-backend --replicas=4
 kubectl set image deploy/wo-backend backend=registry.../wo-backend:0.6.0
 kubectl rollout status deploy/wo-backend
 
-# 清空工单数据（保留配置）
-kubectl exec -it deploy/wo-backend -- python -c \
-  "from app.api.admin import clear_transactional_data; from app.core.database import SessionLocal; print(clear_transactional_data(SessionLocal()))"
+# 上线前工单清场：先在 RDS 做 pg_dump，再盘点，最后才带 --apply 执行。
+# 禁止使用 /api/admin/clear-data，它会连闭环与流程中的工单也一并删除。
+kubectl exec -it deploy/wo-backend -- sh -lc \
+  'PYTHONPATH=/app python /app/scripts/prelaunch_workorder_cleanup.py'
 ```
 
 ### 8.1 日志落地策略（上线前需部署方确认）
@@ -207,3 +211,7 @@ kubectl logs deploy/wo-backend | grep <requestid>
 - [x] JWT 鉴权
 - [x] 钉钉回调验签（生产需配 aes_key）
 - [ ] 定期轮换 JWT_SECRET
+
+## 上线后导入原则
+
+生产默认 `AUTO_WORKORDER_IMPORT_ENABLED=false`：定时任务不会从 AI 表格或钉盘自动生成工单，数据池不作为正式菜单入口。后续需要导入时，由管理员在“工单列表”使用对应的直接导入入口，确认范围后直接写入列表；需要恢复自动导入时，必须先完成业务确认，再显式将该开关设为 `true` 并重启 scheduler。

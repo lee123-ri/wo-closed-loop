@@ -15,6 +15,7 @@
         <t-button theme="default" variant="outline" :disabled="!selectedRowKeys.length" @click="exportSelectedCSV">
           导出选中<template v-if="selectedRowKeys.length">({{ selectedRowKeys.length }})</template>
         </t-button>
+        <t-button v-if="userStore.user?.name === '李沛东'" theme="default" variant="outline" @click="openTableImport">📥 历史工单导入</t-button>
         <t-button theme="default" variant="outline" @click="openAgentHtmlImport">🖇️ 导入 Agent 复盘 HTML</t-button>
         <t-button theme="default" variant="outline" @click="exportCSV(list.items)">导出当前页 CSV</t-button>
         <t-button theme="primary" @click="router.push('/create')">＋ 新建工单</t-button>
@@ -59,6 +60,29 @@
         @page-change="onPageChange"
       />
     </t-card>
+
+    <t-dialog v-model:visible="tableImport.visible" header="直接导入工单" :footer="false" width="760">
+      <div class="agent-import">
+        <p class="ai-hint">上传 CSV 或 Excel 后先核对。只有勾选的有效行会直接进入工单列表，不经过数据池。</p>
+        <div class="ai-toolbar">
+          <t-button size="small" variant="outline" @click="tableFileInput?.click()">📂 选择文件</t-button>
+          <span v-if="tableImport.filename" class="ai-filename">已载入：{{ tableImport.filename }}</span>
+        </div>
+        <input ref="tableFileInput" type="file" accept=".csv,.xlsx,.xlsm" style="display:none" @change="onTableFile" />
+        <div v-if="tableImport.rows.length" class="import-preview">
+          <label v-for="row in tableImport.rows" :key="row.line" class="import-row" :class="{ invalid: !row.ok }">
+            <input type="checkbox" :checked="tableImport.selected.has(row.line)" :disabled="!row.ok" @change="toggleImportRow(row.line, $event)" />
+            <span>第 {{ row.line }} 行 · {{ row.title || '无标题' }} · {{ row.project_label || row.project_name || '无项目' }}</span>
+            <small>{{ row.ok ? `P${row.priority.slice(1)} · ${row.deadline}` : row.error }}</small>
+          </label>
+        </div>
+        <div class="ai-footer">
+          <span class="ai-meta">有效 {{ tableImport.okCount }} 条，已选 {{ tableImport.selected.size }} 条</span>
+          <t-button theme="primary" :disabled="!tableImport.selected.size" :loading="tableImport.submitting" @click="confirmTableImport">确认直接导入</t-button>
+          <t-button theme="default" @click="tableImport.visible = false">关闭</t-button>
+        </div>
+      </div>
+    </t-dialog>
 
     <!-- 导入 Agent 复盘 HTML 对话框 -->
     <t-dialog v-model:visible="agentImport.visible" header="导入 Agent 复盘 HTML" :footer="false" width="760">
@@ -107,9 +131,10 @@
 import { toast, confirmDialog } from "@/utils/feedback";
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useUserStore } from "@/stores/user";
 import { listWorkOrders, transitionWorkOrder, type WorkOrderList } from "@/api/workorders";
 import { getStatuses, getUsersAll, getWoTypes, type ConfigItem } from "@/api/config";
-import { importAgentHtml, type AgentHtmlImportResult } from "@/api/imports";
+import { importAgentHtml, importTableConfirm, importTablePreview, type AgentHtmlImportResult, type ImportPreviewRow } from "@/api/imports";
 import { statusLabel, sourceLabel } from "@/utils/wo-display";
 import WorkbenchTable from "@/components/WorkbenchTable.vue";
 import { downloadCsv } from "@/utils/csv";
@@ -119,6 +144,7 @@ defineOptions({ name: "WorkOrderList" });
 
 const route = useRoute();
 const router = useRouter();
+const userStore = useUserStore();
 const loading = ref(false);
 let reloadSeq = 0;
 const list = ref<WorkOrderList>({ items: [], total: 0, page: 1, page_size: 20 });
@@ -143,6 +169,8 @@ const agentImport = reactive({
   result: null as AgentHtmlImportResult | null,
 });
 const agentHtmlInput = ref<HTMLInputElement | null>(null);
+const tableFileInput = ref<HTMLInputElement | null>(null);
+const tableImport = reactive({ visible: false, filename: "", rows: [] as ImportPreviewRow[], selected: new Set<number>(), submitting: false, okCount: 0 });
 
 async function reload() {
   const seq = ++reloadSeq;
@@ -218,6 +246,34 @@ function exportSelectedCSV() {
   const rows = selectedRows();
   if (!rows.length) { toast.warning("请先勾选工单"); return; }
   exportCSV(rows);
+}
+
+function openTableImport() {
+  tableImport.filename = ""; tableImport.rows = []; tableImport.selected = new Set(); tableImport.okCount = 0; tableImport.visible = true;
+}
+async function onTableFile(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  try {
+    const preview = await importTablePreview(file);
+    tableImport.filename = file.name; tableImport.rows = preview.rows;
+    tableImport.selected = new Set(preview.rows.filter((r) => r.ok).map((r) => r.line)); tableImport.okCount = preview.ok_count;
+  } catch (err: any) { toast.error("文件预览失败：" + (err.message || "未知错误")); }
+}
+function toggleImportRow(line: number, event: Event) {
+  const selected = new Set(tableImport.selected);
+  if ((event.target as HTMLInputElement).checked) selected.add(line); else selected.delete(line);
+  tableImport.selected = selected;
+}
+async function confirmTableImport() {
+  const rows = tableImport.rows.filter((r) => tableImport.selected.has(r.line)).map((r) => r.raw);
+  tableImport.submitting = true;
+  try {
+    const result = await importTableConfirm(rows);
+    toast.success(`已直接导入 ${result.created} 条工单${result.errors.length ? `；${result.errors.join('；')}` : ''}`);
+    tableImport.visible = false; await reload();
+  } catch (err: any) { toast.error("导入失败：" + (err.message || "未知错误")); }
+  finally { tableImport.submitting = false; }
 }
 
 /* ---------- 导入 Agent HTML ---------- */
@@ -298,4 +354,8 @@ watch(
 .ai-list li { font-size: 12px; padding: 3px 0; display: flex; gap: 8px; align-items: baseline; }
 .ai-unmapped { color: #b9770e; }
 .ai-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.import-preview { max-height: 300px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+.import-row { display: grid; grid-template-columns: 20px 1fr auto; gap: 8px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.import-row.invalid { color: var(--danger, #c62828); background: #fff7f7; }
+.import-row small { color: var(--muted); }
 </style>

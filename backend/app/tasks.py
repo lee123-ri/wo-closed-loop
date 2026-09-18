@@ -108,14 +108,20 @@ def sync_aitable_full():
 
 @celery_app.task(name="app.tasks.sync_anomaly_daily")
 def sync_anomaly_daily():
-    """10:00/15:00 增量：异常指标表 → 原因工单列表（只落新增）。"""
+    """10:00/15:00 增量采集。正式上线默认只进入数据池，不自动生成工单。"""
+    from app.core.config import get_settings
+    if not get_settings().auto_workorder_import_enabled:
+        return {"skipped": True, "reason": "正式上线默认人工勾选导入", "generated": 0}
     from app.services.aitable import run_anomaly_daily_sync
     return run_anomaly_daily_sync()
 
 
 @celery_app.task(name="app.tasks.sync_plan_draft")
 def sync_plan_draft():
-    """轮询钉盘「年度运营计划初稿」文件夹 → 下载解析 → 导入非EAM计划工单（source=plan）"""
+    """轮询钉盘直导仅在明确开启自动导入后运行。"""
+    from app.core.config import get_settings
+    if not get_settings().auto_workorder_import_enabled:
+        return {"skipped": True, "reason": "正式上线默认人工勾选导入"}
     from app.services.drive_workorder_import import import_drive_workorder_versions
     return import_drive_workorder_versions()
 

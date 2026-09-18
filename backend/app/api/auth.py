@@ -164,6 +164,14 @@ def require_admin(user: User = Depends(require_auth)) -> User:
     return user
 
 
+def require_bulk_import_owner(user: User = Depends(require_auth)) -> User:
+    """历史批量导入是运维后门：仅允许配置的单一钉钉身份。"""
+    owner_id = settings.bulk_import_owner_dingtalk_id.strip()
+    if not owner_id or user.dingtalk_id != owner_id:
+        raise HTTPException(403, "历史批量导入仅对指定运维账号开放")
+    return user
+
+
 def require_approver(user: User = Depends(require_auth)) -> User:
     """审批人及以上权限"""
     if user.role not in ("admin", "approver"):
