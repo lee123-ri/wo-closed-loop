@@ -23,6 +23,7 @@ router = APIRouter(prefix="/config", tags=["config"])
 # 业务岗位是“人做什么”，数据范围是“能看什么”。二者在规则配置内维护，
 # 用户管理只负责把岗位分配给具体人员。
 BUSINESS_ROLE_SCOPE_DEFAULTS = {
+    "project_member": ["self"],
     "site_member": ["self"],
     "inspection_engineer": ["self"],
     "project_manager": ["self"],

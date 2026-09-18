@@ -236,31 +236,34 @@ def get_me(user: User = Depends(require_auth)):
     return {"id": user.id, "name": user.name, "role": user.role, "phone": user.phone, "dingtalk_id": user.dingtalk_id}
 
 
-# ── 权限配置（可持久化，前端按角色过滤菜单/功能）────────
+# ── 系统身份 × 菜单权限（可持久化）─────────────────────
 
-# 默认权限：库中无持久化记录时兜底。admin 恒为超管，前端 canAccessMenu 会额外放行。
+# “只读”是菜单权限级别，不是用户身份。用户只保留三类系统身份；每个菜单项
+# 按身份配置无权限 / 只读 / 读写。admin 仍保留服务端兜底权限，避免误配锁死系统。
+SYSTEM_ROLES = ("admin", "approver", "executor")
+MENU_ACCESS_LEVELS = frozenset(("none", "read", "write"))
 DEFAULT_PERMISSIONS = {
-    "roles": ["admin", "approver", "executor", "readonly"],
+    "roles": list(SYSTEM_ROLES),
     "menu_groups": {
         "工作台": {
-            "管理看板": {"roles": ["admin", "approver"]},
-            "我的工单": {"roles": ["admin", "approver", "executor"]},
+            "管理看板": {"access": {"admin": "write", "approver": "read", "executor": "none"}},
+            "我的工单": {"access": {"admin": "write", "approver": "write", "executor": "write"}},
         },
         "工单管理": {
-            "工单列表": {"roles": ["admin", "approver"]},
-            "新建工单": {"roles": ["admin", "approver"]},
-            "闭环记录": {"roles": ["admin", "approver", "executor"]},
+            "工单列表": {"access": {"admin": "write", "approver": "write", "executor": "none"}},
+            "新建工单": {"access": {"admin": "write", "approver": "write", "executor": "none"}},
+            "闭环记录": {"access": {"admin": "write", "approver": "write", "executor": "write"}},
         },
         "基础数据": {
-            "项目管理": {"roles": ["admin", "approver"]},
-            "用户管理": {"roles": ["admin"]},
-            "数据池": {"roles": ["admin", "approver"]},
-            "SOP知识库": {"roles": ["admin", "approver", "executor"]},
+            "项目管理": {"access": {"admin": "write", "approver": "read", "executor": "none"}},
+            "用户管理": {"access": {"admin": "write", "approver": "none", "executor": "none"}},
+            "数据池": {"access": {"admin": "write", "approver": "write", "executor": "none"}},
+            "SOP知识库": {"access": {"admin": "write", "approver": "read", "executor": "read"}},
         },
         "系统设置": {
-            "规则配置": {"roles": ["admin"]},
-            "操作日志": {"roles": ["admin"]},
-            "钉钉集成": {"roles": ["admin", "approver"]},
+            "规则配置": {"access": {"admin": "write", "approver": "none", "executor": "none"}},
+            "操作日志": {"access": {"admin": "read", "approver": "none", "executor": "none"}},
+            "钉钉集成": {"access": {"admin": "write", "approver": "read", "executor": "none"}},
         },
     },
     "actions": {
@@ -275,14 +278,27 @@ DEFAULT_PERMISSIONS = {
 }
 
 
+def _normalise_menu_permission(conf: object) -> dict:
+    """将旧 roles 数组平滑转换成当前的 access 映射。"""
+    raw = conf if isinstance(conf, dict) else {}
+    raw_access = raw.get("access") if isinstance(raw.get("access"), dict) else None
+    if raw_access is None:
+        # 历史配置只有“能否看见”；迁移后保守地视为只读，管理员始终可写。
+        legacy_roles = set(raw.get("roles") or []) if isinstance(raw.get("roles"), list) else set()
+        raw_access = {role: ("write" if role == "admin" else "read") if role in legacy_roles else "none" for role in SYSTEM_ROLES}
+    return {"access": {role: raw_access.get(role, "none") if raw_access.get(role) in MENU_ACCESS_LEVELS else "none" for role in SYSTEM_ROLES}}
+
+
 def _permissions_from_row(row: ConfigDefinition | None) -> dict:
-    """从配置还原权限，并为存量自定义配置补齐版本新增的菜单/操作项。"""
+    """还原系统身份到菜单权限，并兼容旧 roles 数组。"""
     extra = (row.extra or {}) if row else {}
-    menu_groups = {group: {title: dict(conf) for title, conf in items.items()}
+    menu_groups = {group: {title: _normalise_menu_permission(conf) for title, conf in items.items()}
                    for group, items in DEFAULT_PERMISSIONS["menu_groups"].items()}
     for group, items in (extra.get("menu_groups") or {}).items():
         if isinstance(items, dict):
-            menu_groups.setdefault(group, {}).update(items)
+            target = menu_groups.setdefault(group, {})
+            for title, conf in items.items():
+                target[title] = _normalise_menu_permission(conf)
     actions = {name: dict(conf) for name, conf in DEFAULT_PERMISSIONS["actions"].items()}
     if isinstance(extra.get("actions"), dict):
         actions.update(extra["actions"])
@@ -315,19 +331,24 @@ class PermissionsBody(BaseModel):
 @router.put("/permissions")
 def update_permissions(body: PermissionsBody, db: Session = Depends(get_db),
                        user: User = Depends(require_admin)):
-    """保存菜单权限配置（管理员）。只校验 roles 值；actions 缺省时保留既有。"""
-    valid_roles = set(DEFAULT_PERMISSIONS["roles"])
+    """保存每个系统身份对每个菜单项的无权限/只读/读写级别。"""
     for gname, items in (body.menu_groups or {}).items():
         if not isinstance(items, dict):
             raise HTTPException(400, f"菜单权限格式错误：{gname}")
         for title, conf in items.items():
-            roles = conf.get("roles", []) if isinstance(conf, dict) else []
-            if not isinstance(roles, list) or any(r not in valid_roles for r in roles):
-                raise HTTPException(400, f"无效角色配置：{gname} / {title}")
+            access = conf.get("access") if isinstance(conf, dict) else None
+            if not isinstance(access, dict) or set(access) - set(SYSTEM_ROLES) or any(level not in MENU_ACCESS_LEVELS for level in access.values()):
+                raise HTTPException(400, f"无效菜单权限：{gname} / {title}")
 
     row = _permissions_row(db)
     actions = body.actions if body.actions is not None else _permissions_from_row(row)["actions"]
-    extra = {"menu_groups": body.menu_groups, "actions": actions}
+    extra = {
+        "menu_groups": {
+            group: {title: _normalise_menu_permission(conf) for title, conf in items.items()}
+            for group, items in body.menu_groups.items()
+        },
+        "actions": actions,
+    }
     if row is None:
         row = ConfigDefinition(category="permission", code="menu", name="菜单权限配置", extra=extra)
         db.add(row)
@@ -375,6 +396,9 @@ def _business_roles_for_users(db: Session, user_ids: list[int]) -> dict[int, lis
 
 
 def _user_out(user: User, business_roles: list[dict]) -> dict:
+    # 不把“无岗位”留成数据权限空洞：默认项目人员，只看本人相关工单。
+    if not business_roles:
+        business_roles = [{"code": "project_member", "name": "项目人员", "is_default": True}]
     return {
         "id": user.id, "name": user.name, "role": user.role, "phone": user.phone,
         "dingtalk_id": user.dingtalk_id, "department": user.department,
@@ -401,7 +425,7 @@ def list_users(page: int = 1, page_size: int = 50, q: str | None = None,
 
 @router.patch("/users/{user_id}/role")
 def update_user_role(user_id: int, body: UpdateRoleBody, db: Session = Depends(get_db), user: User = Depends(require_admin)):
-    if body.role not in ("admin", "approver", "executor", "readonly"):
+    if body.role not in SYSTEM_ROLES:
         raise HTTPException(400, "无效角色")
     u = db.get(User, user_id)
     if not u:

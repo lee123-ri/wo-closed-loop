@@ -1,7 +1,7 @@
 <template>
   <div class="users-page">
     <div class="header">
-      <div><h1>用户管理</h1><div class="meta">钉钉部门带入 · 权限角色 · 业务岗位分配</div></div>
+      <div><h1>用户管理</h1><div class="meta">钉钉部门带入 · 系统身份 · 业务岗位分配</div></div>
     </div>
 
     <div class="card">
@@ -56,7 +56,7 @@
 
     <t-dialog v-model:visible="editDialog.open" :header="`编辑用户：${editDialog.name}`" width="480" :footer="false">
       <div class="form-group"><label>钉钉部门</label><input v-model="editDialog.department" placeholder="钉钉同步后可按实际归属修正" /><div class="form-hint">默认取钉钉通讯录；修改只影响本平台资料，不会回写钉钉。</div></div>
-      <div class="form-group"><label>业务岗位</label><div class="business-role-list"><label v-for="role in businessRoleOptions.filter((item) => item.is_active)" :key="role.code" class="business-role-option"><input type="checkbox" :value="role.code" v-model="editDialog.roleCodes" />{{ role.name }}</label></div><div class="form-hint">岗位定义和数据权限在“规则配置”维护；此处仅分配给人员。</div></div>
+      <div class="form-group"><label>业务岗位</label><t-select v-model="editDialog.roleCodes" :options="businessRoleSelectOptions" multiple clearable filterable placeholder="默认：项目人员（仅本人相关）" /><div class="form-hint">未选择时自动按“项目人员”处理；岗位定义和数据权限在“规则配置”维护，此处只分配给人员。</div></div>
       <div class="modal-actions"><t-button variant="outline" @click="editDialog.open = false">取消</t-button><t-button theme="primary" :loading="savingProfile" @click="saveProfile">保存</t-button></div>
     </t-dialog>
   </div>
@@ -64,7 +64,7 @@
 
 <script setup lang="ts">
 import { toast } from "@/utils/feedback";
-import { onMounted, onUnmounted, reactive, ref } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import http from "@/api/http";
 import PageError from "@/components/PageError.vue";
 
@@ -81,16 +81,16 @@ let searchTimer: ReturnType<typeof setTimeout> | null = null;
 const pagination = reactive({ current: 1, pageSize: 14, total: 0, showJumper: true, showPageSize: false });
 const savingProfile = ref(false);
 const businessRoleOptions = ref<any[]>([]);
+const businessRoleSelectOptions = computed(() => businessRoleOptions.value.filter((item) => item.is_active).map((item) => ({ label: item.name, value: item.code })));
 const editDialog = reactive({ open: false, id: 0, name: "", department: "", roleCodes: [] as string[] });
 const roleOptions = [
   { label: "管理员", value: "admin" },
-  { label: "审批读写", value: "approver" },
-  { label: "执行读写", value: "executor" },
-  { label: "只读", value: "readonly" },
+  { label: "审批人", value: "approver" },
+  { label: "执行人", value: "executor" },
 ];
 const columns: any[] = [
   { colKey: "name", title: "姓名", width: 100 },
-  { colKey: "role", title: "权限角色", width: 130 },
+  { colKey: "role", title: "系统身份", width: 130 },
   { colKey: "department", title: "钉钉部门", width: 160, ellipsis: true },
   { colKey: "business_roles", title: "业务岗位", minWidth: 180 },
   { colKey: "dingtalk_id", title: "钉钉ID", width: 130, ellipsis: true },
@@ -201,8 +201,6 @@ onUnmounted(() => { if (searchTimer) clearTimeout(searchTimer); });
 .form-group label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
 .form-group input[type="text"], .form-group > input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
 .form-hint { margin-top: 5px; color: var(--muted); font-size: 12px; }
-.business-role-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.business-role-option { display: flex !important; align-items: center; gap: 6px; padding: 7px 8px; margin: 0 !important; font-weight: 400 !important; background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 
 </style>

@@ -12,7 +12,7 @@ def test_user_list_returns_dingtalk_department_and_business_roles(client_auth, d
     assert response.status_code == 200
     item = response.json()["items"][0]
     assert item["department"] == "钉钉运检部"
-    assert item["business_roles"] == []
+    assert item["business_roles"] == [{"code": "project_member", "name": "项目人员", "is_default": True}]
 
 
 def test_user_profile_and_business_roles_are_saved_as_one_user_configuration(client_auth, db):

@@ -16,7 +16,7 @@ export interface LoginResult {
 
 export interface Permissions {
   roles: string[];
-  menu_groups: Record<string, Record<string, { roles: string[] }>>;
+  menu_groups: Record<string, Record<string, { access: Record<string, "none" | "read" | "write"> }>>;
   actions: Record<string, { roles: string[] }>;
 }
 

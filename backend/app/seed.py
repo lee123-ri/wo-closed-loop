@@ -100,6 +100,7 @@ def seed_roles(db) -> None:
 def seed_role_scopes(db) -> None:
     """灌入业务岗位的数据范围默认值，具体人员在用户管理中分配。"""
     defaults = [
+        ("project_member", "项目人员", ["self"], False, 99),
         ("site_member", "场站人员", ["self"], False, 100),
         ("inspection_engineer", "运检工程师", ["self"], False, 101),
         ("project_manager", "项目经理", ["self"], False, 102),
@@ -123,7 +124,7 @@ def seed_role_scopes(db) -> None:
 
 def seed_business_roles(db) -> None:
     for code, name, scope in [
-        ("site_member", "场站人员", "project"), ("inspection_engineer", "运检工程师", "project"),
+        ("project_member", "项目人员", "global"), ("site_member", "场站人员", "project"), ("inspection_engineer", "运检工程师", "project"),
         ("project_manager", "项目经理", "project"), ("pmo", "PMO", "global"),
         ("regional_pmo", "区域PMO", "region"), ("regional_gm", "区域总经理", "region"),
         ("regional_deputy_gm", "区域副总经理", "region"), ("headquarters_member", "总部人员", "global"),
@@ -133,12 +134,11 @@ def seed_business_roles(db) -> None:
 
 
 def seed_permission_roles(db) -> None:
-    """权限角色和业务岗位分离；保留旧 users.role 作平滑迁移兜底。"""
+    """历史权限角色表不再参与运行；系统身份与菜单读写权限见 auth 配置。"""
     defaults = [
         ("admin", "系统管理员", ["all"], ["*"], ["*"]),
         ("approver", "审批管理员", ["all"], ["工作台", "工单管理"], ["create_wo", "close_wo"]),
         ("executor", "执行人员", ["self"], ["工作台", "工单管理"], ["backfill_wo"]),
-        ("readonly", "只读人员", ["self"], ["工作台"], []),
     ]
     for code, name, data_scopes, menus, actions in defaults:
         if not db.query(PermissionRole).filter_by(code=code).first():

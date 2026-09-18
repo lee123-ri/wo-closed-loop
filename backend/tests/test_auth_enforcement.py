@@ -37,10 +37,10 @@ def test_public_endpoints_open(client):
 # ── 菜单权限配置：持久化 + 管理员独占 ─────────────────
 
 def test_get_permissions_defaults(client):
-    """默认权限返回 4 角色 + 用户管理仅 admin"""
+    """系统身份与菜单读写权限分离；只读是菜单级别而不是用户角色。"""
     body = client.get("/api/auth/permissions").json()
-    assert body["roles"] == ["admin", "approver", "executor", "readonly"]
-    assert body["menu_groups"]["基础数据"]["用户管理"]["roles"] == ["admin"]
+    assert body["roles"] == ["admin", "approver", "executor"]
+    assert body["menu_groups"]["基础数据"]["用户管理"]["access"] == {"admin": "write", "approver": "none", "executor": "none"}
 
 
 def test_save_permissions_requires_admin(client, db):
@@ -52,19 +52,19 @@ def test_save_permissions_requires_admin(client, db):
 def test_save_and_reload_permissions(client, auth_headers):
     """管理员保存后 GET 能读到，未提交的 actions 保留默认"""
     cur = client.get("/api/auth/permissions").json()
-    cur["menu_groups"]["基础数据"]["用户管理"]["roles"] = ["admin", "approver"]
+    cur["menu_groups"]["基础数据"]["用户管理"]["access"]["approver"] = "read"
     r = client.put("/api/auth/permissions", json={"menu_groups": cur["menu_groups"]}, headers=auth_headers)
     assert r.status_code == 200
 
     body = client.get("/api/auth/permissions").json()
-    assert body["menu_groups"]["基础数据"]["用户管理"]["roles"] == ["admin", "approver"]
+    assert body["menu_groups"]["基础数据"]["用户管理"]["access"]["approver"] == "read"
     assert body["actions"]["manage_users"]["roles"] == ["admin"]
 
 
-def test_save_permissions_rejects_bad_role(client, auth_headers):
-    """非法角色值应 400"""
+def test_save_permissions_rejects_bad_access_level(client, auth_headers):
+    """非法菜单权限级别应 400"""
     r = client.put("/api/auth/permissions",
-                   json={"menu_groups": {"基础数据": {"用户管理": {"roles": ["superuser"]}}}},
+                   json={"menu_groups": {"基础数据": {"用户管理": {"access": {"admin": "owner"}}}}},
                    headers=auth_headers)
     assert r.status_code == 400
 

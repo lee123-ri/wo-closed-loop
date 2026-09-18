@@ -12,21 +12,21 @@
     </div>
 
     <!-- 权限角色的菜单权限：从用户管理收敛至规则配置 -->
-    <div class="card">
-      <div class="card-hd"><div><h3>🔐 权限角色与菜单权限</h3><span class="count">管理员、审批读写、执行读写、只读的菜单可见性；保存后全站生效</span></div><t-button size="small" theme="primary" :loading="savingPermissions" @click="savePermissions">保存菜单权限</t-button></div>
+    <div class="card system-permissions-card">
+      <div class="card-hd"><div><h3>🔐 系统身份与菜单权限</h3><span class="count">每个身份在每个菜单可单独设为无权限、只读或读写；保存后全站生效</span></div><t-button size="small" theme="primary" :loading="savingPermissions" @click="savePermissions">保存菜单权限</t-button></div>
       <div v-if="permissionConfig" class="perm-grid">
         <div v-for="(items, group) in permissionConfig.menu_groups" :key="group" class="perm-group">
           <div class="perm-group-label">{{ group }}</div>
           <div v-for="(conf, title) in items" :key="title" class="perm-row">
             <span class="perm-title">{{ title }}</span>
-            <div class="perm-roles"><label v-for="role in permissionConfig.roles" :key="role" class="perm-check"><input type="checkbox" :checked="hasMenuPermission(conf, role)" @change="toggleMenuPermission(conf, role)" />{{ permissionRoleLabel(role) }}</label></div>
+            <div class="perm-roles"><label v-for="role in permissionConfig.roles" :key="role" class="perm-check">{{ permissionRoleLabel(role) }}<select class="permission-select" :value="menuAccess(conf, role)" @change="setMenuAccess(conf, role, $event)"><option value="none">无权限</option><option value="read">只读</option><option value="write">读写</option></select></label></div>
           </div>
         </div>
       </div>
     </div>
 
     <!-- 工单类型（统一口径：来源/工单类型/异常指标大类三合一） -->
-    <div class="card">
+    <div class="card work-type-card">
       <div class="card-hd"><div><h3>📚 工单类型</h3><span class="count">流程区分保留：异常类走五阶段、运营计划走计划流、其余三步；每类配默认审批人（异常类再配默认责任人）</span></div><button class="btn btn-pri btn-sm" @click="openNewType()">＋ 新增（只输名字）</button></div>
       <div class="region-pmo-grid">
         <div v-for="t in woTypeList" :key="t.id" class="region-pmo-row">
@@ -51,7 +51,7 @@
     </div>
 
     <!-- 状态 -->
-    <div class="card">
+    <div class="card status-card">
       <div class="card-hd"><h3>🏷️ 工单状态</h3></div>
       <div class="grid2">
         <div><div class="sub-hd">状态</div>
@@ -61,7 +61,7 @@
     </div>
 
     <!-- 优先级规则 -->
-    <div class="card">
+    <div class="card priority-card">
       <div class="card-hd"><div><h3>🎯 自动优先级判定</h3><span class="count">已接入智能解析、导入、机器人建单；手工指定优先级优先</span></div><button class="btn btn-pri btn-sm" @click="openPriority()">＋ 新增</button></div>
       <t-table :data="priorityRules" :columns="ruleColumns" row-key="id" size="small" cell-empty-content="—" hover>
         <template #idx="{ rowIndex }">{{ rowIndex + 1 }}</template>
@@ -79,7 +79,7 @@
     </div>
 
     <!-- SLA -->
-    <div class="card">
+    <div class="card sla-card">
       <div class="card-hd"><div><h3>⏱ SLA 定义</h3><span class="count">已接入默认截止日、SLA 扫描和管理看板违约统计</span></div></div>
       <t-table :data="slaList" :columns="slaColumns" row-key="id" size="small" cell-empty-content="—">
         <template #priority="{ row }"><t-tag :theme="priorityTheme(row.priority)" size="small">{{ priorityLabel(row.priority) }}</t-tag></template>
@@ -91,7 +91,7 @@
     </div>
 
     <!-- 区域归属：不是岗位分配，决定区域数据权限覆盖哪几个大区 -->
-    <div class="card">
+    <div class="card region-card">
       <div class="card-hd"><div><h3>📍 区域数据负责人</h3><span class="count">把已分配“区域 PMO/区域总副总”等业务岗位的人员关联到具体大区</span></div></div>
       <div class="region-pmo-grid">
         <div v-for="r in REGIONS" :key="r" class="region-pmo-row">
@@ -108,7 +108,7 @@
     </div>
 
     <!-- 审批流默认人员：只给现有审批流节点解析角色，不和用户业务岗位重复 -->
-    <div class="card">
+    <div class="card approval-role-card">
       <div class="card-hd"><h3>👤 审批流默认人员</h3><span class="count">仅供工单模板中的角色节点解析，不参与用户的业务岗位和数据权限</span></div>
       <div class="region-pmo-grid">
         <div v-for="r in roleAssignments" :key="r.role_code" class="region-pmo-row">
@@ -125,7 +125,7 @@
     </div>
 
     <!-- 数据权限（业务岗位 → 可见范围） -->
-    <div class="card">
+    <div class="card business-scope-card">
       <div class="card-hd"><div><h3>🗂 业务岗位数据权限</h3><span class="count">在用户管理分配岗位后生效；一个人有多个岗位时取并集</span></div><button class="btn btn-pri btn-sm" @click="openBusinessRole">＋ 新增岗位</button></div>
       <div class="scope-grid">
         <div v-for="r in roleScopes" :key="r.role_code" class="scope-row">
@@ -140,7 +140,7 @@
     </div>
 
     <!-- 审批流 -->
-    <div class="card">
+    <div class="card escalation-card">
       <div class="card-hd"><div><h3>🔄 平台升级路径</h3><span class="count">已接入平台节点展示和逾期升级目标；不修改钉钉 OA 模板</span></div></div>
       <div class="flow-grid">
         <div v-for="f in approvalFlows" :key="f.id" class="flow-card" :class="flowClass(f.priority)">
@@ -234,12 +234,11 @@ const permissionConfig = ref<any>(null);
 const savingPermissions = ref(false);
 
 function permissionRoleLabel(role: string) {
-  return ({ admin: "管理员", approver: "审批读写", executor: "执行读写", readonly: "只读" } as Record<string, string>)[role] || role;
+  return ({ admin: "管理员", approver: "审批人", executor: "执行人" } as Record<string, string>)[role] || role;
 }
-function hasMenuPermission(conf: any, role: string) { return Array.isArray(conf?.roles) && conf.roles.includes(role); }
-function toggleMenuPermission(conf: any, role: string) {
-  const roles = Array.isArray(conf.roles) ? conf.roles : [];
-  conf.roles = roles.includes(role) ? roles.filter((item: string) => item !== role) : [...roles, role];
+function menuAccess(conf: any, role: string) { return conf?.access?.[role] || "none"; }
+function setMenuAccess(conf: any, role: string, event: Event) {
+  conf.access = { ...(conf.access || {}), [role]: (event.target as HTMLSelectElement).value };
 }
 async function savePermissions() {
   if (!permissionConfig.value) return;
@@ -452,7 +451,10 @@ onMounted(retryLoad);
 </script>
 
 <style scoped>
-.config-page .header { margin-bottom: 20px; } .header h1 { font-size: var(--fs-h1); font-weight: 700; } .meta { font-size: 12px; color: var(--muted); }
+.config-page { display: flex; flex-direction: column; }
+.config-page .header { margin-bottom: 20px; order: 0; } .header h1 { font-size: var(--fs-h1); font-weight: 700; } .meta { font-size: 12px; color: var(--muted); }
+.config-guide { order: 1; }
+.system-permissions-card { order: 10; }.business-scope-card { order: 11; }.region-card { order: 12; }.approval-role-card { order: 13; }.escalation-card { order: 14; }.work-type-card { order: 20; }.status-card { order: 21; }.priority-card { order: 22; }.sla-card { order: 23; }
 .config-guide { display: flex; flex-wrap: wrap; gap: 8px; margin: -6px 0 16px; }
 .config-guide span { background: #f0f5ff; border: 1px solid #d9e6ff; border-radius: 999px; color: #4b5563; font-size: 12px; padding: 5px 10px; }
 .config-guide b { color: var(--brand); }
@@ -464,8 +466,8 @@ onMounted(retryLoad);
 .perm-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
 .perm-title { font-size: 13px; white-space: nowrap; }
 .perm-roles { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
-.perm-check { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); font-size: 11px; white-space: nowrap; cursor: pointer; }
-.perm-check input { margin: 0; }
+.perm-check { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 11px; white-space: nowrap; }
+.permission-select { width: 62px; padding: 2px; border: 1px solid var(--border); border-radius: 4px; background: #fff; font-size: 11px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; } .sub-hd { font-weight: 600; font-size: 13px; margin-bottom: 8px; }
 .chip-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: #f8fafc; border: 1px solid var(--border); border-radius: 14px; font-size: 12px; cursor: pointer; }

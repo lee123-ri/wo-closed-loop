@@ -6,7 +6,7 @@ role_data_scopes 表里该角色的可见范围勾选（多选取并集，天然
 - admin           → 锁死「全部」，不读配置、不受后台改动影响。
 - 事业部 PMO/负责人 → 默认「全部」（后台可改）。
 - 区域 PMO        → 默认「自己相关 + 区域」（后台可改；region 展开到其负责大区）。
-- 其他（executor/approver/readonly）→ 默认「自己相关」（后台可改）。
+- 未分配业务岗位的用户 → 默认「项目人员」，仅看自己相关（后台可改）。
 
 管理范围走 apply_scope_to_query；「我的工单」严格个人范围走
 apply_personal_scope_to_query（不受管理身份扩大）。
@@ -30,6 +30,7 @@ DEFAULT_ROLE_SCOPES = {
     "regional_pmo": ["self", "region"],
     "regional_gm": ["self", "region"],
     "regional_deputy_gm": ["self", "region"],
+    "project_member": ["self"],
     "site_member": ["self"],
     "inspection_engineer": ["self"],
     "project_manager": ["self"],
@@ -55,7 +56,7 @@ def resolve_data_roles(db: Session, user: User | None) -> tuple[set[str], list[s
     既有审批流解析兜底，避免迁移时中断已配置的工单模板。
     """
     if user is None:
-        return ({"member"}, [])
+        return ({"project_member"}, [])
     if user.role == "admin":
         return ({"admin"}, [])
     business_codes = {
@@ -80,7 +81,7 @@ def resolve_data_roles(db: Session, user: User | None) -> tuple[set[str], list[s
         return ({"pmo"}, regions)
     if regions:
         return ({"regional_pmo"}, regions)
-    return ({"member"}, [])
+    return ({"project_member"}, [])
 
 
 def apply_scope_to_query(q, db: Session, user: User | None):
