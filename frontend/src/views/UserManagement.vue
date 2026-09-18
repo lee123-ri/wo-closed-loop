@@ -6,7 +6,7 @@
 
     <div class="grid2">
       <!-- 用户列表 -->
-      <div class="card">
+      <div class="card user-list-card">
         <div class="card-hd">
           <h3>用户列表</h3>
           <div class="hd-tools">
@@ -21,9 +21,10 @@
             <span class="count">{{ total }} 人</span>
           </div>
         </div>
-        <div class="card-body">
+        <div class="card-body user-list-body">
         <PageError v-if="loadError" title="用户加载失败" :message="loadError" @action="loadUsers" />
         <t-table v-else
+          class="user-table"
           :data="users"
           :columns="columns"
           row-key="id"
@@ -280,6 +281,10 @@ onUnmounted(() => { if (searchTimer) clearTimeout(searchTimer); });
 .grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 440px); gap: 20px; align-items: stretch; }
 .card { height: 100%; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); display: flex; flex-direction: column; }
 .card-body { overflow-x: auto; }
+.user-list-body { display: flex; flex: 1; min-height: 0; }
+.user-list-body :deep(.user-table) { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.user-list-body :deep(.user-table .t-table__content) { flex: 1; min-height: 0; }
+.user-list-body :deep(.user-table .t-table__pagination) { flex: none; }
 .card-hd { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border); flex: none; }
 .card-hd h3 { font-size: 15px; font-weight: 700; }
 .hd-tools { display: flex; align-items: center; gap: 12px; }
