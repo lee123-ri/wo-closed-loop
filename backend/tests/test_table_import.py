@@ -6,7 +6,7 @@
 """
 import io
 
-from app.models import Project, WorkOrder
+from app.models import Project, User, WorkOrder
 
 HEADERS = ["标题", "项目", "责任人", "截止日期", "类型", "描述", "行动要求"]
 
@@ -111,3 +111,12 @@ def test_table_confirm_persists_selected_rows(client_auth, db):
     body = r.json()
     assert body["created"] == 2, body
     assert db.query(WorkOrder).count() == before + 2
+
+
+def test_table_import_is_admin_only(client, db):
+    """正式批量导入口只允许管理员；普通已登录人员也不能绕过前端。"""
+    from app.core.security import create_access_token
+    executor = db.query(User).filter_by(role="executor").first()
+    token = create_access_token(str(executor.id), extra={"name": executor.name, "role": executor.role})
+    r = client.post("/api/import/table/confirm", json={"rows": []}, headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 403

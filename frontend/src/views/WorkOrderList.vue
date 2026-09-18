@@ -15,7 +15,7 @@
         <t-button theme="default" variant="outline" :disabled="!selectedRowKeys.length" @click="exportSelectedCSV">
           导出选中<template v-if="selectedRowKeys.length">({{ selectedRowKeys.length }})</template>
         </t-button>
-        <t-button theme="default" variant="outline" @click="openTableImport">📥 直接导入工单</t-button>
+        <t-button v-if="userStore.isAdmin" theme="default" variant="outline" @click="openTableImport">📥 直接导入工单</t-button>
         <t-button theme="default" variant="outline" @click="openAgentHtmlImport">🖇️ 导入 Agent 复盘 HTML</t-button>
         <t-button theme="default" variant="outline" @click="exportCSV(list.items)">导出当前页 CSV</t-button>
         <t-button theme="primary" @click="router.push('/create')">＋ 新建工单</t-button>
@@ -131,6 +131,7 @@
 import { toast, confirmDialog } from "@/utils/feedback";
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useUserStore } from "@/stores/user";
 import { listWorkOrders, transitionWorkOrder, type WorkOrderList } from "@/api/workorders";
 import { getStatuses, getUsersAll, getWoTypes, type ConfigItem } from "@/api/config";
 import { importAgentHtml, importTableConfirm, importTablePreview, type AgentHtmlImportResult, type ImportPreviewRow } from "@/api/imports";
@@ -143,6 +144,7 @@ defineOptions({ name: "WorkOrderList" });
 
 const route = useRoute();
 const router = useRouter();
+const userStore = useUserStore();
 const loading = ref(false);
 let reloadSeq = 0;
 const list = ref<WorkOrderList>({ items: [], total: 0, page: 1, page_size: 20 });
