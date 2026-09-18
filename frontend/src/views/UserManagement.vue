@@ -86,7 +86,7 @@ const editDialog = reactive({ open: false, id: 0, name: "", department: "", role
 const roleOptions = [
   { label: "管理员", value: "admin" },
   { label: "审批人", value: "approver" },
-  { label: "执行人", value: "executor" },
+  { label: "责任人", value: "executor" },
 ];
 const columns: any[] = [
   { colKey: "name", title: "姓名", width: 100 },

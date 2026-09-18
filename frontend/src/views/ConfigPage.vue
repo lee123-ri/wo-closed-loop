@@ -234,7 +234,7 @@ const permissionConfig = ref<any>(null);
 const savingPermissions = ref(false);
 
 function permissionRoleLabel(role: string) {
-  return ({ admin: "管理员", approver: "审批人", executor: "执行人" } as Record<string, string>)[role] || role;
+  return ({ admin: "管理员", approver: "审批人", executor: "责任人" } as Record<string, string>)[role] || role;
 }
 function menuAccess(conf: any, role: string) { return conf?.access?.[role] || "none"; }
 function setMenuAccess(conf: any, role: string, event: Event) {

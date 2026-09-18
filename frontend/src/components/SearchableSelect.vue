@@ -119,7 +119,7 @@ const grouped = computed(() => {
 
 function roleLabel(r: string) {
   return (
-    { admin: "管理员", approver: "审批人", executor: "执行人" }[r] || r
+    { admin: "管理员", approver: "审批人", executor: "责任人" }[r] || r
   );
 }
 

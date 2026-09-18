@@ -138,7 +138,7 @@ def seed_permission_roles(db) -> None:
     defaults = [
         ("admin", "系统管理员", ["all"], ["*"], ["*"]),
         ("approver", "审批管理员", ["all"], ["工作台", "工单管理"], ["create_wo", "close_wo"]),
-        ("executor", "执行人员", ["self"], ["工作台", "工单管理"], ["backfill_wo"]),
+        ("executor", "责任人", ["self"], ["工作台", "工单管理"], ["backfill_wo"]),
     ]
     for code, name, data_scopes, menus, actions in defaults:
         if not db.query(PermissionRole).filter_by(code=code).first():
