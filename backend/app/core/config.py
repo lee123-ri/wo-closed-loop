@@ -91,6 +91,8 @@ class Settings(BaseSettings):
 
     # 上线默认只采集到数据池，由管理员逐条勾选后才生成工单；避免首次同步倒灌。
     auto_workorder_import_enabled: bool = False
+    # 历史工单批量导入唯一授权人（钉钉 userId）；生产必须显式配置，空值即关闭入口。
+    bulk_import_owner_dingtalk_id: str = ""
 
     # 对外开放 API（外部系统/Agent 经 X-API-Key 建单/查询工单；为空=禁用对外接口）
     external_api_key: str = ""

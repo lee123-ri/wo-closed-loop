@@ -15,7 +15,7 @@
         <t-button theme="default" variant="outline" :disabled="!selectedRowKeys.length" @click="exportSelectedCSV">
           导出选中<template v-if="selectedRowKeys.length">({{ selectedRowKeys.length }})</template>
         </t-button>
-        <t-button v-if="userStore.isAdmin" theme="default" variant="outline" @click="openTableImport">📥 直接导入工单</t-button>
+        <t-button v-if="userStore.user?.name === '李沛东'" theme="default" variant="outline" @click="openTableImport">📥 历史工单导入</t-button>
         <t-button theme="default" variant="outline" @click="openAgentHtmlImport">🖇️ 导入 Agent 复盘 HTML</t-button>
         <t-button theme="default" variant="outline" @click="exportCSV(list.items)">导出当前页 CSV</t-button>
         <t-button theme="primary" @click="router.push('/create')">＋ 新建工单</t-button>

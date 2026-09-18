@@ -10,6 +10,8 @@
 
 必须设定：`APP_ENV=production`、`AUTO_SEED=false`、`NAME_LOGIN_ENABLED=false`、`DEV_LOGIN_ENABLED=false`、`AUTO_WORKORDER_IMPORT_ENABLED=false`、`DINGTALK_LOGIN_REDIRECT_URI=https://<正式域名>/login`、`CORS_ORIGINS=https://<正式域名>`。
 
+历史工单批量导入还必须设 `BULK_IMPORT_OWNER_DINGTALK_ID=<李沛东已绑定的钉钉 userId>`；未设置时入口与接口均拒绝访问。
+
 ## 2. 云效构建步骤
 
 ```bash

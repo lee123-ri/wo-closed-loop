@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.security_middleware import limiter
 
 from app.core.database import get_db
-from app.api.auth import require_admin
+from app.api.auth import require_bulk_import_owner
 from app.models import Project, User, WorkOrder, WorkOrderTypeKB, StatusLog, AgentImportBatch, AnomalyOccurrence, ConfigDefinition
 from app.services.llm_service import parse_minutes
 from app.services.priority_service import match_priority
@@ -282,7 +282,7 @@ def _import_rows(db: Session, rows: list[dict]) -> tuple[int, list[str]]:
 
 @router.post("/table")
 @limiter.limit("10/minute")
-async def import_table(request: Request, file: UploadFile = File(...), db: Session = Depends(get_db), _=Depends(require_admin)):
+async def import_table(request: Request, file: UploadFile = File(...), db: Session = Depends(get_db), _=Depends(require_bulk_import_owner)):
     """上传 CSV/Excel 批量导入（列名中文/英文同义自适应）。
 
     支持列：标题/项目/责任人/截止日期/类型/描述/行动要求（含英文别名 title/project/person/
@@ -307,7 +307,7 @@ class TableConfirmIn(BaseModel):
 
 @router.post("/table/preview")
 @limiter.limit("10/minute")
-async def preview_table(request: Request, file: UploadFile = File(...), db: Session = Depends(get_db), _=Depends(require_admin)):
+async def preview_table(request: Request, file: UploadFile = File(...), db: Session = Depends(get_db), _=Depends(require_bulk_import_owner)):
     """上传 CSV/Excel → 解析预览（不落库），返回每行 ok/error，供前端「确认录入」勾选。"""
     raw = await file.read()
     if not raw:
@@ -323,7 +323,7 @@ async def preview_table(request: Request, file: UploadFile = File(...), db: Sess
 
 @router.post("/table/confirm")
 @limiter.limit("10/minute")
-def confirm_table(request: Request, body: TableConfirmIn, db: Session = Depends(get_db), _=Depends(require_admin)):
+def confirm_table(request: Request, body: TableConfirmIn, db: Session = Depends(get_db), _=Depends(require_bulk_import_owner)):
     """确认录入：接收预览阶段勾选的原始行（raw），复用 _import_rows 落库。"""
     if not body.rows:
         raise HTTPException(400, "无可导入的行")
