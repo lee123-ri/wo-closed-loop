@@ -94,8 +94,8 @@ const loadingUsers = ref(false);
 const loadError = ref("");
 let loadSeq = 0;
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
-// 用户管理保持固定 12 行，避免分页尺寸切换导致左右面板高度跳变。
-const pagination = reactive({ current: 1, pageSize: 12, total: 0, showJumper: true, showPageSize: false });
+// 用户管理保持固定 14 行，避免分页尺寸切换导致左右面板高度跳变。
+const pagination = reactive({ current: 1, pageSize: 14, total: 0, showJumper: true, showPageSize: false });
 const saving = ref(false);
 const roleOptions = [
   { label: "管理员", value: "admin" },
@@ -297,7 +297,7 @@ onUnmounted(() => { if (searchTimer) clearTimeout(searchTimer); });
 .perm-check { display: flex; align-items: center; gap: 3px; font-size: 11px; color: var(--muted); cursor: pointer; white-space: nowrap; }
 .perm-check input { margin: 0; }
 
-.form-actions { display: flex; justify-content: flex-end; padding: 12px 20px; border-top: 1px solid var(--border); }
+.form-actions { display: flex; justify-content: flex-end; padding: 16px 20px 17px; border-top: 1px solid var(--border); }
 
 @media (max-width: 1200px) { .grid2 { grid-template-columns: 1fr; } }
 </style>
