@@ -1,7 +1,7 @@
-"""通知引擎：按优先级×事件查策略、解析通道、多通道发送。
+"""通知触发入口。
 
-事件类型：dispatch | unread | sla_warn | sla_breach | sla_breach_72h
-通道：work_notify | app_ding | phone_ding | robot_mention | sms
+实际投递统一委托给 ``notification_rules``，可配置渠道仅机器人私聊和群聊。
+本文件中的旧分组格式函数仅保留给历史展示/测试，不再作为生产投递策略。
 """
 from sqlalchemy.orm import Session
 
@@ -29,23 +29,25 @@ def trigger_notify(wo_id: int, event: str) -> None:
 
 
 def trigger_dispatch_group(wo_ids: list[int]) -> None:
-    """派发后批量通知入口：异步按责任人分组合并发群（避免一条工单一条消息轰炸）。"""
+    """派发后按每张工单触发已启用的统一通知规则。"""
     if not wo_ids:
         return
     try:
-        from app.tasks import send_dispatch_group_task
-        send_dispatch_group_task.delay(wo_ids)
+        from app.tasks import send_notification_task
+        for wo_id in wo_ids:
+            send_notification_task.delay(wo_id, "dispatch")
     except Exception as e:
         print(f"[notify] 群发触发跳过: {e}")
 
 
 def trigger_measure_dispatch(host_id: int, measure_ids: list[int]) -> None:
-    """措施工单派发后异步通报（场景2：突出完成人）。"""
+    """措施派发后按统一规则触发；没有启用规则就不投递。"""
     if not measure_ids:
         return
     try:
-        from app.tasks import send_measure_dispatch_task
-        send_measure_dispatch_task.delay(host_id, measure_ids)
+        from app.tasks import send_notification_task
+        for wo_id in measure_ids:
+            send_notification_task.delay(wo_id, "dispatch")
     except Exception as e:
         print(f"[notify] 措施通报触发跳过: {e}")
 
@@ -255,53 +257,15 @@ def build_message(wo: WorkOrder, event: str, db: Session) -> tuple[str, str]:
 
 
 def send_notification(wo_id: int, event: str) -> dict:
-    """同步发送通知（也可被 Celery 调用）"""
+    """同步投递已启用规则（也可被 Celery 调用）。"""
     db = SessionLocal()
-    sent = 0
-    failed = 0
     try:
         wo = db.get(WorkOrder, wo_id)
         if not wo:
             return {"error": "work order not found"}
-        channels = resolve_channels(db, wo.priority, event)
-        title, body = build_message(wo, event, db)
-        person = db.get(User, wo.person_id) if wo.person_id else None
-        approver = db.get(User, wo.approver_id) if wo.approver_id else None
-        # 钉钉 userId（这里用 name 占位，真实场景需 user.dingtalk_id 映射）
-        person_dt = (person.dingtalk_id or person.name) if person else ""
-        approver_dt = (approver.dingtalk_id or approver.name) if approver else ""
-
-        for ch in channels:
-            ok = False
-            log_ch = ch
-            recipient = person_dt
-            if ch == "work_notify" and person_dt:
-                ok = dingtalk.send_work_notification(person_dt, title, body, action_url=_detail_url(wo.id))
-            elif ch == "app_ding" and person_dt:
-                ok = dingtalk.send_work_notification(person_dt, f"[应用DING]{title}", body)
-            elif ch == "phone_ding" and person_dt:
-                ok = dingtalk.send_phone_ding(person_dt, f"{title} {body}")
-            elif ch == "robot_mention":
-                ok = dingtalk.send_robot_group(
-                    settings.dingtalk_robot_webhook, settings.dingtalk_robot_secret,
-                    title, body, at_userids=[person_dt] if person_dt else [],
-                )
-                recipient = "group"
-            elif ch == "sms" and person and person.phone:
-                # 短信通道占位
-                print(f"[sms-mock] -> {person.phone}: {title}")
-                ok = True
-                log_ch = "sms"
-
-            db.add(NotificationLog(
-                work_order_id=wo.id, channel=log_ch, recipient=recipient,
-                event=event, status="sent" if ok else "failed", message=title,
-            ))
-            if ok:
-                sent += 1
-            else:
-                failed += 1
+        from app.services.notification_rules import dispatch
+        result = dispatch(db, wo, event, dry_run=False)
         db.commit()
+        return result
     finally:
         db.close()
-    return {"event": event, "sent": sent, "failed": failed}

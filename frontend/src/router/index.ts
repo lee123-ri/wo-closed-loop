@@ -27,6 +27,7 @@ const router = createRouter({
         { path: "dingtalk", name: "dingtalk", meta: { title: "钉钉集成", icon: "✆" }, component: () => import("@/views/DingTalkPage.vue") },
         { path: "config", name: "config", meta: { title: "规则配置", icon: "⚙" }, component: () => import("@/views/ConfigPage.vue") },
         { path: "users", name: "users", meta: { title: "用户管理", icon: "👥" }, component: () => import("@/views/UserManagement.vue") },
+        { path: "organization", name: "organization", meta: { title: "用户与组织", icon: "👥" }, component: () => import("@/views/OrganizationCenter.vue") },
         { path: "projects", name: "projects", meta: { title: "项目管理", icon: "◈" }, component: () => import("@/views/ProjectManage.vue") },
         { path: "sop", name: "sop", meta: { title: "SOP知识库", icon: "📖" }, component: () => import("@/views/SOPBrowser.vue") },
         { path: "audit-log", name: "audit-log", meta: { title: "操作日志", icon: "📋" }, component: () => import("@/views/AuditLog.vue") },

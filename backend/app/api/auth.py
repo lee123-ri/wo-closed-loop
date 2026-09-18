@@ -12,7 +12,7 @@ from app.core.database import get_db
 from app.core.security import create_access_token, decode_token
 from app.core.security_middleware import limiter
 from app.core.config import get_settings
-from app.models import ConfigDefinition, User
+from app.models import ConfigDefinition, PermissionRole, User, UserPermissionRole
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
@@ -157,16 +157,27 @@ def require_auth(user: User | None = Depends(get_current_user)) -> User:
     return user
 
 
-def require_admin(user: User = Depends(require_auth)) -> User:
+def has_permission_role(db: Session, user: User, code: str) -> bool:
+    """兼容旧 users.role，同时让新权限角色成为真正的服务端鉴权依据。"""
+    if user.role == "admin":
+        return True
+    return db.query(UserPermissionRole).join(PermissionRole).filter(
+        UserPermissionRole.user_id == user.id,
+        PermissionRole.code == code,
+        PermissionRole.is_active.is_(True),
+    ).first() is not None
+
+
+def require_admin(user: User = Depends(require_auth), db: Session = Depends(get_db)) -> User:
     """管理员权限"""
-    if user.role != "admin":
+    if not has_permission_role(db, user, "admin"):
         raise HTTPException(403, "需要管理员权限")
     return user
 
 
-def require_approver(user: User = Depends(require_auth)) -> User:
+def require_approver(user: User = Depends(require_auth), db: Session = Depends(get_db)) -> User:
     """审批人及以上权限"""
-    if user.role not in ("admin", "approver"):
+    if user.role not in ("admin", "approver") and not has_permission_role(db, user, "approver"):
         raise HTTPException(403, "需要审批人及以上权限")
     return user
 
@@ -254,6 +265,7 @@ DEFAULT_PERMISSIONS = {
         "基础数据": {
             "项目管理": {"roles": ["admin", "approver"]},
             "用户管理": {"roles": ["admin"]},
+            "用户与组织": {"roles": ["admin"]},
             "数据池": {"roles": ["admin", "approver"]},
             "SOP知识库": {"roles": ["admin", "approver", "executor"]},
         },
@@ -276,12 +288,20 @@ DEFAULT_PERMISSIONS = {
 
 
 def _permissions_from_row(row: ConfigDefinition | None) -> dict:
-    """从 config_definitions 行还原权限；无行 / 无 extra 时回退默认。"""
+    """从配置还原权限，并为存量自定义配置补齐版本新增的菜单/操作项。"""
     extra = (row.extra or {}) if row else {}
+    menu_groups = {group: {title: dict(conf) for title, conf in items.items()}
+                   for group, items in DEFAULT_PERMISSIONS["menu_groups"].items()}
+    for group, items in (extra.get("menu_groups") or {}).items():
+        if isinstance(items, dict):
+            menu_groups.setdefault(group, {}).update(items)
+    actions = {name: dict(conf) for name, conf in DEFAULT_PERMISSIONS["actions"].items()}
+    if isinstance(extra.get("actions"), dict):
+        actions.update(extra["actions"])
     return {
         "roles": list(DEFAULT_PERMISSIONS["roles"]),
-        "menu_groups": extra.get("menu_groups") or DEFAULT_PERMISSIONS["menu_groups"],
-        "actions": extra.get("actions") or DEFAULT_PERMISSIONS["actions"],
+        "menu_groups": menu_groups,
+        "actions": actions,
     }
 
 

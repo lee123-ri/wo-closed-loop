@@ -9,7 +9,7 @@ from app.core.config import load_system_yaml
 from app.models import (
     ApprovalFlow, ConfigDefinition, NotificationPolicy, ParsingRule,
     PriorityRule, Project, SLADefinition, User, WorkOrder, WorkOrderTypeKB,
-    PersonProjectMap, RoleAssignment, RoleDataScope,
+    PersonProjectMap, RoleAssignment, RoleDataScope, BusinessRole, PermissionRole,
 )
 
 
@@ -118,6 +118,32 @@ def seed_role_scopes(db) -> None:
         r.scopes = list(scopes)
         r.is_locked = locked
         r.sort_order = order
+    db.commit()
+
+
+def seed_business_roles(db) -> None:
+    for code, name, scope in [
+        ("site_member", "场站人员", "project"), ("inspection_engineer", "运检工程师", "project"),
+        ("project_manager", "项目经理", "project"), ("pmo", "PMO", "global"),
+        ("regional_pmo", "区域PMO", "region"), ("regional_gm", "区域总经理", "region"),
+        ("regional_deputy_gm", "区域副总经理", "region"), ("headquarters_member", "总部人员", "global"),
+    ]:
+        if not db.query(BusinessRole).filter_by(code=code).first(): db.add(BusinessRole(code=code,name=name,scope_type=scope,is_system=True))
+    db.commit()
+
+
+def seed_permission_roles(db) -> None:
+    """权限角色和业务岗位分离；保留旧 users.role 作平滑迁移兜底。"""
+    defaults = [
+        ("admin", "系统管理员", ["all"], ["*"], ["*"]),
+        ("approver", "审批管理员", ["all"], ["工作台", "工单管理"], ["create_wo", "close_wo"]),
+        ("executor", "执行人员", ["self"], ["工作台", "工单管理"], ["backfill_wo"]),
+        ("readonly", "只读人员", ["self"], ["工作台"], []),
+    ]
+    for code, name, data_scopes, menus, actions in defaults:
+        if not db.query(PermissionRole).filter_by(code=code).first():
+            db.add(PermissionRole(code=code, name=name, data_scopes=data_scopes,
+                menu_permissions=menus, action_permissions=actions, is_system=True))
     db.commit()
 
 
@@ -527,6 +553,8 @@ def run() -> None:
         seed_roles(db)
         print("→ 灌入数据范围角色默认...")
         seed_role_scopes(db)
+        seed_business_roles(db)
+        seed_permission_roles(db)
         print("→ 灌入配置（来源/状态/类型）...")
         seed_config(db)
         print("→ 灌入规则...")

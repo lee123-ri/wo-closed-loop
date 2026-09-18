@@ -18,7 +18,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
 from app.core.database import SessionLocal
-from app.models import User
+from app.models import OrganizationMappingRule, User
+from app.services.organization import build_candidates_from_directory, create_pending_candidate
 
 
 def _dws(*args: str, timeout: int = 30) -> dict:
@@ -167,6 +168,21 @@ def sync_users():
         print(f"  无钉钉ID: {no_dingtalk}")
         has_dept = db.query(User).filter(User.department.isnot(None)).count()
         print(f"  有部门: {has_dept}")
+
+        # 6. 把“部门 → 业务岗位”规则转成待确认候选，不直接授予岗位。
+        #    职位字段依赖钉钉接口返回；当前通讯录脚本可靠提供部门事实，
+        #    所以只带 department。管理员可在组织中心维护/停用正则映射规则。
+        rules = db.query(OrganizationMappingRule).filter(OrganizationMappingRule.enabled.is_(True)).all()
+        records = [
+            {"user_id": user.id, "department": user.department or "", "title": ""}
+            for user in db.query(User).filter(User.is_active.is_(True)).all()
+        ]
+        candidate_created = 0
+        for candidate in build_candidates_from_directory(records, rules):
+            _, created_now = create_pending_candidate(db, candidate)
+            candidate_created += int(created_now)
+        db.commit()
+        print(f"  已生成待确认岗位候选: {candidate_created}（需在平台确认后生效）")
 
     finally:
         db.close()
