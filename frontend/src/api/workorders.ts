@@ -4,7 +4,6 @@ export interface WorkOrder {
   id: number;
   code: string;
   title: string;
-  service: string | null;
   reason: string | null;
   action: string | null;
   task_deliverable: string | null;

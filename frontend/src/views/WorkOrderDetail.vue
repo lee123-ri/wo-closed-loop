@@ -74,7 +74,6 @@
             <span v-if="wo.escalation_level > 0" class="tag" :class="escTag(wo.escalation_level)">{{ escLabel[wo.escalation_level] }}</span>
           </div>
           <div class="lbl">项目</div><div class="val">{{ wo.project_name || "—" }}</div>
-          <div class="lbl">服务</div><div class="val">{{ wo.service || "—" }}</div>
           <div class="lbl">区域</div><div class="val">{{ wo.region || "—" }}</div>
           <div class="lbl">工单类型</div><div class="val">{{ wo.type_name || "—" }}</div>
           <div class="lbl">责任人</div>
@@ -124,9 +123,9 @@
           <label>行动要求</label>
           <div class="detail-val">{{ wo.action || "—" }}</div>
         </div>
-        <div class="detail-block" v-if="wo.task_deliverable">
-          <label>任务目标交付物</label>
-          <div class="detail-val">{{ wo.task_deliverable }}</div>
+        <div class="detail-block">
+          <label>交付物</label>
+          <div class="detail-val">{{ wo.task_deliverable || "—" }}</div>
         </div>
         <div class="detail-block" v-if="wo.conclusion">
           <label>执行结论</label>
@@ -404,10 +403,6 @@
         <input v-model="basicForm.title" placeholder="一句话概括工单内容" />
       </div>
       <div class="form-group">
-        <label>服务</label>
-        <input v-model="basicForm.service" placeholder="填写对应服务" maxlength="128" />
-      </div>
-      <div class="form-group">
         <label>项目</label>
         <t-select v-model="basicForm.project_id" placeholder="输入项目名称 / 编码搜索" filterable clearable :options="projectOptions" />
       </div>
@@ -534,7 +529,6 @@ const showBasicEdit = ref(false);
 const basicSaving = ref(false);
 const basicForm = reactive({
   title: "",
-  service: "",
   reason: "",
   action: "",
   task_deliverable: "",
@@ -1026,7 +1020,6 @@ async function savePerson(field: "person_id" | "approver_id", userId: number | u
 function openBasicEdit() {
   if (!wo.value) return;
   basicForm.title = wo.value.title || "";
-  basicForm.service = wo.value.service || "";
   basicForm.reason = wo.value.reason || "";
   basicForm.action = wo.value.action || "";
   basicForm.task_deliverable = wo.value.task_deliverable || "";
@@ -1053,7 +1046,6 @@ async function saveBasicEdit() {
   try {
     await updateWorkOrderBasic(wo.value.id, {
       title: basicForm.title.trim(),
-      service: basicForm.service.trim() || null,
       reason: basicForm.reason || null,
       action: basicForm.action || null,
       task_deliverable: basicForm.task_deliverable.trim() || null,

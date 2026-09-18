@@ -30,10 +30,6 @@
           <label><span class="req">*</span>标题</label>
           <t-input v-model="form.title" placeholder="一句话概括工单内容" maxlength="120" />
         </div>
-        <div class="form-group">
-          <label>服务</label>
-          <t-input v-model="form.service" placeholder="填写对应服务" maxlength="128" />
-        </div>
         <div class="form-group form-full">
           <label>触发原因</label>
           <t-textarea v-model="form.reason" placeholder="偏差描述或触发条件" :autosize="{ minRows: 3, maxRows: 6 }" />
@@ -158,7 +154,7 @@ const form = reactive({
   project_id: undefined as number | undefined,
   source_code: "" as string,
   priority: "P2",
-  title: "", service: "", reason: "", action: "",
+  title: "", reason: "", action: "",
   person_id: undefined as number | undefined,
   approver_id: undefined as number | undefined,
   planned_start_date: "",
@@ -200,7 +196,7 @@ async function submitManual() {
   submitting.value = true;
   try {
     await createWorkOrder({
-      title: form.title, service: form.service || undefined, reason: form.reason || undefined, action: form.action,
+      title: form.title, reason: form.reason || undefined, action: form.action,
       project_id: form.project_id, source_code: form.source_code,
       priority: form.priority, person_id: form.person_id, approver_id: form.approver_id,
       region: form.region || undefined,

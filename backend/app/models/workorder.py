@@ -24,7 +24,6 @@ class WorkOrder(TimestampMixin, Base):
         comment="外部 API 调用方请求唯一标识（幂等去重）",
     )
     title: Mapped[str] = mapped_column(String(256), nullable=False)
-    service: Mapped[str | None] = mapped_column(String(128), comment="服务")
     reason: Mapped[str | None] = mapped_column(Text, comment="触发原因")
     action: Mapped[str | None] = mapped_column(Text, comment="行动要求")
     conclusion: Mapped[str | None] = mapped_column(Text, comment="执行结论")
