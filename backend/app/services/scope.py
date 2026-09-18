@@ -16,7 +16,7 @@ from __future__ import annotations
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.models import RegionPMO, RoleAssignment, RoleDataScope, User, WorkOrder
+from app.models import PermissionRole, RegionPMO, RoleAssignment, RoleDataScope, User, UserPermissionRole, WorkOrder
 
 # 可行可见范围（三档，可多选）
 SCOPE_OPTIONS = ("self", "region", "all")
@@ -67,6 +67,14 @@ def resolve_data_role(db: Session, user: User | None) -> tuple[str, list[str]]:
     return ("member", [])
 
 
+def permission_scopes_for(db: Session, user: User) -> set[str]:
+    """新权限角色的数据范围取并集；无分配时返回空以兼容旧角色迁移。"""
+    rows = db.query(PermissionRole).join(UserPermissionRole).filter(
+        UserPermissionRole.user_id == user.id, PermissionRole.is_active.is_(True)
+    ).all()
+    return {scope for row in rows for scope in (row.data_scopes or []) if scope in VALID_SCOPES}
+
+
 def apply_scope_to_query(q, db: Session, user: User | None):
     """把行级数据范围落到 query 上。
 
@@ -79,11 +87,12 @@ def apply_scope_to_query(q, db: Session, user: User | None):
     """
     if user is None:
         return q
-    if user.role == "admin":
+    permission_scopes = permission_scopes_for(db, user)
+    if user.role == "admin" or "all" in permission_scopes:
         # 超管锁死全部：不读配置、不受后台改动影响。
         return q
     role_code, regions = resolve_data_role(db, user)
-    scopes = set(_scopes_for(db, role_code))
+    scopes = permission_scopes or set(_scopes_for(db, role_code))
     if "all" in scopes:
         return q
     conds = []

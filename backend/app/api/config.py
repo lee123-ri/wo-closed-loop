@@ -362,35 +362,26 @@ def update_approval_flow(flow_id: int, body: ApprovalFlowUpdate, db: Session = D
 
 
 # ====== 通知策略 CRUD ======
-@router.get("/notification-policies", response_model=list[NotificationPolicyOut])
-def list_notification_policies(db: Session = Depends(get_db)):
-    return db.query(NotificationPolicy).order_by(NotificationPolicy.priority).all()
+@router.get("/notification-policies")
+def list_notification_policies(_: User = Depends(require_admin)):
+    """旧通知策略已退役，通知配置统一在 /organization/notification-rules。"""
+    raise HTTPException(410, "通知策略已迁移到用户与组织/机器人通知规则，仅支持机器人私聊和群聊")
 
 
-@router.post("/notification-policies", response_model=NotificationPolicyOut, status_code=201)
-def add_notification_policy(body: NotificationPolicyCreate, db: Session = Depends(get_db)):
-    p = NotificationPolicy(priority=body.priority, event=body.event, channels=body.channels, template=body.template)
-    db.add(p); db.commit(); db.refresh(p)
-    return p
+@router.post("/notification-policies")
+def add_notification_policy(_: NotificationPolicyCreate, user: User = Depends(require_admin)):
+    raise HTTPException(410, "通知策略已迁移到用户与组织/机器人通知规则")
 
 
 @router.patch("/notification-policies/{policy_id}", response_model=NotificationPolicyOut)
 def update_notification_policy(policy_id: int, channels: list | None = None, enabled: bool | None = None,
-                               db: Session = Depends(get_db)):
-    p = db.get(NotificationPolicy, policy_id)
-    if not p: raise HTTPException(404, "策略不存在")
-    if channels is not None: p.channels = channels
-    if enabled is not None: p.enabled = enabled
-    db.commit(); db.refresh(p)
-    return p
+                               _: User = Depends(require_admin)):
+    raise HTTPException(410, "通知策略已迁移到用户与组织/机器人通知规则")
 
 
 @router.delete("/notification-policies/{policy_id}", status_code=204)
-def del_notification_policy(policy_id: int, db: Session = Depends(get_db)):
-    p = db.get(NotificationPolicy, policy_id)
-    if not p: raise HTTPException(404, "策略不存在")
-    db.delete(p)
-    db.commit()
+def del_notification_policy(policy_id: int, _: User = Depends(require_admin)):
+    raise HTTPException(410, "通知策略已迁移到用户与组织/机器人通知规则")
 
 
 # ── 项目管理 CRUD ─────────────────────────────────────
@@ -482,7 +473,7 @@ def sync_project_ledger_endpoint(db: Session = Depends(get_db), user: User = Dep
 # ── 操作日志 ──────────────────────────────────────────
 
 @router.get("/audit-logs")
-def list_audit_logs(page: int = 1, page_size: int = 50, db: Session = Depends(get_db)):
+def list_audit_logs(page: int = 1, page_size: int = 50, db: Session = Depends(get_db), _: User = Depends(require_admin)):
     from app.models.audit import AuditLog
     total = db.query(AuditLog).count()
     rows = db.query(AuditLog).order_by(AuditLog.id.desc()).offset((page-1)*page_size).limit(page_size).all()

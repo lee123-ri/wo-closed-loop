@@ -36,6 +36,7 @@ export const MENU_GROUPS: MenuGroup[] = [
     items: [
       { path: "/projects", icon: "folder", title: "项目管理" },
       { path: "/users", icon: "usergroup", title: "用户管理" },
+      { path: "/organization", icon: "usergroup", title: "用户与组织" },
       { path: "/pool", icon: "layers", title: "数据池" },
       { path: "/sop", icon: "book-open", title: "SOP知识库" },
     ],
