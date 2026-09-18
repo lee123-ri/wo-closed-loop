@@ -140,7 +140,8 @@ const permissionConfig = reactive<PermGroup[]>([
     items: [
       { title: "项目管理", roles: ["admin", "approver"] },
       { title: "用户管理", roles: ["admin"] },
-      { title: "数据池", roles: ["admin", "approver"] },
+      // 数据池仍是自动同步的内部暂存层；日常不开放人工入口，需恢复时取消本行注释。
+      // { title: "数据池", roles: ["admin", "approver"] },
       { title: "SOP知识库", roles: ["admin", "approver", "executor"] },
     ],
   },
@@ -276,8 +277,8 @@ onUnmounted(() => { if (searchTimer) clearTimeout(searchTimer); });
 .header h1 { font-size: var(--fs-h1); font-weight: 700; }
 .meta { font-size: 12px; color: var(--muted); }
 
-.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 440px); gap: 20px; align-items: start; }
-.card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); display: flex; flex-direction: column; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 440px); gap: 20px; align-items: stretch; }
+.card { height: 100%; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); display: flex; flex-direction: column; }
 .card-body { overflow-x: auto; }
 .card-hd { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border); flex: none; }
 .card-hd h3 { font-size: 15px; font-weight: 700; }
