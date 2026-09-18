@@ -26,11 +26,6 @@ export const getPriorityRules = () => http.get<any, any[]>("/config/priority-rul
 export const getSla = () => http.get<any, any[]>("/config/sla");
 export const getApprovalFlows = () => http.get<any, any[]>("/config/approval-flows");
 export const getPersonProjectMap = () => http.get<any, any[]>("/config/person-project-map");
-export const getRegionPMOs = () => http.get<any, any[]>("/config/region-pmos");
-export const setRegionPMO = (data: { region: string; user_id: number }) => http.post<any, any>("/config/region-pmos", data);
-export const deleteRegionPMO = (id: number) => http.delete(`/config/region-pmos/${id}`);
-export const getRoleAssignments = () => http.get<any, any[]>("/config/role-assignments");
-export const updateRoleAssignment = (roleCode: string, data: { user_id: number | null }) => http.patch<any, any>(`/config/role-assignments/${roleCode}`, data);
 
 // 数据范围角色：每个角色能看到哪些工单（多选取并集；admin 行锁定不可改）
 export const getRoleScopes = () => http.get<any, any[]>("/config/role-scopes");

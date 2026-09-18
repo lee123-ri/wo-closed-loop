@@ -42,7 +42,6 @@ class WorkOrderTypeKB(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(64))
     desc: Mapped[str | None] = mapped_column(Text)
     default_approver_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
-    default_approver_role: Mapped[str | None] = mapped_column(String(32), comment="默认审批人角色编码，如 division_head/pmo/delivery_pmo")
     default_priority: Mapped[str] = mapped_column(String(16), default="P2")
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
@@ -108,45 +107,9 @@ class ApprovalFlow(TimestampMixin, Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
-class NotificationPolicy(TimestampMixin, Base):
-    """通知策略（优先级 × 事件类型）"""
-    __tablename__ = "notification_policies"
-    __table_args__ = {"comment": "通知策略"}
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    priority: Mapped[str] = mapped_column(String(16), comment="P1|P2|P3")
-    event: Mapped[str] = mapped_column(String(32), comment="dispatch|unread|sla_warn|sla_breach|sla_breach_72h")
-    channels: Mapped[list] = mapped_column(JSONB, comment="['phone_ding','work_notify','robot_mention']")
-    template: Mapped[str | None] = mapped_column(Text, comment="消息模板")
-    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-
-
-class RegionPMO(TimestampMixin, Base):
-    """区域 → PMO 映射"""
-    __tablename__ = "region_pmos"
-    __table_args__ = {"comment": "区域PMO映射"}
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    region: Mapped[str] = mapped_column(String(16), unique=True, nullable=False, comment="华北/华中/华东/华南/西北/西南/东北")
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-
-
-class RoleAssignment(TimestampMixin, Base):
-    """组织角色 → 人员映射（审批流用角色编码引用，具体人名可后台配置）"""
-    __tablename__ = "role_assignments"
-    __table_args__ = {"comment": "组织角色-人员映射"}
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    role_code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, comment="division_head|pmo|delivery_pmo")
-    role_name: Mapped[str] = mapped_column(String(64), comment="事业部负责人/事业部PMO/交付PMO")
-    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    sort_order: Mapped[int] = mapped_column(Integer, default=0)
-
-
 class RoleDataScope(TimestampMixin, Base):
     """数据范围角色 → 可见范围（谁能看哪些工单，后台可配）。
 
-    与 region_pmos（谁当区域PMO）、role_assignments（谁当事业部负责人/PMO）解耦：
     本表只声明「角色能看到哪些范围」，判定时把人归到某角色再读这里的勾选。
     """
     __tablename__ = "role_data_scopes"

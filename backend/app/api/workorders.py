@@ -21,7 +21,6 @@ from app.schemas.workorder import (
 )
 from app.schemas.pool import BackfillRequest
 from app.services.priority_service import normalize_priority
-from app.services.roles import resolve_role_user_id
 from app.services.scope import apply_scope_to_query
 from app.services.maintenance import ensure_open
 

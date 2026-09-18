@@ -19,7 +19,7 @@ def clear_transactional_data(db: Session = Depends(get_db)):
 
     清空：work_orders, status_log, notification_log, escalation_log, attachments
     保留：users, projects, config_definitions, workorder_type_kb, sla_definitions,
-         approval_flows, notification_policies, priority_rules, parsing_rules
+         approval_flows, notification_rules, priority_rules, parsing_rules
     """
     # 按外键依赖顺序删除（含可靠性Agent导入批次，重置后即可重导重测）
     for model in [NotificationLog, EscalationLog, Attachment, StatusLog, WorkOrder, AgentImportBatch]:
@@ -38,7 +38,7 @@ def data_stats(db: Session = Depends(get_db)):
     """各表数据量统计"""
     from app.models import (
         ConfigDefinition, WorkOrderTypeKB, PriorityRule, ParsingRule,
-        SLADefinition, ApprovalFlow, NotificationPolicy, PersonProjectMap,
+        SLADefinition, ApprovalFlow, PersonProjectMap,
         User, Project,
     )
     return {
@@ -52,6 +52,5 @@ def data_stats(db: Session = Depends(get_db)):
         "parsing_rules": db.query(ParsingRule).count(),
         "sla": db.query(SLADefinition).count(),
         "approval_flows": db.query(ApprovalFlow).count(),
-        "notification_policies": db.query(NotificationPolicy).count(),
         "person_map": db.query(PersonProjectMap).count(),
     }

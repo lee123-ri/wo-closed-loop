@@ -1,7 +1,7 @@
 """省份 → 大区 映射
 
 区域统一口径为七大区：华北 / 东北 / 华东 / 华中 / 华南 / 西南 / 西北。
-与前端 REGIONS、work_orders.region 注释、region_pmos 存储一致。
+与用户钉钉部门、work_orders.region 注释保持一致。
 数仓「0映射表」只有省份字段（v6ZTRXw），大区由省份推导。
 """
 from __future__ import annotations

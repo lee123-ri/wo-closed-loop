@@ -25,7 +25,6 @@ from app.schemas.workorder import WorkOrderOut
 from app.api.workorders import _enrich, _next_code
 from app.services.audit import log_audit
 from app.services.priority_service import normalize_priority
-from app.services.roles import resolve_role_user_id
 from app.services.maintenance import ensure_open
 
 router = APIRouter(prefix="/external", tags=["external"])

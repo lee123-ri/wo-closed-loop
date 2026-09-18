@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.api.workorders import create_work_order
-from app.models import BusinessRole, BusinessRoleAssignment, RegionPMO, RoleDataScope, User
+from app.models import BusinessRole, BusinessRoleAssignment, RoleDataScope, User
 from app.schemas.workorder import WorkOrderCreate
 
 
@@ -79,7 +79,7 @@ def test_region_pmo_drop_self_scope(db):
     pmo = db.query(User).filter(User.role == "executor").first()
     other = db.query(User).filter(User.role == "executor", User.id != pmo.id).first()
     _assign_business_role(db, pmo, "regional_pmo")
-    db.add(RegionPMO(region="华东", user_id=pmo.id))
+    pmo.department = "华东区域"
     _role_row(db, "regional_pmo").scopes = ["region"]
     db.flush()
 
@@ -93,11 +93,11 @@ def test_region_pmo_drop_self_scope(db):
 
 
 def test_business_role_can_be_granted_all(db):
-    """场站人员岗位配置为 all 后能看全部。"""
+    """项目人员岗位配置为 all 后能看全部。"""
     me = db.query(User).filter(User.role == "executor").first()
     other = db.query(User).filter(User.role == "executor", User.id != me.id).first()
-    _assign_business_role(db, me, "site_member")
-    _role_row(db, "site_member").scopes = ["all"]
+    _assign_business_role(db, me, "project_member")
+    _role_row(db, "project_member").scopes = ["all"]
     db.flush()
 
     other_wo = _mk(db, "m-他人", person_id=other.id, approver_id=other.id)
@@ -109,8 +109,8 @@ def test_empty_scopes_means_nothing(db):
     """勾选为空集时显式无范围，不误放量成「全部」。"""
     me = db.query(User).filter(User.role == "executor").first()
     other = db.query(User).filter(User.role == "executor", User.id != me.id).first()
-    _assign_business_role(db, me, "site_member")
-    _role_row(db, "site_member").scopes = []
+    _assign_business_role(db, me, "project_member")
+    _role_row(db, "project_member").scopes = []
     db.flush()
 
     mine_wo = _mk(db, "e-本人", person_id=me.id, approver_id=other.id)
@@ -121,12 +121,12 @@ def test_empty_scopes_means_nothing(db):
 # ── API 校验 ───────────────────────────────────────────
 
 def test_role_scope_update_validates_values(client_auth):
-    r = client_auth.put("/api/config/role-scopes/site_member", json={"scopes": ["self", "bogus"]})
+    r = client_auth.put("/api/config/role-scopes/project_member", json={"scopes": ["self", "bogus"]})
     assert r.status_code == 400
 
 
 def test_role_scope_update_ok(client_auth):
-    r = client_auth.put("/api/config/role-scopes/site_member", json={"scopes": ["self", "region"]})
+    r = client_auth.put("/api/config/role-scopes/project_member", json={"scopes": ["self", "region"]})
     assert r.status_code == 200
     assert set(r.json()["scopes"]) == {"self", "region"}
 

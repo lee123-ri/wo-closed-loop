@@ -16,6 +16,7 @@ from app.services.organization import confirm_candidate, create_pending_candidat
 
 router = APIRouter(prefix="/organization", tags=["organization"])
 SCOPES = {"global", "region", "project"}
+NOTIFICATION_EVENTS = {"dispatch", "sla_warn", "sla_breach", "sla_breach_72h"}
 
 class BusinessRoleIn(BaseModel):
     code: str = Field(pattern=r"^[a-z][a-z0-9_]{1,62}$")
@@ -62,17 +63,25 @@ def _notification_out(row: NotificationRule) -> dict:
 def _channels(channels: list[str]) -> None:
     from app.services.notification_rules import ALLOWED_CHANNELS
     if not channels or set(channels) - ALLOWED_CHANNELS: raise HTTPException(400, "通知渠道仅允许 robot_private、robot_group")
+def _notification_recipients(db: Session, event: str, recipients: dict[str, Any]) -> None:
+    if event not in NOTIFICATION_EVENTS:
+        raise HTTPException(400, "通知触发时点仅允许 dispatch、sla_warn、sla_breach、sla_breach_72h")
+    user_ids = set(recipients.get("user_ids") or [])
+    if any(not isinstance(user_id, int) for user_id in user_ids):
+        raise HTTPException(400, "指定私聊人员必须为系统用户")
+    if user_ids and db.query(User).filter(User.id.in_(user_ids), User.is_active.is_(True)).count() != len(user_ids):
+        raise HTTPException(400, "指定私聊人员不存在或已停用")
 @router.get("/notification-rules")
 def list_notification_rules(db: Session = Depends(get_db), _: User = Depends(require_admin)):
     return [_notification_out(row) for row in db.query(NotificationRule).order_by(NotificationRule.id)]
 @router.post("/notification-rules", status_code=201)
 def create_notification_rule(body: NotificationRuleIn, db: Session = Depends(get_db), actor: User = Depends(require_admin)):
-    _channels(body.channels); row = NotificationRule(**body.model_dump()); db.add(row); db.flush(); _audit(db, actor, "create_notification_rule", "notification_rule", row.id, {"name": row.name, "channels": row.channels, "enabled": row.enabled}); db.commit(); return _notification_out(row)
+    _channels(body.channels); _notification_recipients(db, body.event, body.recipients); row = NotificationRule(**body.model_dump()); db.add(row); db.flush(); _audit(db, actor, "create_notification_rule", "notification_rule", row.id, {"name": row.name, "channels": row.channels, "enabled": row.enabled}); db.commit(); return _notification_out(row)
 @router.patch("/notification-rules/{rule_id}")
 def update_notification_rule(rule_id: int, body: NotificationRuleIn, db: Session = Depends(get_db), actor: User = Depends(require_admin)):
     row = db.get(NotificationRule, rule_id)
     if not row: raise HTTPException(404, "通知规则不存在")
-    _channels(body.channels)
+    _channels(body.channels); _notification_recipients(db, body.event, body.recipients)
     for key, value in body.model_dump().items(): setattr(row, key, value)
     _audit(db, actor, "update_notification_rule", "notification_rule", row.id, {"enabled": row.enabled, "channels": row.channels}); db.commit(); return _notification_out(row)
 @router.delete("/notification-rules/{rule_id}", status_code=204)

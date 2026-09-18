@@ -5,7 +5,7 @@ role_data_scopes 表里该角色的可见范围勾选（多选取并集，天然
 
 - admin           → 锁死「全部」，不读配置、不受后台改动影响。
 - 事业部 PMO/负责人 → 默认「全部」（后台可改）。
-- 区域 PMO        → 默认「自己相关 + 区域」（后台可改；region 展开到其负责大区）。
+- 区域岗位        → 默认「自己相关 + 区域」（后台可改；区域从用户的钉钉部门自动识别）。
 - 未分配业务岗位的用户 → 默认「项目人员」，仅看自己相关（后台可改）。
 
 管理范围走 apply_scope_to_query；「我的工单」严格个人范围走
@@ -16,7 +16,8 @@ from __future__ import annotations
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.models import BusinessRole, BusinessRoleAssignment, RegionPMO, RoleAssignment, RoleDataScope, User, WorkOrder
+from app.models import BusinessRole, BusinessRoleAssignment, RoleDataScope, User, WorkOrder
+from app.services.region_map import normalize_region
 
 # 可行可见范围（三档，可多选）
 SCOPE_OPTIONS = ("self", "region", "all")
@@ -26,14 +27,10 @@ VALID_SCOPES = frozenset(SCOPE_OPTIONS)
 DEFAULT_ROLE_SCOPES = {
     "admin": ["all"],
     "pmo": ["all"],
-    "region_pmo": ["self", "region"],
     "regional_pmo": ["self", "region"],
     "regional_gm": ["self", "region"],
     "regional_deputy_gm": ["self", "region"],
     "project_member": ["self"],
-    "site_member": ["self"],
-    "inspection_engineer": ["self"],
-    "project_manager": ["self"],
     "headquarters_member": ["self"],
     "member": ["self"],
 }
@@ -52,8 +49,8 @@ def _scopes_for(db: Session, role_code: str) -> list[str]:
 def resolve_data_roles(db: Session, user: User | None) -> tuple[set[str], list[str]]:
     """返回用户业务岗位对应的数据范围角色及其负责区域。
 
-    用户管理里的业务岗位是唯一的人员归属来源。旧的角色人员映射仅继续为
-    既有审批流解析兜底，避免迁移时中断已配置的工单模板。
+    用户管理里的业务岗位是唯一的人员归属来源；区域从钉钉同步的部门字段
+    自动识别，不再维护第二份“区域负责人”映射。
     """
     if user is None:
         return ({"project_member"}, [])
@@ -68,19 +65,10 @@ def resolve_data_roles(db: Session, user: User | None) -> tuple[set[str], list[s
             .all()
         )
     }
-    regions = [
-        r.region
-        for r in db.query(RegionPMO).filter(RegionPMO.user_id == user.id).all()
-        if r.region
-    ]
+    department_region = normalize_region(user.department)
+    regions = [department_region] if department_region else []
     if business_codes:
         return (business_codes, regions)
-    # 存量业务：尚未在用户列表分配业务岗位时，不改变已生效的数据范围。
-    legacy_codes = {r.role_code for r in db.query(RoleAssignment).filter(RoleAssignment.user_id == user.id).all()}
-    if legacy_codes & {"division_head", "pmo"}:
-        return ({"pmo"}, regions)
-    if regions:
-        return ({"regional_pmo"}, regions)
     return ({"project_member"}, [])
 
 
@@ -90,7 +78,7 @@ def apply_scope_to_query(q, db: Session, user: User | None):
     admin 锁死「全部」，原样返回不附加过滤；
     其余角色读 role_data_scopes 勾选，多选取 OR 并集（数据库天然去重）：
       self  → 本人为责任人/审批人
-      region→ 工单所属大区 ∈ 我的负责大区（仅区域 PMO 有值）
+      region→ 工单所属大区 ∈ 当前用户钉钉部门所对应的大区
       all  → 不限
     勾选为空集时显式返回无结果（避免意外放量）。
     """

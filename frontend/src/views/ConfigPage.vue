@@ -8,7 +8,7 @@
       <span><b>自动判定</b>：优先级正则（仅智能解析/导入/机器人）</span>
       <span><b>时效与升级</b>：SLA 期限、平台升级路径</span>
       <span><b>权限角色</b>：菜单可见性</span>
-      <span><b>业务岗位</b>：数据范围、区域归属、审批流默认人员</span>
+      <span><b>业务岗位</b>：数据范围；区域权限直接按钉钉部门识别</span>
     </div>
 
     <!-- 权限角色的菜单权限：从用户管理收敛至规则配置 -->
@@ -90,40 +90,6 @@
       </t-table>
     </div>
 
-    <!-- 区域归属：不是岗位分配，决定区域数据权限覆盖哪几个大区 -->
-    <div class="card region-card">
-      <div class="card-hd"><div><h3>📍 区域数据负责人</h3><span class="count">把已分配“区域 PMO/区域总副总”等业务岗位的人员关联到具体大区</span></div></div>
-      <div class="region-pmo-grid">
-        <div v-for="r in REGIONS" :key="r" class="region-pmo-row">
-          <span class="region-label">{{ r }}</span>
-          <SearchableSelect
-            :model-value="regionPMO[r]?.user_id"
-            :options="allUsers"
-            placeholder="输入姓名搜索…"
-            class="region-pmo-select"
-            @update:model-value="(v: number | undefined) => onRegionPMOChange(r, v)"
-          />
-        </div>
-      </div>
-    </div>
-
-    <!-- 审批流默认人员：只给现有审批流节点解析角色，不和用户业务岗位重复 -->
-    <div class="card approval-role-card">
-      <div class="card-hd"><h3>👤 审批流默认人员</h3><span class="count">仅供工单模板中的角色节点解析，不参与用户的业务岗位和数据权限</span></div>
-      <div class="region-pmo-grid">
-        <div v-for="r in roleAssignments" :key="r.role_code" class="region-pmo-row">
-          <span class="region-label"><b>{{ r.role_name }}</b><code class="role-code">{{ r.role_code }}</code></span>
-          <SearchableSelect
-            :model-value="r.user_id"
-            :options="allUsers"
-            placeholder="输入姓名搜索…"
-            class="region-pmo-select"
-            @update:model-value="(v: number | undefined) => onRoleChange(r.role_code, v)"
-          />
-        </div>
-      </div>
-    </div>
-
     <!-- 数据权限（业务岗位 → 可见范围） -->
     <div class="card business-scope-card">
       <div class="card-hd"><div><h3>🗂 业务岗位数据权限</h3><span class="count">在用户管理分配岗位后生效；一个人有多个岗位时取并集</span></div><button class="btn btn-pri btn-sm" @click="openBusinessRole">＋ 新增岗位</button></div>
@@ -136,12 +102,12 @@
           </label>
         </div>
       </div>
-      <div class="scope-hint">「区域」依赖上方“区域数据负责人”配置；未关联大区时该范围为空。“系统权限角色”的菜单可见性在上方维护，不在这里重复配置。</div>
+      <div class="scope-hint">「区域」从用户管理里的钉钉部门自动识别（如“华东区域”）；无法识别时该范围为空。“系统身份”的菜单可见性在上方维护，不在这里重复配置。</div>
     </div>
 
-    <!-- 审批流 -->
+    <!-- 审批流与机器人跟催：原“默认人员”和“平台升级路径”统一维护 -->
     <div class="card escalation-card">
-      <div class="card-hd"><div><h3>🔄 平台升级路径</h3><span class="count">已接入平台节点展示和逾期升级目标；不修改钉钉 OA 模板</span></div></div>
+      <div class="card-hd"><div><h3>🔄 审批与跟催流程</h3><span class="count">工单类型上方直接配置默认审批人/责任人；这里维护流程节点与机器人跟催对象，不修改钉钉 OA 模板</span></div><button class="btn btn-pri btn-sm" @click="openFollowup()">＋ 新建跟催</button></div>
       <div class="flow-grid">
         <div v-for="f in approvalFlows" :key="f.id" class="flow-card" :class="flowClass(f.priority)">
           <div class="flow-hd"><h4>{{ emoji(f.priority) }} {{ f.name }}</h4></div>
@@ -152,6 +118,14 @@
               <div v-if="n.timeout_days" class="node-timeout">⏱ {{ n.timeout_days }}天</div>
             </div>
           </div>
+        </div>
+      </div>
+      <div class="followup-section">
+        <div class="sub-hd">机器人跟催规则</div>
+        <div v-if="!notificationRules.length" class="empty-followup">尚未创建跟催规则；新建后需显式启用才会在对应事件触发。</div>
+        <div v-for="rule in notificationRules" :key="rule.id" class="followup-row">
+          <div><b>{{ rule.name }}</b><span class="followup-meta">{{ notificationEventLabel(rule.event) }} · {{ notificationChannelLabel(rule.channels) }} · {{ notificationRecipients(rule) }}</span></div>
+          <div class="row-actions"><span class="toggle" :class="{ on: rule.enabled }">{{ rule.enabled ? '已启用' : '未启用' }}</span><t-button size="small" variant="outline" @click="openFollowup(rule)">编辑</t-button><t-button size="small" variant="outline" theme="danger" @click="deleteFollowup(rule.id)">删除</t-button></div>
         </div>
       </div>
     </div>
@@ -194,6 +168,17 @@
         <div class="form-group"><label>超时(天)</label><input type="number" v-model.number="nodeModal.timeout_days" /></div>
         <div class="modal-actions"><t-button variant="outline" @click="nodeModal.open = false">取消</t-button><t-button theme="primary" :loading="writing" @click="saveNode">保存</t-button></div>
     </t-dialog>
+    <t-dialog v-model:visible="followupModal.open" :header="followupModal.editing ? '编辑机器人跟催' : '新建机器人跟催'" width="560" :footer="false">
+      <div class="form-group"><label>规则名称</label><input v-model="followupModal.name" placeholder="如：P1 逾期跟催" /></div>
+      <div class="form-group"><label>触发时点</label><select v-model="followupModal.event"><option v-for="event in NOTIFICATION_EVENTS" :key="event.value" :value="event.value">{{ event.label }}</option></select></div>
+      <div class="form-group"><label>机器人渠道</label><div class="check-row"><label><input v-model="followupModal.robotPrivate" type="checkbox" /> 私聊</label><label><input v-model="followupModal.robotGroup" type="checkbox" /> 群聊</label></div></div>
+      <div v-if="followupModal.robotPrivate" class="form-group"><label>私聊对象</label><div class="check-row"><label><input v-model="followupModal.responsible" type="checkbox" /> 当前责任人</label><label><input v-model="followupModal.approver" type="checkbox" /> 当前审批人</label></div><input v-model="followupModal.userSearch" placeholder="按姓名或部门筛选后勾选指定人员…" /><div class="recipient-grid"><label v-for="u in filteredFollowupUsers" :key="u.id"><input type="checkbox" :checked="followupModal.userIds.includes(u.id)" @change="toggleFollowupUser(u.id)" /> {{ u.name }}<small>{{ u.department || '未分组' }}</small></label></div></div>
+      <div v-if="followupModal.robotGroup" class="form-group"><label>群聊对象</label><input v-model="followupModal.groupId" placeholder="留空则发到工单所属项目群；也可填写指定群 ID" /></div>
+      <div class="form-group"><label>消息模板（可选）</label><textarea v-model="followupModal.template" placeholder="可用 {code}、{title}、{status}" rows="3"></textarea></div>
+      <div class="form-group"><label>冷却时间（分钟）</label><input v-model.number="followupModal.cooldownMinutes" type="number" min="0" /></div>
+      <div class="form-group"><label><input v-model="followupModal.enabled" type="checkbox" /> 保存后立即启用</label><div class="form-hint">仅支持机器人私聊和群聊；此处只保存规则，不会发送测试消息。</div></div>
+      <div class="modal-actions"><t-button variant="outline" @click="followupModal.open = false">取消</t-button><t-button theme="primary" :loading="writing" @click="saveFollowup">保存</t-button></div>
+    </t-dialog>
     </template>
   </div>
 </template>
@@ -201,9 +186,8 @@
 <script setup lang="ts">
 import { toast, confirmDialog } from "@/utils/feedback";
 import { computed, onMounted, reactive, ref } from "vue";
-import { getStatuses, getProjects, getUsers, getUsersAll, getPriorityRules, getSla, getApprovalFlows, getRegionPMOs, getRoleAssignments, getRoleScopes, updateRoleScope, getWoTypes, addWorkOrderType, updateWorkOrderType } from "@/api/config";
+import { getStatuses, getProjects, getUsers, getUsersAll, getPriorityRules, getSla, getApprovalFlows, getRoleScopes, updateRoleScope, getWoTypes, addWorkOrderType, updateWorkOrderType } from "@/api/config";
 import * as CC from "@/api/config-crud";
-import { setRegionPMO, deleteRegionPMO, updateRoleAssignment } from "@/api/config";
 import SearchableSelect from "@/components/SearchableSelect.vue";
 import PageError from "@/components/PageError.vue";
 import { priorityLabel, priorityTheme } from "@/utils/wo-display";
@@ -211,7 +195,6 @@ import { getPermissions, savePermissions as savePermissionsApi } from "@/api/aut
 import { useUserStore } from "@/stores/user";
 import http from "@/api/http";
 
-const REGIONS = ["华北", "华中", "华东", "华南", "西北", "西南", "东北"];
 const SCOPE_OPTIONS = [
   { value: "self", label: "自己相关" },
   { value: "region", label: "区域" },
@@ -224,14 +207,28 @@ const woTypeList = ref<any[]>([]);
 const priorityRules = ref<any[]>([]);
 const slaList = ref<any[]>([]);
 const approvalFlows = ref<any[]>([]);
-const regionPMO = reactive<Record<string, any>>({});
-const roleAssignments = ref<any[]>([]);
 const roleScopes = ref<any[]>([]);
+const notificationRules = ref<any[]>([]);
 const writing = ref(false);
 const loadError = ref("");
 const store = useUserStore();
 const permissionConfig = ref<any>(null);
 const savingPermissions = ref(false);
+const NOTIFICATION_EVENTS = [
+  { value: "dispatch", label: "工单派发" },
+  { value: "sla_warn", label: "即将到期" },
+  { value: "sla_breach", label: "已逾期" },
+  { value: "sla_breach_72h", label: "逾期满 72 小时" },
+];
+const followupModal = reactive({
+  open: false, editing: null as any, name: "", event: "sla_warn", robotPrivate: true, robotGroup: false,
+  responsible: true, approver: false, userIds: [] as number[], groupId: "", template: "", cooldownMinutes: 60,
+  enabled: false, userSearch: "",
+});
+const filteredFollowupUsers = computed(() => {
+  const q = followupModal.userSearch.trim().toLowerCase();
+  return allUsers.value.filter((u) => !q || u.name.toLowerCase().includes(q) || (u.department || "").toLowerCase().includes(q));
+});
 
 function permissionRoleLabel(role: string) {
   return ({ admin: "管理员", approver: "审批人", executor: "责任人" } as Record<string, string>)[role] || role;
@@ -370,6 +367,36 @@ function flowClass(p: string) { return p === "P1" ? "p1" : p === "P2" ? "p2" : "
 function emoji(p: string) { return p === "P1" ? "🔴" : p === "P2" ? "🟠" : "🔵"; }
 function nodeTypeLabel(t: string) { return ({ start: "起始", approval: "审批", exec: "执行", end: "结束" } as any)[t] || t; }
 
+function notificationEventLabel(event: string) { return NOTIFICATION_EVENTS.find((x) => x.value === event)?.label || event; }
+function notificationChannelLabel(channels: string[] = []) { return channels.map((c) => c === "robot_private" ? "私聊" : "群聊").join(" + "); }
+function notificationRecipients(rule: any) {
+  const recipients = rule.recipients || {};
+  const names = (recipients.user_ids || []).map((id: number) => allUsers.value.find((u) => u.id === id)?.name || `用户#${id}`);
+  if (recipients.responsible) names.push("当前责任人");
+  if (recipients.approver) names.push("当前审批人");
+  if ((rule.channels || []).includes("robot_group")) names.push(recipients.group_id ? "指定群" : "项目群");
+  return names.length ? names.join("、") : "未配置对象";
+}
+function openFollowup(rule?: any) {
+  const recipients = rule?.recipients || {};
+  followupModal.editing = rule || null; followupModal.name = rule?.name || ""; followupModal.event = rule?.event || "sla_warn";
+  followupModal.robotPrivate = !rule || (rule.channels || []).includes("robot_private"); followupModal.robotGroup = !!rule && (rule.channels || []).includes("robot_group");
+  followupModal.responsible = !!recipients.responsible; followupModal.approver = !!recipients.approver; followupModal.userIds = [...(recipients.user_ids || [])];
+  followupModal.groupId = recipients.group_id || ""; followupModal.template = rule?.template || ""; followupModal.cooldownMinutes = rule?.cooldown_minutes ?? 60;
+  followupModal.enabled = !!rule?.enabled; followupModal.userSearch = ""; followupModal.open = true;
+}
+function toggleFollowupUser(id: number) {
+  followupModal.userIds = followupModal.userIds.includes(id) ? followupModal.userIds.filter((x) => x !== id) : [...followupModal.userIds, id];
+}
+async function saveFollowup() {
+  const channels = [followupModal.robotPrivate && "robot_private", followupModal.robotGroup && "robot_group"].filter(Boolean);
+  if (!followupModal.name.trim() || !channels.length) { toast.warning("请填写名称并选择至少一种机器人渠道"); return; }
+  const body = { name: followupModal.name.trim(), event: followupModal.event, channels, conditions: {}, recipients: { user_ids: followupModal.userIds, responsible: followupModal.responsible, approver: followupModal.approver, ...(followupModal.groupId.trim() ? { group_id: followupModal.groupId.trim() } : {}) }, template: followupModal.template.trim() || null, cooldown_minutes: followupModal.cooldownMinutes || 0, enabled: followupModal.enabled };
+  const saved = await writeConfig(() => followupModal.editing ? http.patch(`/organization/notification-rules/${followupModal.editing.id}`, body) : http.post("/organization/notification-rules", body));
+  if (saved) followupModal.open = false;
+}
+async function deleteFollowup(id: number) { if (await confirmDialog("删除这条机器人跟催规则？")) await writeConfig(() => http.delete(`/organization/notification-rules/${id}`)); }
+
 async function loadAll() {
   loadError.value = "";
   let st, u, wt, pr, sla, flows;
@@ -382,21 +409,12 @@ async function loadAll() {
     throw e;
   }
   statuses.value = st; users.value = u; woTypeList.value = wt; priorityRules.value = pr; slaList.value = sla; approvalFlows.value = flows;
-  // 加载全部用户（用于区域PMO选择）
+  // 加载全部用户（用于审批人与机器人跟催对象选择）
   try {
     allUsers.value = await getUsersAll();
   } catch { allUsers.value = u; }
-  // 加载区域PMO配置（失败不影响页面）
-  try {
-    const rpmo = await getRegionPMOs();
-    for (const r of REGIONS) {
-      regionPMO[r] = rpmo.find((x: any) => x.region === r) || null;
-    }
-  } catch { /* 接口可能尚未部署 */ }
-  // 加载角色→人员配置（失败不影响页面）
-  try {
-    roleAssignments.value = await getRoleAssignments();
-  } catch { /* 接口可能尚未部署 */ }
+  // 跟催规则和审批节点同屏维护；加载失败不影响工单规则的其他部分。
+  try { notificationRules.value = await http.get("/organization/notification-rules"); } catch { notificationRules.value = []; }
   // 加载数据范围角色配置（失败不影响页面）
   try {
     roleScopes.value = await getRoleScopes();
@@ -406,32 +424,6 @@ async function loadAll() {
     permissionConfig.value = await getPermissions();
   } catch { /* 不影响其余规则配置 */ }
 }
-async function onRegionPMOChange(region: string, userId: number | undefined) {
-  if (userId) {
-    // 设置 PMO
-    try {
-      const result = await setRegionPMO({ region, user_id: userId });
-      regionPMO[region] = result;
-    } catch (e: any) { toast.error("保存失败：" + e.message); }
-  } else {
-    // 清除 PMO
-    const existing = regionPMO[region];
-    if (existing?.id) {
-      try {
-        await deleteRegionPMO(existing.id);
-        regionPMO[region] = null;
-      } catch (e: any) { toast.error("删除失败：" + e.message); }
-    }
-  }
-}
-async function onRoleChange(code: string, userId: number | undefined) {
-  try {
-    const result = await updateRoleAssignment(code, { user_id: userId ?? null });
-    const idx = roleAssignments.value.findIndex((r) => r.role_code === code);
-    if (idx >= 0) roleAssignments.value[idx] = result;
-  } catch (e: any) { toast.error("保存失败：" + e.message); }
-}
-
 // 数据范围角色：勾选可见范围（多取并集）
 function hasScope(r: any, s: string) {
   return (r.scopes || []).includes(s);
@@ -500,6 +492,14 @@ onMounted(retryLoad);
 .region-pmo-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #f8fafc; border-radius: 8px; border: 1px solid var(--border); }
 .region-label { font-weight: 700; font-size: 13px; min-width: 40px; flex-shrink: 0; }
 .region-pmo-select { flex: 1; min-width: 0; }
+.followup-section { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 14px; }
+.followup-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; margin-top: 8px; border: 1px solid var(--border); border-radius: 8px; background: #f8fafc; }
+.followup-meta { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; }
+.row-actions, .check-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.empty-followup { color: var(--muted); font-size: 13px; padding: 10px 0; }
+.recipient-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; max-height: 170px; overflow-y: auto; margin-top: 8px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; }
+.recipient-grid label { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.recipient-grid small { color: var(--muted); margin-left: 4px; }
 .scope-grid { display: flex; flex-direction: column; gap: 10px; }
 .scope-row { display: flex; align-items: center; gap: 18px; padding: 8px 12px; background: #f8fafc; border-radius: 8px; border: 1px solid var(--border); }
 .scope-row .region-label { min-width: 120px; }

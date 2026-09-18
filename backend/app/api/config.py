@@ -6,15 +6,13 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.api.auth import require_admin, require_auth
 from app.models import (
-    ApprovalFlow, ConfigDefinition, NotificationPolicy, ParsingRule, PriorityRule, Project, SLADefinition,
-    BusinessRole, User, WorkOrderTypeKB, PersonProjectMap, RegionPMO, RoleAssignment, RoleDataScope,
+    ApprovalFlow, ConfigDefinition, ParsingRule, PriorityRule, Project, SLADefinition,
+    BusinessRole, User, WorkOrderTypeKB, PersonProjectMap, RoleDataScope,
 )
 from app.schemas.config import (
-    ApprovalFlowOut, ConfigDefCreate, ConfigDefinitionOut, NotificationPolicyCreate,
-    NotificationPolicyOut, ParsingRuleOut, PersonMapCreate, PersonMapOut,
+    ApprovalFlowOut, ConfigDefCreate, ConfigDefinitionOut, ParsingRuleOut, PersonMapCreate, PersonMapOut,
     PriorityRuleCreate, PriorityRuleOut, PriorityRuleUpdate, ProjectOut, SLADefinitionOut, UserOut,
     WorkOrderTypeCreate, WorkOrderTypeOut, WorkOrderTypeUpdate,
-    RegionPMOOut, RegionPMOCreate, RoleAssignmentOut, RoleAssignmentUpdate,
     RoleDataScopeOut, RoleDataScopeUpdate,
 )
 
@@ -24,9 +22,6 @@ router = APIRouter(prefix="/config", tags=["config"])
 # 用户管理只负责把岗位分配给具体人员。
 BUSINESS_ROLE_SCOPE_DEFAULTS = {
     "project_member": ["self"],
-    "site_member": ["self"],
-    "inspection_engineer": ["self"],
-    "project_manager": ["self"],
     "pmo": ["all"],
     "regional_pmo": ["self", "region"],
     "regional_gm": ["self", "region"],
@@ -398,29 +393,6 @@ def update_approval_flow(flow_id: int, body: ApprovalFlowUpdate, db: Session = D
     return f
 
 
-# ====== 通知策略 CRUD ======
-@router.get("/notification-policies")
-def list_notification_policies(_: User = Depends(require_admin)):
-    """旧通知策略已退役；通知规则只保留机器人私聊和群聊通道。"""
-    raise HTTPException(410, "通知策略已迁移到机器人通知规则，仅支持机器人私聊和群聊")
-
-
-@router.post("/notification-policies")
-def add_notification_policy(_: NotificationPolicyCreate, user: User = Depends(require_admin)):
-    raise HTTPException(410, "通知策略已迁移到机器人通知规则")
-
-
-@router.patch("/notification-policies/{policy_id}", response_model=NotificationPolicyOut)
-def update_notification_policy(policy_id: int, channels: list | None = None, enabled: bool | None = None,
-                               _: User = Depends(require_admin)):
-    raise HTTPException(410, "通知策略已迁移到机器人通知规则")
-
-
-@router.delete("/notification-policies/{policy_id}", status_code=204)
-def del_notification_policy(policy_id: int, _: User = Depends(require_admin)):
-    raise HTTPException(410, "通知策略已迁移到机器人通知规则")
-
-
 # ── 项目管理 CRUD ─────────────────────────────────────
 
 from pydantic import BaseModel as PydanticBase, field_validator
@@ -522,88 +494,6 @@ def list_audit_logs(page: int = 1, page_size: int = 50, db: Session = Depends(ge
                     "created_at": r.created_at.isoformat()} for r in rows],
         "total": total, "page": page, "page_size": page_size,
     }
-
-
-# ── 区域 PMO 配置 ──────────────────────────────────────
-
-@router.get("/region-pmos", response_model=list[RegionPMOOut])
-def list_region_pmos(db: Session = Depends(get_db)):
-    """列出所有区域 PMO 映射"""
-    rows = db.query(RegionPMO).order_by(RegionPMO.id).all()
-    result = []
-    for r in rows:
-        user = db.get(User, r.user_id)
-        result.append(RegionPMOOut(
-            id=r.id, region=r.region, user_id=r.user_id,
-            user_name=user.name if user else None,
-        ))
-    return result
-
-
-@router.post("/region-pmos", response_model=RegionPMOOut, status_code=201)
-def set_region_pmo(body: RegionPMOCreate, db: Session = Depends(get_db)):
-    """设置区域 PMO（如果区域已存在则更新）"""
-    existing = db.query(RegionPMO).filter(RegionPMO.region == body.region).first()
-    if existing:
-        existing.user_id = body.user_id
-        db.commit()
-        db.refresh(existing)
-        r = existing
-    else:
-        r = RegionPMO(region=body.region, user_id=body.user_id)
-        db.add(r)
-        db.commit()
-        db.refresh(r)
-    user = db.get(User, r.user_id)
-    return RegionPMOOut(id=r.id, region=r.region, user_id=r.user_id,
-                        user_name=user.name if user else None)
-
-
-@router.delete("/region-pmos/{pmo_id}", status_code=204)
-def delete_region_pmo(pmo_id: int, db: Session = Depends(get_db)):
-    """删除区域 PMO 映射"""
-    r = db.get(RegionPMO, pmo_id)
-    if not r:
-        raise HTTPException(404, "区域PMO不存在")
-    db.delete(r)
-    db.commit()
-
-
-# ── 组织角色 → 人员配置（审批流用角色，人名可后台改） ──
-
-@router.get("/role-assignments", response_model=list[RoleAssignmentOut])
-def list_role_assignments(db: Session = Depends(get_db)):
-    """列出组织角色 → 人员映射"""
-    rows = db.query(RoleAssignment).order_by(RoleAssignment.sort_order, RoleAssignment.id).all()
-    out = []
-    for r in rows:
-        user = db.get(User, r.user_id) if r.user_id else None
-        out.append(RoleAssignmentOut(
-            id=r.id, role_code=r.role_code, role_name=r.role_name,
-            user_id=r.user_id, user_name=user.name if user else None,
-            sort_order=r.sort_order,
-        ))
-    return out
-
-
-@router.patch("/role-assignments/{role_code}", response_model=RoleAssignmentOut)
-def update_role_assignment(role_code: str, body: RoleAssignmentUpdate, db: Session = Depends(get_db)):
-    """配置某角色由哪个人员担任"""
-    r = db.query(RoleAssignment).filter(RoleAssignment.role_code == role_code).first()
-    if not r:
-        raise HTTPException(404, "角色不存在")
-    if body.user_id is not None:
-        if not db.get(User, body.user_id):
-            raise HTTPException(404, "人员不存在")
-        r.user_id = body.user_id
-        db.commit()
-        db.refresh(r)
-    user = db.get(User, r.user_id) if r.user_id else None
-    return RoleAssignmentOut(
-        id=r.id, role_code=r.role_code, role_name=r.role_name,
-        user_id=r.user_id, user_name=user.name if user else None,
-        sort_order=r.sort_order,
-    )
 
 
 # ── 业务岗位与数据权限（规则配置唯一入口） ──
