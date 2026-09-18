@@ -10,12 +10,13 @@ export interface ConfigItem {
   extra: any;
 }
 
-export const getSources = () => http.get<any, ConfigItem[]>("/config/sources");
 export const getStatuses = () => http.get<any, ConfigItem[]>("/config/statuses");
-export const getAnomalyCategories = () => http.get<any, ConfigItem[]>("/config/anomaly-categories");
-export const updateAnomalyCategory = (id: number, data: { name?: string; default_person_name?: string | null; agent?: string | null }) =>
-  http.patch<any, ConfigItem>(`/config/anomaly-categories/${id}`, data);
+// 工单类型（统一口径：来源/工单类型/异常大类三合一，10 内置 + 后台新增）
 export const getWoTypes = () => http.get<any, ConfigItem[]>("/config/work-order-types");
+export const addWorkOrderType = (data: { name: string; default_approver_name?: string | null; default_person_name?: string | null }) =>
+  http.post<any, ConfigItem>("/config/work-order-types", data);
+export const updateWorkOrderType = (id: number, data: { name?: string; flow?: string; default_approver_name?: string | null; default_person_name?: string | null }) =>
+  http.patch<any, ConfigItem>(`/config/work-order-types/${id}`, data);
 export const getWoTypesFull = () => http.get<any, any[]>("/config/work-order-types-full");
 export const getProjects = () => http.get<any, any[]>("/config/projects");
 export const getProjectsAll = () => http.get<any, any[]>("/config/projects/all");
@@ -30,6 +31,14 @@ export const setRegionPMO = (data: { region: string; user_id: number }) => http.
 export const deleteRegionPMO = (id: number) => http.delete(`/config/region-pmos/${id}`);
 export const getRoleAssignments = () => http.get<any, any[]>("/config/role-assignments");
 export const updateRoleAssignment = (roleCode: string, data: { user_id: number | null }) => http.patch<any, any>(`/config/role-assignments/${roleCode}`, data);
+
+// 数据范围角色：每个角色能看到哪些工单（多选取并集；admin 行锁定不可改）
+export const getRoleScopes = () => http.get<any, any[]>("/config/role-scopes");
+export const updateRoleScope = (roleCode: string, scopes: string[]) => http.put<any, any>(`/config/role-scopes/${roleCode}`, { scopes });
+
+// 「暂停发单」开关：读=任意已登录；写=仅管理员
+export const getSystemPause = () => http.get<any, { paused: boolean }>("/config/system-pause");
+export const setSystemPause = (enabled: boolean) => http.put<any, { paused: boolean }>("/config/system-pause", { enabled });
 
 export interface DingtalkStatus {
   app_key: boolean;

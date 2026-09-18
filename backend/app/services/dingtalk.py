@@ -145,7 +145,8 @@ def create_oa_approval(wo: Any, token: str | None = None) -> str | None:
 
     使用旧版 oapi 网关（已通过测试验证）。
     模板字段：工单编号、项目名称、工单类型、触发原因、行动要求、
-              责任人、截止时间、执行佐证、执行结论、审批人
+              责任人、截止时间、计划开始时间、执行佐证、执行结论、审批人、
+              任务目标交付物（年度计划类必填，须在钉钉模板里加同名控件）
     """
     if not _configured() or not settings.dingtalk_oa_template_id:
         print("[dingtalk] OA 模板未配置，跳过发起审批")
@@ -155,27 +156,21 @@ def create_oa_approval(wo: Any, token: str | None = None) -> str | None:
         print("[dingtalk] no access_token, skip OA")
         return None
 
-    # OA 模板中工单类型的可选值（必须与钉钉管理后台「工单闭环审批」模板的下拉选项一致，
-    # 若模板下拉尚未同步为这 11 类，请先在钉钉后台更新模板选项）
-    _OA_TYPE_OPTIONS = {
-        "客户满意度/客户投诉", "履约指标异常", "应签未签", "考核扣款", "项目风险",
-        "绩效考核", "成本管理", "专项服务", "重点工作督办", "设备预警工单", "其他",
-    }
-
     # 获取关联数据
     project_name = ""
     type_name = ""
     try:
         db = SessionLocal()
-        from app.models import Project, WorkOrderTypeKB
+        from app.models import Project, ConfigDefinition
         proj = db.query(Project).filter(Project.id == wo.project_id).first()
         if proj:
             project_name = proj.name or ""
-        typ = db.query(WorkOrderTypeKB).filter(WorkOrderTypeKB.id == wo.type_id).first()
-        if typ:
-            raw = typ.name or ""
-            # 如果工单类型不在 OA 模板选项里，fallback 到"其他"避免钉钉校验失败
-            type_name = raw if raw in _OA_TYPE_OPTIONS else "其他"
+        # 工单类型名从统一类型配置取（source_code = 工单类型 code）
+        sc = getattr(wo, "source_code", None)
+        if sc:
+            cd = db.query(ConfigDefinition).filter_by(category="work_order_type", code=sc).first()
+            if cd:
+                type_name = cd.name or ""
         db.close()
     except Exception as e:
         print(f"[dingtalk] lookup project/type failed: {e}")
@@ -190,6 +185,7 @@ def create_oa_approval(wo: Any, token: str | None = None) -> str | None:
         {"name": "工单类型", "value": type_name},
         {"name": "触发原因", "value": getattr(wo, "reason", "") or ""},
         {"name": "行动要求", "value": getattr(wo, "action", "") or ""},
+        {"name": "任务目标交付物", "value": getattr(wo, "task_deliverable", "") or ""},
         {"name": "责任人", "value": _lookup_dingtalk_id(wo, "person_id", as_list=True)},
         {"name": "审批人", "value": _lookup_dingtalk_id(wo, "approver_id", as_list=True)},
         {"name": "计划开始时间", "value": str(getattr(wo, "planned_start_date", "") or "")},
@@ -301,7 +297,7 @@ def oa_required_missing(wo: Any) -> list:
     missing = []
     if not getattr(wo, "project_id", None):
         missing.append("项目")
-    if not getattr(wo, "type_id", None):
+    if not (getattr(wo, "source_code", None) or "").strip():
         missing.append("工单类型")
     if not getattr(wo, "person_id", None):
         missing.append("责任人")
@@ -315,6 +311,19 @@ def oa_required_missing(wo: Any) -> list:
         missing.append("触发原因")
     if not (getattr(wo, "action", None) or "").strip():
         missing.append("行动要求")
+    return missing
+
+
+def plan_completeness_missing(wo: Any) -> list:
+    """运营计划工单（工单类型 code=plan）进列表前的必填完整性校验。
+
+    必填 = OA 发起必填（oa_required_missing）+ 「任务目标交付物」。其他类型不强制。
+    返回缺失字段中文名列表，空列表表示完整。用于「导入建单门禁」与「月度自动派发前再校验」，
+    缺项时不建单/不发起 OA（不塞默认值糊弄）。
+    """
+    missing = oa_required_missing(wo)
+    if not (getattr(wo, "task_deliverable", None) or "").strip():
+        missing.append("任务目标交付物")
     return missing
 
 

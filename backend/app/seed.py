@@ -9,7 +9,7 @@ from app.core.config import load_system_yaml
 from app.models import (
     ApprovalFlow, ConfigDefinition, NotificationPolicy, ParsingRule,
     PriorityRule, Project, SLADefinition, User, WorkOrder, WorkOrderTypeKB,
-    PersonProjectMap, RoleAssignment,
+    PersonProjectMap, RoleAssignment, RoleDataScope,
 )
 
 
@@ -97,14 +97,33 @@ def seed_roles(db) -> None:
     db.commit()
 
 
-def seed_config(db) -> None:
-    """来源 + 状态 + 工单类型"""
-    cfg = load_system_yaml().get("seed", {})
+def seed_role_scopes(db) -> None:
+    """灌入数据范围角色默认可见范围（后台可改，admin 行锁定）。
 
-    # 来源
-    for i, s in enumerate(cfg.get("sources", [])):
-        if not db.query(ConfigDefinition).filter_by(category="source", code=s["code"]).first():
-            db.add(ConfigDefinition(category="source", code=s["code"], name=s["name"], color=s.get("color"), sort_order=i))
+    默认值对齐 scope.py 的旧硬编码口径，保证灌完种子前后行为一致：
+      admin=全部(锁) / 事业部PMO=全部 / 区域PMO=自己相关+区域 / 普通成员=自己相关
+    """
+    defaults = [
+        ("admin", "系统管理员", ["all"], True, 0),
+        ("division_pmo", "事业部PMO", ["all"], False, 1),
+        ("region_pmo", "区域PMO", ["self", "region"], False, 2),
+        ("member", "普通成员", ["self"], False, 3),
+    ]
+    for code, name, scopes, locked, order in defaults:
+        r = db.query(RoleDataScope).filter_by(role_code=code).first()
+        if not r:
+            r = RoleDataScope(role_code=code)
+            db.add(r)
+        r.role_name = name
+        r.scopes = list(scopes)
+        r.is_locked = locked
+        r.sort_order = order
+    db.commit()
+
+
+def seed_config(db) -> None:
+    """状态 + 工单类型（统一口径）"""
+    cfg = load_system_yaml().get("seed", {})
 
     # 状态
     for i, (code, info) in enumerate(cfg.get("statuses", {}).items()):
@@ -114,15 +133,16 @@ def seed_config(db) -> None:
                 sort_order=i, extra={"next": info.get("next", [])},
             ))
 
-    # 异常指标大类（指标类型 + 默认责任人 + 分析 Agent 指向）
-    for i, c in enumerate(cfg.get("anomaly_categories", [])):
-        if not db.query(ConfigDefinition).filter_by(category="anomaly_type", code=c["code"]).first():
+    # 工单类型（来源/工单类型/异常大类 三合一）：flow + 默认审批人 + 默认责任人（仅异常类）
+    for i, c in enumerate(cfg.get("work_order_types", [])):
+        if not db.query(ConfigDefinition).filter_by(category="work_order_type", code=c["code"]).first():
             db.add(ConfigDefinition(
-                category="anomaly_type", code=c["code"], name=c["name"], color=c.get("color"),
+                category="work_order_type", code=c["code"], name=c["name"], color=c.get("color"),
                 sort_order=i,
                 extra={
-                    "default_person_name": c.get("default_person_name"),
-                    "agent": c.get("agent") or "",
+                    "flow": c.get("flow", "default"),
+                    "default_approver_name": c.get("default_approver_name") or None,
+                    "default_person_name": c.get("default_person_name") or None,
                 },
             ))
 
@@ -456,40 +476,32 @@ def seed_workorders(db, user_ids, proj_ids) -> None:
     if db.query(WorkOrder).count() > 0:
         return
     name_to_id = user_ids
-    # 类型 id
-    type_codes = {
-        "客户满意度/客户投诉": "customer", "履约指标异常": "contract", "应签未签": "unsigned",
-        "考核扣款": "penalty", "项目风险": "risk", "绩效考核": "performance",
-        "成本管理": "cost", "专项服务": "special", "重点工作督办": "keywork",
-        "设备预警工单": "alert", "其他": "other",
-    }
-    src_map = {"年度计划": "plan", "监视告警": "alert", "判定会": "meeting", "手动": "manual"}
+    # 工单类型 = source_code（统一口径），异常类同时标记 metric_type 走五阶段
+    # rows: (code, pri, type_code, metric_type, proj, title, reason, action, person, approver, dl_off, status, esc, od)
     rows = [
-        ("RW-2026-0001", "P2", "年度计划", "通辽永兴风电场", "变桨系统技改跟踪", "履约指标异常", "业主技改方案流标，进度滞后", "跟进招投标进度，每周汇报", "王小宁", "金惠良", -2, "overdue", 3, 2),
-        ("RW-2026-0002", "P1", "监视告警", "通辽永兴风电场", "AGC双细则考核超标纠偏", "考核扣款", "7月双细则考核扣分超标15%", "排查AGC响应延迟原因，协调厂家修模", "明南辉", "金惠良", 5, "executing", 0, 0),
-        ("RW-2026-0003", "P3", "判定会", "通辽永兴风电场", "沉降观测检测补充", "重点工作督办", "08-03判定会发现漏项", "联系检测单位，11月前完成", "于鸿飞", "陈亮", 90, "pending", 0, 0),
-        ("RW-2026-0004", "P2", "年度计划", "瓮安建中HS300风电场", "客户月度汇报满意度偏低整改", "客户满意度/客户投诉", "上月客户满意度评分仅72分", "本月增加一次现场拜访，解决客户反馈的3个问题", "于鸿飞", "贾兴威", -1, "overdue", 2, 1),
-        ("RW-2026-0005", "P1", "手动", "瓜州二期风电场", "新员工安全培训交底", "其他", "新入场人员未完成三级安全教育", "组织安全培训，完成考试并归档", "高志强", "金惠良", -4, "overdue", 3, 4),
-        ("RW-2026-0006", "P2", "监视告警", "城投太旗光伏电站", "组件清洗质量不达标", "履约指标异常", "上月清洗后PR值未提升", "要求清洗单位返工，重新验收", "张雷雷", "陈亮", 3, "verifying", 0, 0),
-        ("RW-2026-0007", "P3", "年度计划", "通辽永兴风电场", "预防性试验准备-停电协调", "重点工作督办", "年度计划8月停电窗口", "协调调度确认8/19-20停电时间", "于鸿飞", "金惠良", 0, "executing", 0, 0),
-        ("RW-2026-0008", "P3", "判定会", "通辽永兴风电场", "安全培训交底确认", "其他", "判定会确认已完成但无记录", "补录安全培训交底记录并上传", "王小宁", "金惠良", -7, "closed", 0, 0),
-        ("RW-2026-0009", "P2", "年度计划", "通辽永兴风电场", "风机定检第一批旁站监督", "重点工作督办", "定检队伍进场不稳定", "协调定检单位稳定出勤，做好旁站记录", "高志强", "陈亮", -10, "closed", 0, 0),
-        ("RW-2026-0010", "P3", "手动", "瓜州二期风电场", "备品备件库房盘点", "其他", "季度例行盘点", "完成盘点并更新台账", "高志强", "金惠良", -15, "closed", 0, 0),
-        ("RW-2026-0011", "P3", "年度计划", "瓮安建中HS300风电场", "月度运营分析报告", "其他", "7月月度报告提交", "按模板完成7月运营分析报告", "塔拉", "贾兴威", -3, "closed", 0, 0),
-        ("RW-2026-0012", "P1", "监视告警", "城投太旗光伏电站", "逆变器效率异常排查", "履约指标异常", "3号逆变器效率连续3天低于95%", "现场排查逆变器，必要时更换", "张雷雷", "陈亮", 1, "approving", 0, 0),
-        ("RW-2026-0013", "P2", "判定会", "通辽永兴风电场", "涉网试验-1号SVG未完成", "重点工作督办", "判定会发现1号SVG未完成涉网试验", "8月内完成1号SVG涉网试验", "明南辉", "金惠良", 25, "dispatched", 0, 0),
-        ("RW-2026-0014", "P3", "年度计划", "瓮安建中HS300风电场", "消防设施月度检查", "其他", "8月消防检查", "完成灭火器、消防栓检查并记录", "塔拉", "金惠良", -5, "closed", 0, 0),
-        ("RW-2026-0015", "P2", "手动", "城投太旗光伏电站", "双细则日报数据核对", "考核扣款", "本周功率预测准确率偏低", "联系功率预测厂家修模", "明南辉", "陈亮", 2, "verifying", 0, 0),
+        ("RW-2026-0001", "P2", "plan", None, "通辽永兴风电场", "变桨系统技改跟踪", "业主技改方案流标，进度滞后", "跟进招投标进度，每周汇报", "王小宁", "金惠良", -2, "overdue", 3, 2),
+        ("RW-2026-0002", "P1", "dual_rule", "dual_rule", "通辽永兴风电场", "AGC双细则考核超标纠偏", "7月双细则考核扣分超标15%", "排查AGC响应延迟原因，协调厂家修模", "明南辉", "金惠良", 5, "executing", 0, 0),
+        ("RW-2026-0003", "P3", "meeting", None, "通辽永兴风电场", "沉降观测检测补充", "08-03判定会发现漏项", "联系检测单位，11月前完成", "于鸿飞", "陈亮", 90, "pending", 0, 0),
+        ("RW-2026-0004", "P2", "plan", None, "瓮安建中HS300风电场", "客户月度汇报满意度偏低整改", "上月客户满意度评分仅72分", "本月增加一次现场拜访，解决客户反馈的3个问题", "于鸿飞", "贾兴威", -1, "overdue", 2, 1),
+        ("RW-2026-0005", "P1", "meeting", None, "瓜州二期风电场", "新员工安全培训交底", "新入场人员未完成三级安全教育", "组织安全培训，完成考试并归档", "高志强", "金惠良", -4, "overdue", 3, 4),
+        ("RW-2026-0006", "P2", "power_gen", "power_gen", "城投太旗光伏电站", "组件清洗质量不达标", "上月清洗后PR值未提升", "要求清洗单位返工，重新验收", "张雷雷", "陈亮", 3, "verifying", 0, 0),
+        ("RW-2026-0007", "P3", "plan", None, "通辽永兴风电场", "预防性试验准备-停电协调", "年度计划8月停电窗口", "协调调度确认8/19-20停电时间", "于鸿飞", "金惠良", 0, "executing", 0, 0),
+        ("RW-2026-0008", "P3", "meeting", None, "通辽永兴风电场", "安全培训交底确认", "判定会确认已完成但无记录", "补录安全培训交底记录并上传", "王小宁", "金惠良", -7, "closed", 0, 0),
+        ("RW-2026-0009", "P2", "plan", None, "通辽永兴风电场", "风机定检第一批旁站监督", "定检队伍进场不稳定", "协调定检单位稳定出勤，做好旁站记录", "高志强", "陈亮", -10, "closed", 0, 0),
+        ("RW-2026-0010", "P3", "meeting", None, "瓜州二期风电场", "备品备件库房盘点", "季度例行盘点", "完成盘点并更新台账", "高志强", "金惠良", -15, "closed", 0, 0),
+        ("RW-2026-0011", "P3", "plan", None, "瓮安建中HS300风电场", "月度运营分析报告", "7月月度报告提交", "按模板完成7月运营分析报告", "塔拉", "贾兴威", -3, "closed", 0, 0),
+        ("RW-2026-0012", "P1", "reliability", "reliability", "城投太旗光伏电站", "逆变器效率异常排查", "3号逆变器效率连续3天低于95%", "现场排查逆变器，必要时更换", "张雷雷", "陈亮", 1, "approving", 0, 0),
+        ("RW-2026-0013", "P2", "meeting", None, "通辽永兴风电场", "涉网试验-1号SVG未完成", "判定会发现1号SVG未完成涉网试验", "8月内完成1号SVG涉网试验", "明南辉", "金惠良", 25, "dispatched", 0, 0),
+        ("RW-2026-0014", "P3", "plan", None, "瓮安建中HS300风电场", "消防设施月度检查", "8月消防检查", "完成灭火器、消防栓检查并记录", "塔拉", "金惠良", -5, "closed", 0, 0),
+        ("RW-2026-0015", "P2", "dual_rule", "dual_rule", "城投太旗光伏电站", "双细则日报数据核对", "本周功率预测准确率偏低", "联系功率预测厂家修模", "明南辉", "陈亮", 2, "verifying", 0, 0),
     ]
-    for code, pri, src, proj, title, wtype, reason, action, person, approver, dl_off, status, esc, od in rows:
-        type_kb = db.query(WorkOrderTypeKB).filter_by(type_code=type_codes[wtype]).first()
+    for code, pri, wtype_code, metric_type, proj, title, reason, action, person, approver, dl_off, status, esc, od in rows:
         # 根据项目名推断区域
         region_map = {"通辽永兴风电场": "华北", "瓮安建中HS300风电场": "西南", "瓜州二期风电场": "西北", "城投太旗光伏电站": "华北"}
         wo = WorkOrder(
             code=code, title=title, reason=reason, action=action,
             project_id=proj_ids[proj], person_id=name_to_id[person], approver_id=name_to_id[approver],
-            type_id=type_kb.id if type_kb else None,
-            source_code=src_map[src], status=status, priority=pri,
+            source_code=wtype_code, metric_type=metric_type, status=status, priority=pri,
             region=region_map.get(proj),
             created_date=_today(dl_off - 7 if "closed" in status or status == "overdue" else dl_off - 3),
             deadline=_today(dl_off),
@@ -513,6 +525,8 @@ def run() -> None:
         p = seed_projects(db, u)
         print("→ 灌入角色→人员映射...")
         seed_roles(db)
+        print("→ 灌入数据范围角色默认...")
+        seed_role_scopes(db)
         print("→ 灌入配置（来源/状态/类型）...")
         seed_config(db)
         print("→ 灌入规则...")

@@ -7,7 +7,7 @@ def test_dashboard_buckets_match_list_totals(client_auth):
     stats = stats_response.json()["stats"]
 
     for bucket in ("pending", "executing", "need_backfill"):
-        response = client_auth.get("/api/work-orders", params={"scope": "mine", "bucket": bucket})
+        response = client_auth.get("/api/work-orders", params={"scope": "personal", "role": "all", "bucket": bucket})
         assert response.status_code == 200
         assert response.json()["total"] == stats[bucket], bucket
 

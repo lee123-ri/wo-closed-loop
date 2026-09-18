@@ -15,7 +15,7 @@ def _executor_headers(db):
 def test_business_routes_require_auth(client):
     """业务接口未登录一律 401"""
     for path in ("/api/work-orders", "/api/dashboard/stats", "/api/pool/items",
-                 "/api/config/sources", "/api/dingtalk/status"):
+                 "/api/config/work-order-types", "/api/dingtalk/status"):
         r = client.get(path)
         assert r.status_code == 401, f"{path} 应 401，实际 {r.status_code}"
     r = client.post("/api/pool/generate-all")

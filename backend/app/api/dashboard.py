@@ -2,6 +2,7 @@
 import csv
 import io
 from datetime import date, timedelta
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
@@ -18,8 +19,24 @@ _DAY = timedelta(days=1)
 
 
 @router.get("/stats", response_model=DashboardStats)
-def get_stats(db: Session = Depends(get_db)):
+def get_stats(
+    project_id: int | None = None,
+    region: str | None = None,
+    month: str | None = Query(None, description="按创建时间过滤到单月，格式 YYYY-MM"),
+    db: Session = Depends(get_db),
+):
     all_wos = db.execute(select(WorkOrder)).scalars().all()
+    # 管理看板筛选：项目 / 区域 / 时间（默认全部），所有 KPI 沿用同一条件
+    if project_id:
+        all_wos = [w for w in all_wos if w.project_id == project_id]
+    if region:
+        all_wos = [w for w in all_wos if w.region == region]
+    if month:
+        try:
+            _y, _m = (int(x) for x in month.split("-"))
+            all_wos = [w for w in all_wos if w.created_date and w.created_date.year == _y and w.created_date.month == _m]
+        except ValueError:
+            raise HTTPException(400, "month 格式应为 YYYY-MM")
     total = len(all_wos)
     executing = sum(1 for w in all_wos if w.status == "executing")
     pending_verify = sum(1 for w in all_wos if w.status == "verifying")
@@ -57,9 +74,9 @@ def get_stats(db: Session = Depends(get_db)):
         else:
             aging["o14"] += 1
 
-    # 来源分布
+    # 工单类型分布（来源/类型/异常大类三合一）
     src_dist = []
-    src_cfg = {c.code: c.name for c in db.execute(select(ConfigDefinition).where(ConfigDefinition.category == "source")).scalars().all()}
+    src_cfg = {c.code: c.name for c in db.execute(select(ConfigDefinition).where(ConfigDefinition.category == "work_order_type")).scalars().all()}
     src_count: dict[str, int] = {}
     for w in all_wos:
         src_count[w.source_code] = src_count.get(w.source_code, 0) + 1
@@ -81,7 +98,8 @@ def get_stats(db: Session = Depends(get_db)):
 
     # 待办（非闭环，逾期优先）
     todo_raw = [w for w in all_wos if w.status != "closed"]
-    todo_raw.sort(key=lambda w: (w.status != "overdue", w.deadline or date.max))
+    # 管理者先看风险：逾期优先，其次 P1，最后按最近截止日。
+    todo_raw.sort(key=lambda w: (w.status != "overdue", w.priority != "P1", w.deadline or date.max))
     todo_items = []
     for w in todo_raw[:100]:  # 扩大取数范围，前端分页
         person = db.get(User, w.person_id) if w.person_id else None
@@ -140,19 +158,21 @@ def get_person_dashboard(user_id: int, db: Session = Depends(get_db)):
     }
 
 
-# ── 我的工单（行级范围聚合，Phase 3.5）────────────────
+# ── 我的工单（严格双角色范围）──────────────────────────
 
 @router.get("/mine")
-def get_my_dashboard(db: Session = Depends(get_db), user: User = Depends(require_auth)):
-    """「我的工单」统计卡：按登录人行级范围聚合。
+def get_my_dashboard(
+    role: Literal["all", "responsible", "approver", "both"] = "all",
+    db: Session = Depends(get_db),
+    user: User = Depends(require_auth),
+):
+    """「我的工单」统计卡：只聚合登录人作为责任人或审批人的工单。
 
-    admin→全部；区域 PMO→其负责区域；其余→本人（责任人/审批人）。
-    返回 scope 供前端展示口径（all/region/self）。
+    role 细分：all=责任人或审批人 / responsible=仅责任人 / approver=仅审批人 / both=同时两者。
     """
-    from app.services.scope import visible_scope, apply_scope_to_query
+    from app.services.scope import apply_personal_scope_to_query
 
-    scope = visible_scope(db, user)
-    wos = db.execute(apply_scope_to_query(select(WorkOrder), db, user)).scalars().all()
+    wos = db.execute(apply_personal_scope_to_query(select(WorkOrder), user, role)).scalars().all()
 
     total = len(wos)
     pending = sum(1 for w in wos if w.status in ("pending", "approving"))
@@ -162,10 +182,10 @@ def get_my_dashboard(db: Session = Depends(get_db), user: User = Depends(require
     closed = sum(1 for w in wos if w.status == "closed")
     need_backfill = sum(1 for w in wos if w.status in ("dispatched", "executing") and w.backfill_status != "filled")
 
-    scope_label = "all" if scope is None else ("region" if "regions" in scope else "self")
     return {
         "user": {"id": user.id, "name": user.name, "role": user.role},
-        "scope": scope_label,
+        "scope": "personal",
+        "role": role,
         "stats": {
             "total": total, "pending": pending, "executing": executing,
             "verifying": verifying, "overdue": overdue, "closed": closed,
@@ -182,11 +202,12 @@ def get_calendar(
     month: int = Query(..., ge=1, le=12),
     person_id: int | None = None,
     project_id: int | None = None,
-    mine: bool = Query(False, description="true=按登录人行级范围过滤（我的工单页）"),
+    mine: bool = Query(False, description="true=仅登录人作为责任人或审批人的工单（我的工单页）"),
+    role: Literal["all", "responsible", "approver", "both"] = "all",
     db: Session = Depends(get_db),
     user: User = Depends(require_auth),
 ):
-    """工单日历视图：按月份返回工单的 deadline 分布"""
+    """工单日历视图：按月份返回计划开始或截止日落在当月的工单。"""
     from datetime import date as _date
     import calendar as _cal
 
@@ -194,14 +215,17 @@ def get_calendar(
     _, last_day = _cal.monthrange(year, month)
     end = _date(year, month, last_day)
 
+    from sqlalchemy import or_
     q = select(WorkOrder).where(
-        WorkOrder.deadline >= start,
-        WorkOrder.deadline <= end,
+        or_(
+            WorkOrder.deadline.between(start, end),
+            WorkOrder.planned_start_date.between(start, end),
+        ),
         WorkOrder.status != "closed",
     )
     if mine:
-        from app.services.scope import apply_scope_to_query
-        q = apply_scope_to_query(q, db, user)
+        from app.services.scope import apply_personal_scope_to_query
+        q = apply_personal_scope_to_query(q, user, role)
     elif person_id:
         q = q.where(WorkOrder.person_id == person_id)
     if project_id:
@@ -215,6 +239,7 @@ def get_calendar(
         items.append({
             "id": w.id, "code": w.code, "title": w.title, "status": w.status,
             "priority": w.priority, "deadline": w.deadline.isoformat() if w.deadline else None,
+            "planned_start_date": w.planned_start_date.isoformat() if w.planned_start_date else None,
             "person_name": person.name if person else None,
             "overdue_days": w.overdue_days,
             "backfill_status": w.backfill_status,
@@ -248,13 +273,13 @@ def export_csv(
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["编号","标题","项目","责任人","类型","优先级","状态","来源","创建日期","截止日期","完成日期","逾期天数","回填状态","回填原因","回填措施"])
+    writer.writerow(["编号","标题","项目","责任人","工单类型","优先级","状态","创建日期","截止日期","完成日期","逾期天数","回填状态","回填原因","回填措施"])
+    type_names = {cd.code: cd.name for cd in db.query(ConfigDefinition).filter_by(category="work_order_type").all()}
     for wo in wos:
         proj = db.get(Project, wo.project_id) if wo.project_id else None
         person = db.get(User, wo.person_id) if wo.person_id else None
-        wtype = db.get(WorkOrderTypeKB, wo.type_id) if wo.type_id else None
         writer.writerow([wo.code, wo.title, proj.name if proj else "", person.name if person else "",
-                          wtype.name if wtype else "", wo.priority, wo.status, wo.source_code,
+                          type_names.get(wo.source_code, wo.source_code), wo.priority, wo.status,
                           str(wo.created_date) if wo.created_date else "", str(wo.deadline) if wo.deadline else "",
                           str(wo.completed_date) if wo.completed_date else "", wo.overdue_days,
                           wo.backfill_status or "", wo.backfill_reason or "", wo.backfill_action or ""])
@@ -266,10 +291,19 @@ def export_csv(
 # ── 趋势数据 ────────────────────────────────────────
 
 @router.get("/trends")
-def get_trends(months: int = 6, db: Session = Depends(get_db)):
-    """返回最近 N 个月的工单趋势（每月新增/闭环/逾期数）"""
+def get_trends(months: int = 6, project_id: int | None = None, region: str | None = None, db: Session = Depends(get_db)):
+    """返回最近 N 个月的工单趋势（每月新增/闭环/逾期数）。可带项目/区域过滤。"""
     from collections import defaultdict
     from datetime import date as _date, timedelta
+
+    def _base():
+        q = db.query(WorkOrder)
+        if project_id:
+            q = q.filter(WorkOrder.project_id == project_id)
+        if region:
+            q = q.filter(WorkOrder.region == region)
+        return q
+
     today = _date.today()
     trends = []
     for i in range(months - 1, -1, -1):
@@ -282,20 +316,20 @@ def get_trends(months: int = 6, db: Session = Depends(get_db)):
             month_end = d.replace(year=d.year+1, month=1, day=1) - timedelta(days=1)
         else:
             month_end = d.replace(month=d.month+1, day=1) - timedelta(days=1)
-        created = db.query(WorkOrder).filter(WorkOrder.created_date >= month_start, WorkOrder.created_date <= month_end).count()
-        closed = db.query(WorkOrder).filter(WorkOrder.completed_date >= month_start, WorkOrder.completed_date <= month_end).count()
-        overdue = db.query(WorkOrder).filter(WorkOrder.status == "overdue").count()
+        created = _base().filter(WorkOrder.created_date >= month_start, WorkOrder.created_date <= month_end).count()
+        closed = _base().filter(WorkOrder.completed_date >= month_start, WorkOrder.completed_date <= month_end).count()
+        overdue = _base().filter(WorkOrder.status == "overdue").count()
         trends.append({"month": d.strftime("%Y-%m"), "created": created, "closed": closed, "overdue": overdue})
-    # 按类型分布
+    # 按工单类型分布（source_code）
     type_dist = []
-    for t in db.query(WorkOrderTypeKB).all():
-        cnt = db.query(WorkOrder).filter(WorkOrder.type_id == t.id).count()
+    for cd in db.query(ConfigDefinition).filter_by(category="work_order_type").all():
+        cnt = _base().filter(WorkOrder.source_code == cd.code).count()
         if cnt:
-            type_dist.append({"name": t.name, "count": cnt})
+            type_dist.append({"name": cd.name, "count": cnt})
     # 按项目分布
     proj_dist = []
     for p in db.query(Project).filter(Project.is_active.is_(True)).all():
-        cnt = db.query(WorkOrder).filter(WorkOrder.project_id == p.id).count()
+        cnt = _base().filter(WorkOrder.project_id == p.id).count()
         if cnt:
             proj_dist.append({"name": p.name, "count": cnt})
     return {"trends": trends, "type_dist": type_dist, "project_dist": proj_dist}

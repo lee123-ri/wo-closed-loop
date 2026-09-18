@@ -4,14 +4,17 @@ export interface WorkOrder {
   id: number;
   code: string;
   title: string;
+  service: string | null;
   reason: string | null;
   action: string | null;
+  task_deliverable: string | null;
   conclusion: string | null;
   status: string;
   priority: string;
   source_code: string;
   metric_type: string | null;
   alert_phase: string | null;
+  is_measure: boolean;
   measure_progress: {
     closed: number;
     total: number;

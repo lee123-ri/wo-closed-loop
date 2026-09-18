@@ -107,6 +107,20 @@ test("待回填统计卡使用与计数一致的筛选条件", async () => {
   } finally { await close(); }
 });
 
+test("我的工单使用严格个人范围，日历展示计划开始事项", async () => {
+  const calendarItem = {
+    id: 8, code: "WO-0008", title: "计划开始事项", status: "executing", priority: "P2",
+    planned_start_date: new Date().toISOString().slice(0, 10), deadline: null,
+  };
+  const { page, calls, close } = await pageFor("admin", { "/dashboard/calendar": { items: [calendarItem] } });
+  try {
+    await page.goto(base + "/my");
+    await page.getByText("开始 0008", { exact: true }).waitFor();
+    const listCall = calls.find((c) => c.path === "/api/work-orders");
+    assert.equal(new URLSearchParams(listCall.search).get("scope"), "personal");
+  } finally { await close(); }
+});
+
 test("工单不存在时显示错误与返回入口", async () => {
   const { page, close } = await pageFor("admin", {
     "/work-orders/999": { status: 404, body: { detail: "工单不存在" } },
@@ -175,7 +189,7 @@ test("看板接口失败时显示重试入口而非空数据引导", async () =>
 
 test("规则配置失败时展示统一错误态", async () => {
   const { page, close } = await pageFor("admin", {
-    "/config/sources": { status: 503, body: { detail: "配置服务暂不可用" } },
+    "/config/work-order-types": { status: 503, body: { detail: "配置服务暂不可用" } },
   });
   try {
     await page.goto(base + "/config");
@@ -218,6 +232,23 @@ test("我的工单宽表只在卡片内横向滚动", async () => {
       assert.ok(dimensions.body <= dimensions.viewport + 1, JSON.stringify(dimensions));
       assert.ok(dimensions.page <= dimensions.content + 1, JSON.stringify(dimensions));
     }
+  } finally { await close(); }
+});
+
+test("宽表顶部横向滚动条可在首屏驱动表格", async () => {
+  const { page, close } = await pageFor();
+  try {
+    await page.goto(base + "/my");
+    await page.getByText("待回填", { exact: true }).waitFor();
+    const moved = await page.evaluate(() => {
+      const top = document.querySelector(".top-scroller");
+      const table = document.querySelector(".table-viewport");
+      top.scrollLeft = 120;
+      top.dispatchEvent(new Event("scroll"));
+      return { top: top.scrollLeft, table: table.scrollLeft, max: top.scrollWidth - top.clientWidth };
+    });
+    assert.ok(moved.max > 0, JSON.stringify(moved));
+    assert.equal(moved.table, moved.top);
   } finally { await close(); }
 });
 

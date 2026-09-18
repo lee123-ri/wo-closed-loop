@@ -12,10 +12,14 @@
 - app.log 收录全部级别（>= log_level）；error.log 只收 ERROR 及以上，方便快速翻错误。
 - 按天滚动（midnight），保留 log_retention_days 天，旧文件自动删。
 - log_to_stderr=True 时同时打到 stderr（保留现有终端排查习惯；uvicorn 的 access/error 日志仍走它自己的通道，不冲突）。
+- 每条日志带请求 ID（[requestid]），由 RequestIDMiddleware 在请求内 set、RequestIDFilter 注入；
+  后台线程（轮询器/Celery/钉钉 Stream）无请求上下文时显示 "-"。排查时用 requestid 串起
+  访问日志（app.log 一行一条）+ 错误（error.log），是上线后定位问题的关键链路。
 - get_logger / setup_logging 幂等：重复调用不会叠加 handler。
 """
 from __future__ import annotations
 
+import contextvars
 import logging
 import sys
 from logging.handlers import TimedRotatingFileHandler
@@ -27,6 +31,18 @@ _configured = False
 
 # 我们挂到 root 的自定义 handler 标记（幂等判定用，防止环境里二次 import 导致重复）
 _MARK = "wo_file_log"
+
+# 请求级 ID：RequestIDMiddleware 在请求生命周期内 set，日志经 RequestIDFilter 注入每条记录。
+# 后台线程（轮询器 / Celery / 钉钉 Stream）没有请求上下文，值保持 None → 显示 "-"。
+request_id_var: contextvars.ContextVar[str | None] = contextvars.ContextVar("request_id", default=None)
+
+
+class RequestIDFilter(logging.Filter):
+    """把当前请求 ID 注入 LogRecord.requestid，供 formatter 使用。"""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.requestid = request_id_var.get() or "-"
+        return True
 
 
 def _resolve_level(name: str) -> int:
@@ -52,9 +68,10 @@ def setup_logging() -> None:
         return
 
     fmt = logging.Formatter(
-        "%(asctime)s %(levelname)s [%(name)s] %(message)s",
+        "%(asctime)s %(levelname)s [%(requestid)s] [%(name)s] %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+    _rid_filter = RequestIDFilter()
     level = _resolve_level(settings.log_level)
     backup_count = max(1, settings.log_retention_days)
 
@@ -73,6 +90,7 @@ def setup_logging() -> None:
     app_handler.name = _MARK
     app_handler.setFormatter(fmt)
     app_handler.setLevel(level)
+    app_handler.addFilter(_rid_filter)
     root.addHandler(app_handler)
 
     err_handler = _MarkedFileHandler(
@@ -81,12 +99,14 @@ def setup_logging() -> None:
     err_handler.name = _MARK
     err_handler.setFormatter(fmt)
     err_handler.setLevel(logging.ERROR)
+    err_handler.addFilter(_rid_filter)
     root.addHandler(err_handler)
 
     if settings.log_to_stderr:
         stream = logging.StreamHandler(sys.stderr)
         stream.setFormatter(fmt)
         stream.setLevel(level)
+        stream.addFilter(_rid_filter)
         root.addHandler(stream)
 
     _configured = True

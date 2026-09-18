@@ -26,6 +26,7 @@ from app.api.workorders import _enrich, _next_code
 from app.services.audit import log_audit
 from app.services.priority_service import normalize_priority
 from app.services.roles import resolve_role_user_id
+from app.services.maintenance import ensure_open
 
 router = APIRouter(prefix="/external", tags=["external"])
 settings = get_settings()
@@ -75,17 +76,23 @@ def _resolve_user_by_name(db: Session, name: str | None, label: str) -> User:
     return rows[0]
 
 
-def _resolve_type(db: Session, code: str | None, name: str | None) -> WorkOrderTypeKB | None:
+def _resolve_type_code(db: Session, code: str | None, name: str | None) -> str | None:
+    """按「工单类型 code / 名称」解析为统一类型 code（category=work_order_type）。找不到即报错。"""
+    from app.models import ConfigDefinition
+
     if code:
-        t = db.query(WorkOrderTypeKB).filter(WorkOrderTypeKB.type_code == code.strip()).first()
-        if not t:
+        cd = db.query(ConfigDefinition).filter_by(category="work_order_type", code=code.strip()).first()
+        if not cd:
             raise HTTPException(404, f"工单类型编码不存在：{code}")
-        return t
+        return cd.code
     if name:
-        t = db.query(WorkOrderTypeKB).filter(WorkOrderTypeKB.name == name.strip()).first()
-        if not t:
+        cd = db.query(ConfigDefinition).filter(
+            ConfigDefinition.category == "work_order_type",
+            ConfigDefinition.name == name.strip(),
+        ).first()
+        if not cd:
             raise HTTPException(404, f"工单类型不存在：{name}")
-        return t
+        return cd.code
     return None
 
 
@@ -98,6 +105,7 @@ def create_external_work_order(
     db: Session = Depends(get_db),
     _: None = Depends(require_api_key),
 ):
+    ensure_open(db)  # 暂停发单开关：外部 API 建单同样拦截
     # 幂等：同 client_request_id 重复提交，返回首次创建的那条工单（200）
     if body.client_request_id:
         existing = (
@@ -112,22 +120,28 @@ def create_external_work_order(
     project = _resolve_project(db, body.project_code, body.project_name)
     person_id = (_resolve_user_by_name(db, body.person_name, "责任人").id
                  if body.person_name else None)
-    type_obj = _resolve_type(db, body.type_code, body.type_name)
+    type_code = _resolve_type_code(db, body.type_code, body.type_name)
+    # 工单类型：type_code/type_name 解析优先，其次显式 source_code，最后兜底「关键会议」
+    from app.services.work_order_types import is_anomaly_type, type_approver_name
+    from app.models import ConfigDefinition
+    final_type = type_code or (body.source_code or "meeting")
+    if not db.query(ConfigDefinition).filter_by(category="work_order_type", code=final_type).first():
+        raise HTTPException(422, f"工单类型非法：{final_type}（仅限已配置工单类型 code）")
 
     if body.approver_name:
         approver_id = _resolve_user_by_name(db, body.approver_name, "审批人").id
-    elif type_obj:
-        approver_id = resolve_role_user_id(db, type_obj.default_approver_role) or type_obj.default_approver_id
     else:
-        approver_id = None
+        _an = type_approver_name(db, final_type)
+        _au = db.query(User).filter(User.name == _an).first() if _an else None
+        approver_id = _au.id if _au else None
 
-    # 优先级：显式传入须合法；留空按来源推断（alert→P1，其余 P2 —— 与内部建单一致）
+    # 优先级：显式传入须合法；留空按类型推断（异常类→P1，其余 P2 —— 与内部建单一致）
     if body.priority:
         pri = normalize_priority(body.priority)
         if not pri:
             raise HTTPException(422, f"优先级非法：{body.priority}（仅支持 P1/P2/P3）")
     else:
-        pri = "P1" if body.source_code == "alert" else "P2"
+        pri = "P1" if is_anomaly_type(final_type) else "P2"
 
     # 截止时间：未填按 SLA 默认天数顺延（与内部建单一致）
     if body.deadline:
@@ -145,8 +159,7 @@ def create_external_work_order(
         project_id=project.id,
         person_id=person_id,
         approver_id=approver_id,
-        type_id=type_obj.id if type_obj else None,
-        source_code=body.source_code,
+        source_code=final_type,
         priority=pri,
         region=body.region,
         planned_start_date=body.planned_start_date,

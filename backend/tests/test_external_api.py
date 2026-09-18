@@ -63,7 +63,7 @@ def test_create_success(client):
     data = r.json()
     assert data["code"].startswith("RW-")
     assert data["status"] == "pending"          # 外部建单落「待派发」
-    assert data["source_code"] == "external"    # 默认来源
+    assert data["source_code"] == "meeting"    # 未传类型兜底「关键会议」
     assert data["project_name"] == "通辽永兴风电场"
     assert data["person_name"] == "王小宁"
     assert data["approver_name"] == "金惠良"
@@ -99,14 +99,14 @@ def test_person_not_found_404(client):
 
 def test_alert_defaults_p1(client):
     r = client.post("/api/external/work-orders",
-                    json=_payload(source_code="alert", priority=None), headers=_h())
+                    json=_payload(source_code="power_gen", priority=None), headers=_h())
     assert r.status_code == 201, r.text
     assert r.json()["priority"] == "P1"
 
 
 def test_non_alert_defaults_p2(client):
     r = client.post("/api/external/work-orders",
-                    json=_payload(source_code="manual", priority=None), headers=_h())
+                    json=_payload(source_code="meeting", priority=None), headers=_h())
     assert r.status_code == 201, r.text
     assert r.json()["priority"] == "P2"
 

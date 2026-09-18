@@ -13,7 +13,7 @@
         <t-select v-model="filters.project_id" placeholder="项目" clearable filterable @change="applyFilters" style="width:180px">
           <t-option v-for="p in projectOptions" :key="p.id" :value="p.id" :label="p.name" />
         </t-select>
-        <t-select v-model="filters.source_code" placeholder="来源" clearable @change="applyFilters" style="width:120px">
+        <t-select v-model="filters.source_code" placeholder="工单类型" clearable @change="applyFilters" style="width:130px">
           <t-option v-for="s in sources" :key="s.code" :value="s.code" :label="s.name" />
         </t-select>
       </div>
@@ -49,7 +49,7 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { listClosedOrders, type WorkOrderList } from "@/api/workorders";
-import { getSources, type ConfigItem } from "@/api/config";
+import { getWoTypes, type ConfigItem } from "@/api/config";
 import { sourceLabel, sourceTagClass } from "@/utils/wo-display";
 import { toast } from "@/utils/feedback";
 import { downloadCsv } from "@/utils/csv";
@@ -82,7 +82,7 @@ const columns = [
   { colKey: "completed_date", title: "闭环", width: 110 },
   { colKey: "duration_days", title: "耗时", width: 90 },
   { colKey: "is_overdue", title: "逾期", width: 120 },
-  { colKey: "source_code", title: "来源", width: 90 },
+  { colKey: "source_code", title: "工单类型", width: 92 },
 ];
 
 async function reload() {
@@ -126,7 +126,7 @@ function goDetail({ row }: any) { router.push(`/work-orders/${row.id}`); }
 
 function exportCSV() {
   if (!list.value.items.length) { toast.warning("当前页没有可导出的工单"); return; }
-  const head = ["编号", "项目", "标题", "触发原因", "行动要求", "责任人", "创建", "闭环", "耗时(天)", "逾期", "来源"];
+  const head = ["编号", "项目", "标题", "触发原因", "行动要求", "责任人", "创建", "闭环", "耗时(天)", "逾期", "工单类型"];
   const data = list.value.items.map((w) => [w.code, w.project_name, w.title, w.reason, w.action,
     w.person_name, w.created_date, w.completed_date, w.duration_days,
     w.is_overdue ? `是·超${w.overdue_days}天` : "否", sourceLabel(w.source_code)]);
@@ -134,7 +134,7 @@ function exportCSV() {
 }
 
 onMounted(async () => {
-  sources.value = await getSources();
+  sources.value = await getWoTypes();
   await reload();
 });
 </script>

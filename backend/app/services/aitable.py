@@ -118,7 +118,7 @@ def sync_anomaly_to_pool(full: bool = False) -> dict:
     existing_refs = set()
     if not full:
         existing = db.query(DataPoolItem.source_ref).filter(
-            DataPoolItem.source_system == "anomaly", DataPoolItem.source_ref.isnot(None)
+            DataPoolItem.source_system.in_(("anomaly", "anomaly_baseline")), DataPoolItem.source_ref.isnot(None)
         ).all()
         existing_refs = {r[0] for r in existing}
 
@@ -235,19 +235,25 @@ def sync_dual_rule_to_workorders(full: bool = False) -> dict:
         return {"synced": 0, "errors": [f"dws: {e}"]}
 
     db = SessionLocal()
+    from app.services.maintenance import is_paused
+    if is_paused(db):
+        db.close()
+        return {"synced": 0, "errors": ["系统暂停发单，跳过双细则直导"], "total": len(records), "paused": True}
     # 幂等：始终预加载已有 SXZ 编号，增量/全量都跳过已存在。
     # 原实现只在 full=False 时加载，full=True 会重复 INSERT 撞 work_orders_client_request_id_key 唯一约束。
     rows = db.query(WorkOrder.client_request_id).filter(
         WorkOrder.client_request_id.like("sxz-%")).all()
     existing: set[str] = {r[0] for r in rows if r[0]}
+    existing.update(r[0] for r in db.query(DataPoolItem.source_ref).filter(
+        DataPoolItem.source_system == "dual_rule_baseline", DataPoolItem.source_ref.isnot(None)).all())
 
     # 项目/人员/编号预加载（复用 generate_from_pool 同款匹配逻辑）
     from app.models import ConfigDefinition
     projects = {p.name: p for p in db.query(Project).all()}
     users = {u.name: u for u in db.query(User).all()}
-    # 双细则大类默认责任人（config category=anomaly_type, code=dual_rule → 徐林杰）
+    # 双细则大类默认责任人（config category=work_order_type, code=dual_rule → 徐林杰）
     default_person_name = ""
-    for cd in db.query(ConfigDefinition).filter_by(category="anomaly_type", code="dual_rule").all():
+    for cd in db.query(ConfigDefinition).filter_by(category="work_order_type", code="dual_rule").all():
         default_person_name = (cd.extra or {}).get("default_person_name") or ""
     from app.services.pool_service import _match_project, _match_person
 
@@ -308,7 +314,7 @@ def sync_dual_rule_to_workorders(full: bool = False) -> dict:
                 title=title, reason=reason, action=action,
                 project_id=project.id if project else None,
                 person_id=person.id if person else None,
-                source_code="alert", metric_type="dual_rule",
+                source_code="dual_rule", metric_type="dual_rule",
                 region=region, status="judging", priority=priority,
                 # 双细则表自带场站填报原因+措施=已回填 → 直接进入 alert 五阶段①「分析确认」
                 alert_phase="confirming",
@@ -378,7 +384,7 @@ def full_sync() -> dict:
 
 
 def run_anomaly_daily_sync() -> dict:
-    """每日增量：异常指标表 → 数据池 → 生成工单（只落新增）。
+    """定时增量：异常指标表 → 数据池 → 原因工单（只落新增）。
 
     生产由 Celery beat 的 sync-anomaly-daily 触发；本地开发由 services/sync_poller.py
     的进程内轮询触发（一天一次）。增量幂等：已存在的 source_ref 跳过，故可重复调用。
@@ -412,16 +418,13 @@ def run_anomaly_daily_sync() -> dict:
     finally:
         db.close()
 
-    # 场景1：异常工单抓到平台（汇总表 + 双细则）→ 群 @责任人 / 找不到 @刘冰
-    new_wo_ids = anomaly_wo_ids + list(dual.get("work_order_ids", []))
-    if new_wo_ids:
-        from app.services.notification_service import notify_anomaly_new
-        notify_anomaly_new(new_wo_ids)
-
     return {
         "synced": result.get("synced", 0),
         "total": result.get("total", 0),
+        # 新增异常只建立原因工单并路由到责任人列表；绝不在同步任务里
+        # 创建措施工单、发 OA 或发送消息。措施必须经原因回填和人工确认后生成。
         "generated": generated,
+        "reason_work_orders": len(anomaly_wo_ids) + len(dual.get("work_order_ids", [])),
         "dual_rule_synced": dual.get("synced", 0),
         "errors": (result.get("errors") or []) + (dual.get("errors") or []) + generate_errors,
     }

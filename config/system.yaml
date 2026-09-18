@@ -12,26 +12,20 @@ system:
 
 # 默认数据（首次初始化种子数据用，后续以数据库为准）
 seed:
-  # 工单来源
-  sources:
-    - { code: plan,    name: 年度计划, color: "#2563eb" }
-    - { code: alert,   name: 监视告警, color: "#dc2626" }
-    - { code: meeting, name: 判定会,   color: "#d97706" }
-    - { code: manual,  name: 手动,     color: "#7c3aed" }
-    - { code: external, name: 外部接入, color: "#059669" }
-
-  # 异常指标大类（source=alert 的细分维度，与 DataPoolItem.metric_type 对齐）
-  # 每类配置默认责任人 default_person_name 与对应分析 Agent agent
-  # （agent 暂留空，判断 Agent 就绪后逐一接入；默认责任人先统一金惠良，后台可改）
-  anomaly_categories:
-    - { code: power_gen,    name: 发电量异常, color: "#dc2626", default_person_name: 金惠良, agent: "" }
-    - { code: curtailment,  name: 限电量异常, color: "#d97706", default_person_name: 金惠良, agent: "" }
-    - { code: dual_rule,    name: 双细则异常, color: "#7c3aed", default_person_name: 徐林杰, agent: "" }
-    - { code: reliability,  name: 设备可靠性, color: "#ea580c", default_person_name: 金惠良, agent: "" }
-    - { code: info_quality, name: 信息化使用, color: "#2563eb", default_person_name: 金惠良, agent: "" }
-    - { code: contract,     name: 应签未签,   color: "#0891b2", default_person_name: 金惠良, agent: "" }
-    - { code: cost,         name: 成本费用,   color: "#059669", default_person_name: 金惠良, agent: "" }
-    - { code: satisfaction, name: 客户满意度, color: "#db2777", default_person_name: 金惠良, agent: "" }
+  # 工单类型（统一口径）：来源/工单类型/异常指标大类三合一（2026-09-17）
+  # flow: alert=五阶段闭环 / plan=运营计划流 / default=普通三步闭环
+  # default_approver_name 每类都配；default_person_name 仅 8 类异常配（告警分派的系统兜底责任人）
+  work_order_types:
+    - { code: plan,         name: 运营计划工单,     color: "#2563eb", flow: plan,    default_approver_name: 金惠良, default_person_name: "" }
+    - { code: power_gen,    name: 发电量异常工单,   color: "#dc2626", flow: alert,   default_approver_name: 金惠良, default_person_name: 金惠良 }
+    - { code: curtailment,  name: 限电量异常工单,   color: "#d97706", flow: alert,   default_approver_name: 金惠良, default_person_name: 金惠良 }
+    - { code: dual_rule,    name: 双细则异常工单,   color: "#7c3aed", flow: alert,   default_approver_name: 金惠良, default_person_name: 徐林杰 }
+    - { code: reliability,  name: 设备可靠性异常工单, color: "#ea580c", flow: alert, default_approver_name: 金惠良, default_person_name: 金惠良 }
+    - { code: info_quality, name: 信息化使用异常工单, color: "#2563eb", flow: alert, default_approver_name: 金惠良, default_person_name: 金惠良 }
+    - { code: contract,     name: 应签未签工单,     color: "#0891b2", flow: alert,   default_approver_name: 金惠良, default_person_name: 金惠良 }
+    - { code: cost,         name: 成本费用工单,     color: "#059669", flow: alert,   default_approver_name: 金惠良, default_person_name: 金惠良 }
+    - { code: satisfaction, name: 客户满意度工单,   color: "#db2777", flow: alert,   default_approver_name: 金惠良, default_person_name: 金惠良 }
+    - { code: meeting,      name: 关键会议工单,     color: "#d97706", flow: default, default_approver_name: 金惠良, default_person_name: "" }
 
   # 工单状态机（code -> 允许的下一状态 code 列表）
   statuses:

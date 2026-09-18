@@ -95,7 +95,7 @@ def test_audit_written_on_workorder_lifecycle(client_auth):
     """工单创建/流转写入审计日志。"""
     wo = client_auth.post("/api/work-orders", json={
         "title": "审计回归工单", "action": "排查", "reason": "审计回归",
-        "source_code": "manual", "priority": "P2", "project_id": 1, "person_id": 1,
+        "source_code": "meeting", "priority": "P2", "project_id": 1, "person_id": 1,
         "approver_id": 11, "type_id": 1, "planned_start_date": "2026-09-03",
     }).json()
     client_auth.post(f"/api/work-orders/{wo['id']}/transition", params={"action": "reset"})

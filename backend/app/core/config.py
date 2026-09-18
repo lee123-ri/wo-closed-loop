@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     log_dir: str = "logs"               # 文件日志目录：写 app.log（全量）+ error.log（ERROR 起），相对运行目录
     log_retention_days: int = 30        # 按天滚动保留天数
     log_to_stderr: bool = True          # 是否同时打到终端（保留现有排查习惯）
+    # 访问日志：毫秒级阈值，超过判定为慢请求升级 WARNING（性能定位抓手）
+    access_log_slow_ms: int = 1000
+    # 反向代理后的真实客户端 IP：生产 nginx 覆盖写 X-Real-IP（不可伪造），默认采信。
+    # 若再前置一层 SLB/Ingress 且确认它会重写 X-Forwarded-For，才置 True 采信 XFF 最左侧。
+    trust_x_forwarded_for: bool = False
     auto_seed: bool = True                 # 开发环境空库自动灌演示数据（生产恒为关）
     # 进程内 SLA/升级扫描轮询（本地开发兜底；生产用 Celery beat，is_prod 时本开关失效）
     sla_poller_enabled: bool = True

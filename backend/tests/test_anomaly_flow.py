@@ -6,37 +6,45 @@ from app.models import DataPoolItem, User, WorkOrder
 from app.services.pool_service import generate_from_pool
 
 
-# ── 规则配置 API ──────────────────────────────────────
+# ── 工单类型统一配置 API（来源/类型/异常大类三合一） ──
 
-def test_categories_seeded_with_default_person(client_auth):
-    r = client_auth.get("/api/config/anomaly-categories")
+_ANOMALY_CODES = {
+    "power_gen", "curtailment", "dual_rule", "reliability",
+    "info_quality", "contract", "cost", "satisfaction",
+}
+
+
+def _anomaly_items(client_auth):
+    items = client_auth.get("/api/config/work-order-types").json()
+    return [c for c in items if c["code"] in _ANOMALY_CODES]
+
+
+def test_types_seeded_with_default_person(client_auth):
+    r = client_auth.get("/api/config/work-order-types")
     assert r.status_code == 200
     items = r.json()
-    assert len(items) == 8
-    assert {c["code"] for c in items} == {
-        "power_gen", "curtailment", "dual_rule", "reliability",
-        "info_quality", "contract", "cost", "satisfaction",
-    }
-    for c in items:
+    assert len(items) == 10  # 10 内置：plan + 8 异常 + meeting
+    anom = _anomaly_items(client_auth)
+    assert len(anom) == 8
+    for c in anom:
         expected = "徐林杰" if c["code"] == "dual_rule" else "金惠良"
         assert (c["extra"] or {}).get("default_person_name") == expected
 
 
-def test_update_category_default_person_persists(client_auth):
-    items = client_auth.get("/api/config/anomaly-categories").json()
-    target = next(c for c in items if c["code"] == "power_gen")
+def test_update_type_default_person_persists(client_auth):
+    target = next(c for c in _anomaly_items(client_auth) if c["code"] == "power_gen")
 
-    r2 = client_auth.patch(f"/api/config/anomaly-categories/{target['id']}", json={"default_person_name": "王小宁"})
+    r2 = client_auth.patch(f"/api/config/work-order-types/{target['id']}", json={"default_person_name": "王小宁"})
     assert r2.status_code == 200
     assert r2.json()["extra"]["default_person_name"] == "王小宁"
 
     # 再查一次确认已持久化
-    again = next(c for c in client_auth.get("/api/config/anomaly-categories").json() if c["code"] == "power_gen")
+    again = next(c for c in _anomaly_items(client_auth) if c["code"] == "power_gen")
     assert again["extra"]["default_person_name"] == "王小宁"
 
 
-def test_update_unknown_category_404(client_auth):
-    r = client_auth.patch("/api/config/anomaly-categories/999999", json={"default_person_name": "X"})
+def test_update_unknown_type_404(client_auth):
+    r = client_auth.patch("/api/config/work-order-types/999999", json={"default_person_name": "X"})
     assert r.status_code == 404
 
 
@@ -60,15 +68,16 @@ def test_generate_uses_category_default_person(db):
     wo = db.get(WorkOrder, out["work_order_ids"][0])
     assert db.get(User, wo.person_id).name == "金惠良"
     assert wo.metric_type == "power_gen"
+    # 新异常先建原因工单，尚未进入措施派发/跟踪阶段。
+    assert wo.status == "pending"
+    assert wo.alert_phase is None
 
 
-def test_generate_falls_back_to_person_name_when_no_metric(db):
+def test_generate_skips_anomaly_without_metric(db):
     item = _add_pool_item(db, "t-ref-2", metric_type=None, person_name="王小宁")
     out = generate_from_pool(db, [item.id])
-    assert out["generated"] == 1
-    wo = db.get(WorkOrder, out["work_order_ids"][0])
-    assert db.get(User, wo.person_id).name == "王小宁"
-    assert wo.metric_type is None
+    assert out["generated"] == 0
+    assert any("异常大类未识别" in e for e in out["errors"])
 
 
 # ── 每日同步编排冒烟（mock 掉 dws，无真实钉钉/钉盘调用） ──
@@ -81,7 +90,18 @@ def test_daily_sync_smoke(monkeypatch):
     result = run_anomaly_daily_sync()
     assert result["synced"] == 0
     assert "generated" in result
+    assert result["reason_work_orders"] == 0
     assert isinstance(result["errors"], list)
+
+
+def test_anomaly_sync_slots_are_exactly_10_and_15():
+    from datetime import datetime
+    from app.services.sync_poller import _anomaly_slot
+
+    assert _anomaly_slot(datetime(2026, 9, 18, 10, 0)) == ("2026-09-18", 10)
+    assert _anomaly_slot(datetime(2026, 9, 18, 15, 0)) == ("2026-09-18", 15)
+    assert _anomaly_slot(datetime(2026, 9, 18, 10, 1)) is None
+    assert _anomaly_slot(datetime(2026, 9, 18, 9, 0)) is None
 
 
 # ── 异常年份过滤：只进 7 月及以后 ──
@@ -207,7 +227,7 @@ def test_sync_dual_rule_to_workorders(monkeypatch):
         assert wo.metric_type == "dual_rule"
         assert wo.status == "judging"                # 自带回填 → 已回填
         assert wo.alert_phase == "confirming"         # 进入 alert 五阶段①分析确认
-        assert wo.source_code == "alert"
+        assert wo.source_code == "dual_rule"
         assert wo.priority == "P1"                 # 双细则 P0 → 平台最高 P1
         assert wo.region == "华南"
         assert s.get(User, wo.person_id).name == "徐林杰"   # 责任人=大类默认徐林杰，不是表里王小宁

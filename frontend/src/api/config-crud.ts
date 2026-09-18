@@ -11,11 +11,11 @@ export const updatePriorityRuleApi = (id: number, data: { pattern?: string; labe
 export const updateSla = (id: number, data: { deadline_days?: number; warn_before_hours?: number; escalate_hours?: number }) =>
   http.patch<any, any>(`/config/sla/${id}`, data);
 
-// 工单类型
+// 工单类型 SOP（知识库，本轮不迁；SOP 浏览器/编辑用）
 export const getWoTypesFull = () => http.get<any, any[]>("/config/work-order-types-full");
-export const addWoType = (data: any) => http.post<any, any>("/config/work-order-types", data);
-export const updateWoType = (id: number, data: any) => http.patch<any, any>(`/config/work-order-types/${id}`, data);
-export const delWoType = (id: number) => http.delete<any, void>(`/config/work-order-types/${id}`);
+export const addWoType = (data: any) => http.post<any, any>("/config/sop-types", data);
+export const updateWoType = (id: number, data: any) => http.patch<any, any>(`/config/sop-types/${id}`, data);
+export const delWoType = (id: number) => http.delete<any, void>(`/config/sop-types/${id}`);
 
 // 来源/状态
 export const addConfigDef = (data: { category: string; code: string; name: string; color?: string }) =>

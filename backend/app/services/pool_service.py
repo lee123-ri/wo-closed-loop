@@ -12,6 +12,7 @@ from app.core.database import SessionLocal
 from app.models import ConfigDefinition, DataPoolItem, Project, RegionPMO, User, WorkOrder, WorkOrderTypeKB, StatusLog, WorkOrderMeasureLink, AnomalyOccurrence
 from app.services.priority_service import normalize_priority
 from app.services.roles import resolve_role_user_id
+from app.services.maintenance import ensure_open
 
 
 # ── 工具函数 ──────────────────────────────────────────────
@@ -163,6 +164,7 @@ def generate_from_pool(db: Session, pool_ids: list[int]) -> dict:
     5. 创建 WorkOrder + StatusLog
     6. 更新 pool item status=generated, work_order_id=wo.id
     """
+    ensure_open(db)  # 暂停发单开关：数据池→工单 一并冻结
     items = (
         db.query(DataPoolItem)
         .filter(DataPoolItem.id.in_(pool_ids), DataPoolItem.status == "pending")
@@ -186,18 +188,15 @@ def generate_from_pool(db: Session, pool_ids: list[int]) -> dict:
         user = db.get(User, rpmo.user_id)
         if user:
             region_pmo_map[rpmo.region] = user
-    # 异常大类 → 默认责任人（规则配置 config_definitions.category=anomaly_type）
+    # 工单类型统一配置（category=work_order_type）：默认责任人（仅异常类）+ 默认审批人（每类都配）
     metric_default_person: dict[str, str] = {}
-    for cd in db.query(ConfigDefinition).filter_by(category="anomaly_type").all():
+    type_approver_name: dict[str, str] = {}
+    for cd in db.query(ConfigDefinition).filter_by(category="work_order_type").all():
         extra = cd.extra or {}
         if extra.get("default_person_name"):
             metric_default_person[cd.code] = extra["default_person_name"]
-    # 默认工单类型
-    default_type = db.query(WorkOrderTypeKB).order_by(WorkOrderTypeKB.sort_order).first()
-    # 默认审批人：优先按角色解析（后台可改人名），兜底用类型缓存的 person id
-    default_approver_id = None
-    if default_type:
-        default_approver_id = resolve_role_user_id(db, default_type.default_approver_role) or default_type.default_approver_id
+        if extra.get("default_approver_name"):
+            type_approver_name[cd.code] = extra["default_approver_name"]
 
     for item in items:
         try:
@@ -230,9 +229,24 @@ def generate_from_pool(db: Session, pool_ids: list[int]) -> dict:
             cnt = db.query(WorkOrder).filter(WorkOrder.code.like(f"RW-{year}-%")).count()
             code = f"RW-{year}-{cnt + 1:04d}"
 
-            # 来源 code
-            source_map = {"plan": "plan", "anomaly": "alert", "aitable": "meeting", "excel": "manual"}
-            source_code = source_map.get(item.source_system, "manual")
+            # 工单类型（统一口径）：anomaly→8类异常(metric_type)，plan→运营计划，其它→关键会议
+            if item.pool_type == "anomaly":
+                if not item.metric_type:
+                    skipped += 1
+                    errors.append(f"记录 {item.id} ({item.title[:30]}): 异常大类未识别，跳过")
+                    continue
+                source_code = item.metric_type
+            elif item.pool_type == "plan":
+                source_code = "plan"
+            else:
+                source_code = "meeting"
+
+            # 审批人：工单类型默认审批人（后台可配），配不到留空由发起前校验拦截
+            approver_id = None
+            approver_name = type_approver_name.get(source_code)
+            if approver_name:
+                _au = _match_person(approver_name, users)
+                approver_id = _au.id if _au else None
 
             wo = WorkOrder(
                 code=code,
@@ -241,8 +255,7 @@ def generate_from_pool(db: Session, pool_ids: list[int]) -> dict:
                 action=item.title,
                 project_id=project.id if project else None,
                 person_id=person.id if person else None,
-                approver_id=default_approver_id,
-                type_id=default_type.id if default_type else None,
+                approver_id=approver_id,
                 source_code=source_code,
                 metric_type=item.metric_type,
                 region=project.region if project and project.region else None,
@@ -420,6 +433,7 @@ def _create_triggered_wo(
     type_id: int | None = None,
 ) -> int:
     """创建措施工单B，返回新工单ID"""
+    ensure_open(db)  # 暂停发单开关：回填触发的新措施工单也冻结
     final_title = (title or f"措施执行：{parent_wo.title[:200]}")[:256]
     new_code = _next_code(db)
     person = _match_person(
@@ -445,9 +459,9 @@ def _create_triggered_wo(
         project_id=parent_wo.project_id,
         person_id=person.id if person else parent_wo.person_id,
         approver_id=parent_wo.approver_id,  # 继承审批人
-        type_id=type_id if type_id else parent_wo.type_id,  # 措施工单类型（人工选择，未选则继承父单）
         region=parent_wo.region,            # 继承区域
-        source_code="alert",
+        source_code=parent_wo.metric_type or parent_wo.source_code,  # 措施工单继承主单工单类型
+        metric_type=parent_wo.metric_type,
         priority=priority or parent_wo.priority,
         status="dispatched",                # PMO已审核，直接派发
         created_date=date.today(),
@@ -523,9 +537,8 @@ def _create_measure_from_task(db: Session, host_wo: WorkOrder, task: dict, link_
         project_id=host_wo.project_id,
         person_id=person.id if person else host_wo.person_id,
         approver_id=approver.id if approver else host_wo.approver_id,
-        type_id=task.get("type_id") or host_wo.type_id,
         region=host_wo.region,
-        source_code="measure",  # 措施工单：来源=措施工单（区别于监视告警主单），走普通 OA 流转
+        source_code=host_wo.metric_type or host_wo.source_code,  # 措施工单继承主单工单类型
         metric_type=host_wo.metric_type,
         priority=task.get("priority") or host_wo.priority,
         status="pending",  # 待派发：阶段②下发时才转 dispatched

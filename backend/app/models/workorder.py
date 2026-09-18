@@ -24,17 +24,19 @@ class WorkOrder(TimestampMixin, Base):
         comment="外部 API 调用方请求唯一标识（幂等去重）",
     )
     title: Mapped[str] = mapped_column(String(256), nullable=False)
+    service: Mapped[str | None] = mapped_column(String(128), comment="服务")
     reason: Mapped[str | None] = mapped_column(Text, comment="触发原因")
     action: Mapped[str | None] = mapped_column(Text, comment="行动要求")
     conclusion: Mapped[str | None] = mapped_column(Text, comment="执行结论")
+    task_deliverable: Mapped[str | None] = mapped_column(Text, comment="任务目标交付物（年度计划类必填，提示该传什么附件才能闭环）")
 
     # 关联
     project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"))
     person_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), comment="责任人")
     approver_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), comment="审批人")
-    type_id: Mapped[int | None] = mapped_column(ForeignKey("workorder_type_kb.id"), comment="工单类型")
-    source_code: Mapped[str] = mapped_column(String(32), comment="来源 code")
-    metric_type: Mapped[str | None] = mapped_column(String(32), comment="异常指标大类 power_gen|curtailment|dual_rule|reliability|info_quality|contract|cost|satisfaction")
+    type_id: Mapped[int | None] = mapped_column(ForeignKey("workorder_type_kb.id"), comment="工单类型(旧知识库，本轮不迁移SOP，列表/建单不再显示)")
+    source_code: Mapped[str] = mapped_column(String(32), comment="工单类型 code（统一口径：plan/8异常/meeting+后台新增，见 services/work_order_types.py）")
+    metric_type: Mapped[str | None] = mapped_column(String(32), comment="异常细分 code（=source_code 的 8 异常类；非异常为 None，判定 loader 用它识别五阶段）")
     alert_phase: Mapped[str | None] = mapped_column(String(32), comment="alert 五阶段：confirming|dispatching|tracking|reexamining|recovered（非alert为None）")
     region: Mapped[str | None] = mapped_column(String(16), comment="区域：华北/华中/华东/华南/西北/西南/东北")
     status: Mapped[str] = mapped_column(String(32), default="pending", comment="状态 code")

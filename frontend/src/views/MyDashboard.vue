@@ -4,6 +4,14 @@
       <div><h1>{{ pageTitle }}</h1><div class="meta">{{ scopeLabel }}</div></div>
     </div>
 
+    <!-- 角色口径：本人责任 / 本人审批 / 双重角色 / 全部相关 -->
+    <div class="role-tabs">
+      <span class="role-tabs-label">口径</span>
+      <button v-for="o in roleOptions" :key="o.value" type="button" class="role-tab" :class="{ on: role === o.value }" :aria-pressed="role === o.value" @click="setRole(o.value)">
+        {{ o.label }}
+      </button>
+    </div>
+
     <!-- 统计卡片（点击筛状态） -->
     <PageError v-if="statsError" title="统计加载失败" :message="statsError" @action="load" />
     <div class="stats-row" v-else-if="stats">
@@ -62,6 +70,11 @@
         </div>
       </div>
       <PageError v-if="calendarError" title="日历加载失败" :message="calendarError" @action="loadCalendar" />
+      <div v-else-if="calendarHasItems === false" class="cal-empty-banner">
+        <div class="cal-empty-icon">📅</div>
+        <div class="cal-empty-title">本月没有属于你的工单日程</div>
+        <div class="cal-empty-desc">点击上方 ‹ › 切换月份，或去「新建工单」添加计划开始 / 截止日期</div>
+      </div>
       <div v-else class="mini-cal">
         <div class="cal-header">
           <div v-for="d in dayNames" :key="d" class="cal-day-name">{{ d }}</div>
@@ -69,10 +82,11 @@
         <div class="cal-grid">
           <div v-for="(day, i) in calendarDays" :key="i" class="cal-day" :class="dayClass(day)">
             <div class="cal-date">{{ day.date }}</div>
-            <div v-for="wo in day.items" :key="wo.id" class="cal-item" :class="'cal-' + wo.status" @click="goDetail(wo)">
+            <div v-for="wo in day.visible" :key="`${wo.id}-${wo.calendar_kind}`" class="cal-item" :class="itemClass(wo)" @click="goDetail(wo)">
               <span class="cal-dot"></span>
-              <span class="cal-text">{{ wo.code.slice(-4) }}</span>
+              <span class="cal-text">{{ itemKindLabel(wo) }} {{ wo.code.slice(-4) }}</span>
             </div>
+            <div v-if="day.hidden > 0" class="cal-item cal-more">＋{{ day.hidden }} 更多</div>
           </div>
         </div>
       </div>
@@ -98,7 +112,14 @@ const users = ref<any[]>([]);
 const stats = ref<any>(null);
 const statsError = ref("");
 const calendarError = ref("");
-const scope = ref("self"); // all | region | self
+const scope = ref("personal");
+const role = ref<string>("all");
+const roleOptions = [
+  { value: "all", label: "全部相关" },
+  { value: "responsible", label: "本人责任" },
+  { value: "approver", label: "本人审批" },
+  { value: "both", label: "双重角色" },
+];
 const filterStatus = ref("");
 const woList = ref<WorkOrderList>({ items: [], total: 0, page: 1, page_size: 20 });
 const loading = ref(false);
@@ -109,21 +130,18 @@ const calendarMonth = ref(new Date().getMonth() + 1);
 const currentMonthLabel = computed(() => `${calendarYear.value}年${calendarMonth.value}月`);
 const dayNames = ["一", "二", "三", "四", "五", "六", "日"];
 const calendarDays = ref<any[]>([]);
+const calendarHasItems = ref<boolean | null>(null);
+const MAX_CAL_ITEMS = 4;
 
 const meName = computed(() => userStore.user?.name || "我");
-const pageTitle = computed(() =>
-  scope.value === "all" ? "全部工单" : scope.value === "region" ? "区域工单" : "我的工单"
-);
-const scopeLabel = computed(() => {
-  if (scope.value === "all") return `${meName.value} · 管理员可看全部`;
-  if (scope.value === "region") return `${meName.value} · 区域PMO看本区域`;
-  return `${meName.value} · 只看与我相关（责任人/审批人）`;
-});
+const pageTitle = computed(() => "我的工单");
+const roleLabel = computed(() => roleOptions.find((o) => o.value === role.value)?.label || "");
+const scopeLabel = computed(() => `${meName.value} · ${roleLabel.value}（仅本人作为责任人或审批人的工单）`);
 
 async function load() {
   statsError.value = "";
   try {
-    const res = await getMyDashboard();
+    const res = await getMyDashboard(role.value);
     stats.value = res.stats;
     scope.value = res.scope || "self";
     await loadCalendar();
@@ -136,7 +154,7 @@ async function load() {
 async function loadList() {
   loading.value = true;
   try {
-    const params: any = { page: page.value, page_size: pageSize.value, scope: "mine" };
+    const params: any = { page: page.value, page_size: pageSize.value, scope: "personal", role: role.value };
     if (["pending", "executing", "need_backfill"].includes(filterStatus.value)) {
       params.bucket = filterStatus.value;
     } else if (filterStatus.value) {
@@ -161,6 +179,12 @@ function setFilter(s: string) {
   page.value = 1;
   loadList();
 }
+function setRole(r: string) {
+  role.value = r;
+  filterStatus.value = "";
+  page.value = 1;
+  load();
+}
 function onPageChange(p: any) {
   page.value = p.current;
   pageSize.value = p.pageSize;
@@ -173,19 +197,33 @@ function goDetail(row: any) {
 async function loadCalendar() {
   calendarError.value = "";
   try {
-    const res = await getCalendar(calendarYear.value, calendarMonth.value, true);
+    const res = await getCalendar(calendarYear.value, calendarMonth.value, true, role.value);
     const days: any[] = [];
     const first = new Date(calendarYear.value, calendarMonth.value - 1, 1);
     const last = new Date(calendarYear.value, calendarMonth.value, 0);
     const startDow = first.getDay() || 7;
-    for (let i = 1; i < startDow; i++) days.push({ date: "", items: [], empty: true });
+    const todayStr = dayjs().format("YYYY-MM-DD");
+    for (let i = 1; i < startDow; i++) days.push({ date: "", visible: [], hidden: 0, empty: true });
+    let anyItem = false;
     for (let d = 1; d <= last.getDate(); d++) {
       const dateStr = `${calendarYear.value}-${String(calendarMonth.value).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-      const dayItems = res.items.filter((i: any) => i.deadline === dateStr);
-      days.push({ date: d, items: dayItems, today: dateStr === dayjs().format("YYYY-MM-DD"), empty: false });
+      const dayItems = res.items.flatMap((i: any) => [
+        ...(i.deadline === dateStr ? [{ ...i, calendar_kind: "deadline" }] : []),
+        ...(i.planned_start_date === dateStr ? [{ ...i, calendar_kind: "start" }] : []),
+      ]);
+      if (dayItems.length) anyItem = true;
+      days.push({
+        date: d,
+        visible: dayItems.slice(0, MAX_CAL_ITEMS),
+        hidden: Math.max(0, dayItems.length - MAX_CAL_ITEMS),
+        today: dateStr === todayStr,
+        empty: false,
+      });
     }
     calendarDays.value = days;
+    calendarHasItems.value = anyItem;
   } catch (e: any) {
+    calendarHasItems.value = null;
     calendarError.value = e.message || "请稍后重试";
   }
 }
@@ -193,8 +231,23 @@ function dayClass(day: any) {
   return {
     "cal-today": day.today,
     "cal-empty": day.empty,
-    "cal-has-items": day.items.length > 0,
+    "cal-has-items": day.visible?.length > 0 || day.hidden > 0,
   };
+}
+function itemKindLabel(item: any) {
+  return item.calendar_kind === "start" ? "开始" : "截止";
+}
+function itemIsOverdue(item: any) {
+  if (item.calendar_kind !== "deadline") return false;
+  const d = item.deadline;
+  return !!d && d < dayjs().format("YYYY-MM-DD");
+}
+function itemClass(item: any) {
+  return [
+    "cal-" + item.status,
+    "cal-" + item.calendar_kind,
+    { "cal-past": itemIsOverdue(item) },
+  ];
 }
 function changeMonth(delta: number) {
   calendarMonth.value += delta;
@@ -252,5 +305,25 @@ onMounted(async () => {
 .cal-executing .cal-dot { background: var(--brand); }
 .cal-verifying .cal-dot { background: var(--amber); }
 .cal-pending .cal-dot { background: #9ca3af; }
+.cal-start .cal-dot { background: var(--brand); }
+.cal-deadline .cal-dot { background: var(--amber); }
+.cal-overdue .cal-dot { background: var(--red); }
+.cal-past .cal-dot { background: var(--red); }
+.cal-past .cal-text { color: var(--red); font-weight: 600; }
+.cal-more { color: var(--brand); font-weight: 600; cursor: default; }
 .cal-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 角色口径切换 */
+.role-tabs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.role-tabs-label { font-size: 12px; color: var(--muted); margin-right: 2px; }
+.role-tab { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); font: inherit; font-size: 12px; cursor: pointer; color: #4b5563; transition: all .15s; }
+.role-tab:hover { border-color: var(--brand); color: var(--brand); }
+.role-tab.on { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 600; }
+.role-tab:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* 日历空态 */
+.cal-empty-banner { text-align: center; padding: 32px 16px; color: var(--muted); }
+.cal-empty-icon { font-size: 40px; margin-bottom: 8px; }
+.cal-empty-title { font-size: 15px; font-weight: 700; color: #374151; margin-bottom: 4px; }
+.cal-empty-desc { font-size: 12px; }
 </style>

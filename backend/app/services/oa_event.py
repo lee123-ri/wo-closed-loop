@@ -81,23 +81,30 @@ def apply_oa_event(body: dict, db: Session, event_type: str = "") -> dict:
         return to_status
 
     status = wo.status
+    # 0) 退回上一节点（redirect）：钉钉表单是快照、不可改，退回后只能重提新单。
+    #    状态保持 OA↔平台一一对应，不新增 returned 状态——回退到「当前活跃节点」对应的状态。
+    #    2 节点模板：退回责任人 → approving；退回审批人(罕见) → verifying。
+    if (result == "redirect" or _has_redirect_info(info)) and oa_status != "COMPLETED":
+        active = _active_node_index(info)
+        target = _status_for_active_node(active) if active is not None else "approving"
+        status = _apply(target, f"退回「{activity or '上一节点'}」·待重新提交")
     # 1) 任意节点驳回 / 实例被撤销终止 → rejected
-    if result == "refuse" or oa_status in ("TERMINATED", "CANCELED"):
+    elif result == "refuse" or oa_status in ("TERMINATED", "CANCELED"):
         status = _apply("rejected", "驳回" if result == "refuse" else "已撤销/终止")
     # 2) 实例已归档且通过 → closed（仅当钉钉实例 COMPLETED 才闭环，避免过早闭环）
     elif oa_status == "COMPLETED":
         status = _apply("closed", "审批通过·闭环", close=True)
-    # 3) 审批进行中（RUNNING/NEW）：按「已通过的审批节点数」反推平台状态。
+    # 3) 审批进行中（RUNNING/NEW）：按「当前活跃节点」反推平台状态。
     #    实际模板为 2 个审批节点：责任人(执行/提交佐证) → 审批人(确认闭环)。
-    #      1 节点通过 = 责任人已提交佐证 → verifying；2 节点通过 = 实例 COMPLETED（由上面的分支闭环）。
+    #      活跃节点 0 = 责任人未通过 → approving；1 = 责任人已提交佐证 → verifying。
     #    dispatched / executing 只存在于手动流，OA 不驱动。
-    #    只依赖钉钉实例现状，不依赖事件到达次数 → 天然幂等（重推/重复轮询不会重复推进）。
+    #    只依赖钉钉实例现状，不依赖事件到达次数 → 天然幂等；退回导致活跃节点回退时状态也跟着回退。
     else:
-        approved = _approved_node_count(info)
-        if approved is not None:
-            target = _status_for_approved_nodes(approved)
+        active = _active_node_index(info)
+        if active is not None:
+            target = _status_for_active_node(active)
             if target and target != wo.status:
-                status = _apply(target, f"审批已通过 {approved} 个节点")
+                status = _apply(target, f"审批进行中·当前第 {active + 1} 个节点")
         elif result == "agree":
             # 兜底：查询结果拿不到任务列表时，才按「责任人已提交佐证」前进一步
             forward = {
@@ -119,30 +126,49 @@ def apply_oa_event(body: dict, db: Session, event_type: str = "") -> dict:
     return {"success": True, "status": status}
 
 
-def _approved_node_count(info: dict | None) -> int | None:
-    """钉钉实例「已通过（agree）的审批节点数」。字段名兼容新/旧网关大小写；拿不到任务列表时返回 None。"""
+def _active_node_index(info: dict | None) -> int | None:
+    """当前活跃（第一个未通过）审批节点的下标。全部通过返回 len(tasks)；拿不到任务列表返回 None。
+
+    字段名兼容新/旧网关大小写。节点 `task_result` 判 AGREE 视为已通过；
+    退回/重跑会让该节点 task_result 变回 NONE/REDIRECTED，指数自然回退。
+    """
     if not isinstance(info, dict):
         return None
     tasks = info.get("tasks") or info.get("Tasks")
-    if not isinstance(tasks, list):
+    if not isinstance(tasks, list) or not tasks:
         return None
-    n = 0
+    for i, t in enumerate(tasks):
+        if not isinstance(t, dict):
+            continue
+        r = str(t.get("task_result") or t.get("taskResult") or "").strip().lower()
+        if r not in ("agree", "agreed", "approved"):
+            return i
+    return len(tasks)
+
+
+def _status_for_active_node(active: int) -> str | None:
+    """2 节点审批流（责任人执行→审批人确认闭环）活跃节点下标 → 平台状态。
+
+    0 = 责任人未通过 → approving；1 = 责任人已提交佐证 → verifying；≥2 由 COMPLETED 分支闭环。
+    """
+    return {0: "approving", 1: "verifying"}.get(active)
+
+
+def _has_redirect_info(info: dict | None) -> bool:
+    """任务列表里是否有 task_result/task_status 携带 redirect/redirected 标记。"""
+    if not isinstance(info, dict):
+        return False
+    tasks = info.get("tasks") or info.get("Tasks")
+    if not isinstance(tasks, list):
+        return False
     for t in tasks:
         if not isinstance(t, dict):
             continue
         r = str(t.get("task_result") or t.get("taskResult") or "").strip().lower()
-        if r in ("agree", "agreed"):
-            n += 1
-    return n
-
-
-def _status_for_approved_nodes(approved: int) -> str | None:
-    """2 节点审批流（责任人执行→审批人确认闭环）已通过节点数 → 平台状态。
-
-    1 节点通过 = 责任人已提交佐证 → verifying（待验收）。
-    0 个通过保持 approving；≥2 已由 COMPLETED 分支处理，返回 None。
-    """
-    return {1: "verifying"}.get(approved)
+        s = str(t.get("task_status") or t.get("taskStatus") or "").strip().lower()
+        if r in ("redirect", "redirected") or s in ("redirect", "redirected"):
+            return True
+    return False
 
 
 def _sync_form_back(wo: WorkOrder, db: Session, info: dict):

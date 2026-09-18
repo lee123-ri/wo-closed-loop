@@ -18,7 +18,7 @@ def _make_host(db, phase="confirming"):
         code="RW-HOST-1",
         title="测试异常指标工单",
         reason="触发原因", action="行动要求",
-        source_code="alert", status="judging", alert_phase=phase,
+        source_code="reliability", metric_type="reliability", status="judging", alert_phase=phase,
         priority="P1", region=None, created_date=date.today(),
         project_id=1, person_id=1, approver_id=11, type_id=1,
         planned_start_date=date.today(), deadline=date.today() + timedelta(days=3),
@@ -44,7 +44,7 @@ def test_confirm_analysis_creates_pending_measures_and_links(db):
     for l in links:
         m = db.get(WorkOrder, l.measure_wo_id)
         assert m.status == "pending"
-        assert m.source_code == "measure"
+        assert m.source_code == "reliability"
     p = measure_progress(db, host.id)
     assert p["closed"] == 0 and p["total"] == 2
 

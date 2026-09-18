@@ -4,6 +4,7 @@ import { useConfigStore } from "@/stores/config";
 
 export const statusMap: Record<string, { label: string; tag: string }> = {
   pending: { label: "待派发", tag: "tag-gray" },
+  scheduled: { label: "已排期", tag: "tag-blue" },
   approving: { label: "审批中", tag: "tag-blue" },
   dispatched: { label: "已派发", tag: "tag-amber" },
   executing: { label: "执行中", tag: "tag-blue" },
@@ -26,7 +27,7 @@ export const statusTag = (s: string) => statusMap[s]?.tag ?? "tag-gray";
 /** TDesign 主题映射（给 t-tag theme 用） */
 export const statusTheme = (s: string): string => {
   const m: Record<string, string> = {
-    pending: "default", approving: "primary", dispatched: "warning",
+    pending: "default", scheduled: "primary", approving: "primary", dispatched: "warning",
     executing: "primary", verifying: "warning", closed: "success",
     overdue: "danger", rejected: "default",
   };
@@ -46,12 +47,19 @@ export const priorityTheme = (p: string): string => {
   return m[p] || "primary";
 };
 
+// 工单类型（统一口径）：source_code 现承载「工单类型」，10 内置 + 后台新增。
+// 后台新增类型（custom_*）由 configStore 动态供名，此处兜底内置 10 类固有色/名。
 export const sourceMap: Record<string, { label: string; cls: string; color: string }> = {
-  plan: { label: "年度计划", cls: "src-plan", color: "#2563eb" },
-  alert: { label: "监视告警", cls: "src-alert", color: "#dc2626" },
-  meeting: { label: "判定会", cls: "src-meeting", color: "#d97706" },
-  manual: { label: "手动", cls: "src-manual", color: "#7c3aed" },
-  measure: { label: "措施工单", cls: "src-measure", color: "#0ea5e9" },
+  plan: { label: "运营计划工单", cls: "src-plan", color: "#2563eb" },
+  power_gen: { label: "发电量异常工单", cls: "src-alert", color: "#dc2626" },
+  curtailment: { label: "限电量异常工单", cls: "src-alert", color: "#d97706" },
+  dual_rule: { label: "双细则异常工单", cls: "src-alert", color: "#7c3aed" },
+  reliability: { label: "设备可靠性异常工单", cls: "src-alert", color: "#ea580c" },
+  info_quality: { label: "信息化使用异常工单", cls: "src-alert", color: "#2563eb" },
+  contract: { label: "应签未签工单", cls: "src-alert", color: "#0891b2" },
+  cost: { label: "成本费用工单", cls: "src-alert", color: "#059669" },
+  satisfaction: { label: "客户满意度工单", cls: "src-alert", color: "#db2777" },
+  meeting: { label: "关键会议工单", cls: "src-meeting", color: "#d97706" },
 };
 export const sourceLabel = (s: string) => useConfigStore().sourceName(s, sourceMap[s]?.label ?? s);
 export const sourceTagClass = (s: string) => sourceMap[s]?.cls ?? "";
@@ -75,11 +83,11 @@ export const ALERT_PHASES = ["confirming", "dispatching", "tracking", "reexamini
  */
 export function flowProgress(
   status: string,
-  sourceCode?: string,
+  metricType?: string | null,
   alertPhase?: string | null,
 ): { idx: number; steps: { code: string; state: "done" | "active" | "warn" | "todo" }[] } {
-  // alert 主单 → 五阶段闭环
-  if (sourceCode === "alert" && alertPhase) {
+  // 异常主单（metric_type 非空 且 已回填进阶段）→ 五阶段闭环
+  if (metricType && alertPhase) {
     const idx = ALERT_PHASES.indexOf(alertPhase as any);
     const cur = idx < 0 ? 0 : idx;
     return {
@@ -95,6 +103,7 @@ export function flowProgress(
   const STEP_CODES: readonly string[] = FLOW_STEPS;
   const STAGE: Record<string, number> = {
     pending: 0,
+    scheduled: 0,
     approving: 1,
     dispatched: 1,
     executing: 1,

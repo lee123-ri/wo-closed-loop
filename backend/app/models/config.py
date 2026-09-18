@@ -141,3 +141,20 @@ class RoleAssignment(TimestampMixin, Base):
     role_name: Mapped[str] = mapped_column(String(64), comment="事业部负责人/事业部PMO/交付PMO")
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class RoleDataScope(TimestampMixin, Base):
+    """数据范围角色 → 可见范围（谁能看哪些工单，后台可配）。
+
+    与 region_pmos（谁当区域PMO）、role_assignments（谁当事业部负责人/PMO）解耦：
+    本表只声明「角色能看到哪些范围」，判定时把人归到某角色再读这里的勾选。
+    """
+    __tablename__ = "role_data_scopes"
+    __table_args__ = {"comment": "角色数据范围配置"}
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    role_code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, comment="admin|division_pmo|region_pmo|member")
+    role_name: Mapped[str] = mapped_column(String(64), comment="系统管理员/事业部PMO/区域PMO/普通成员")
+    scopes: Mapped[list | None] = mapped_column(JSONB, comment="['self','region','all'] 子集，多选取并集")
+    is_locked: Mapped[bool] = mapped_column(Boolean, default=False, comment="true=锁定不可后台改（如 admin）")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)

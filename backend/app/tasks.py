@@ -108,7 +108,7 @@ def sync_aitable_full():
 
 @celery_app.task(name="app.tasks.sync_anomaly_daily")
 def sync_anomaly_daily():
-    """每日增量：异常指标表 → 数据池 → 生成工单（只落新增）"""
+    """10:00/15:00 增量：异常指标表 → 原因工单列表（只落新增）。"""
     from app.services.aitable import run_anomaly_daily_sync
     return run_anomaly_daily_sync()
 
@@ -118,6 +118,13 @@ def sync_plan_draft():
     """轮询钉盘「年度运营计划初稿」文件夹 → 下载解析 → 导入非EAM计划工单（source=plan）"""
     from app.services.drive_workorder_import import import_drive_workorder_versions
     return import_drive_workorder_versions()
+
+
+@celery_app.task(name="app.tasks.dispatch_monthly_plan_oa")
+def dispatch_monthly_plan_oa():
+    """每月 1 日 09:00 自动给「计划开始日在当月」且必填完整的计划工单发起 OA。"""
+    from app.services.plan_dispatch import dispatch_monthly_plans
+    return dispatch_monthly_plans()
 
 
 @celery_app.task(name="app.tasks.sweep")

@@ -4,6 +4,8 @@
 
 当前代码版本：**v0.6.0**。本地验证记录见 [测试报告](docs/测试报告.html)；生产部署与真实钉钉 OA 联调需另行验收。
 
+> **工单类型**（2026-09-17 起）：来源/工单类型/异常指标大类三合一，`source_code` 承载唯一类型——运营计划、8 类异常（发电量/限电/双细则/设备可靠性/信息化使用/应签未签/成本费用/客户满意度）、关键会议，另可在后台极简新增。8 类异常走五阶段闭环，其余走计划流/三步。
+
 ## 技术栈
 
 | 层 | 选型 |
@@ -65,7 +67,7 @@ npm install
 npm run dev                   # http://localhost:5173
 ```
 
-> 本地开发**无需起 Celery**：SLA 扫描 + 升级告警已由后端进程内轮询（`app/services/sla_poller.py`，每 300s 一轮，`notify=False` 不发钉钉通知）自动跑，工单「告警」列会在截止过期后自动亮起；异常指标增量同步（每 `anomaly_sync_interval` 秒、只落新增）+ 年度运营计划「初稿」非EAM 导入（每 `plan_sync_interval` 秒、默认 3600，source=plan）由 `app/services/sync_poller.py` 进程内轮询兜底。生产仍由 Celery beat 负责（`sync-anomaly-daily` 每 300s + `sync-plan-draft` 每 3600s + SLA/升级扫描）。
+> 本地开发**无需起 Celery**：SLA 扫描 + 升级告警已由后端进程内轮询（`app/services/sla_poller.py`，每 300s 一轮，`notify=False` 不发钉钉通知）自动跑，工单「告警」列会在截止过期后自动亮起；异常指标增量同步（每 `anomaly_sync_interval` 秒、只落新增）+ 年度运营计划「初稿」非EAM 导入（每 `plan_sync_interval` 秒、默认 3600，source=plan）由 `app/services/sync_poller.py` 进程内轮询兜底。生产仍由 Celery beat 负责（`sync-anomaly-daily` 每 300s + `sync-plan-draft` 每 3600s + SLA/升级扫描）。年度计划工单导入后落 `scheduled`（排期）不再立即发起 OA，由 Celery beat `dispatch-monthly-plan-oa`（每月 1 日 09:00）挑「计划开始日在当月且必填完整」的计划单统一发起 OA（`app/services/plan_dispatch.py`，幂等）。
 
 > 局域网试用（2026-09-03 验证）：前后端均已 `0.0.0.0` 监听，**固定入口 `http://10.10.147.200:5173`**（en0 手动静态配置，255.255.252.0 / 网关 10.10.144.1；旧地址 10.10.147.84 作废）。本机无 Docker，PG/Redis 为原生运行；若开防火墙需放行 node/python 传入连接。OA 同步走钉钉 Stream + 10s 轮询，无需公网回调。
 
