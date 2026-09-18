@@ -10,6 +10,7 @@ from app.models.workorder import WorkOrder, StatusLog, Attachment, EscalationLog
 from app.models.audit import AuditLog
 from app.models.pool import DataPoolItem
 from app.models.judgment import JudgmentDegradationLog
+from app.models.organization import PermissionRole, UserPermissionRole, BusinessRole, BusinessRoleAssignment, OrganizationSyncCandidate, OrganizationMappingRule, NotificationRule, OperationEvent
 
 __all__ = [
     "TimestampMixin",
@@ -21,4 +22,5 @@ __all__ = [
     "AuditLog",
     "DataPoolItem",
     "JudgmentDegradationLog",
+    "PermissionRole", "UserPermissionRole", "BusinessRole", "BusinessRoleAssignment", "OrganizationSyncCandidate", "OrganizationMappingRule", "NotificationRule", "OperationEvent",
 ]

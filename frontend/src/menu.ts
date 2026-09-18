@@ -38,6 +38,7 @@ export const MENU_GROUPS: MenuGroup[] = [
       { path: "/users", icon: "usergroup", title: "用户管理" },
       // 数据池是自动同步链路的内部暂存层，日常不开放人工入口；需要人工兜底时恢复本项。
       // { path: "/pool", icon: "layers", title: "数据池" },
+      { path: "/organization", icon: "usergroup", title: "用户与组织" },
       { path: "/sop", icon: "book-open", title: "SOP知识库" },
     ],
   },

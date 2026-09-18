@@ -407,14 +407,14 @@ def send_work_notification(user_id: str, title: str, content: str, action_url: s
         return False
 
 
-def send_group_markdown(text: str, title: str = "") -> bool:
+def send_group_markdown(text: str, title: str = "", group_id: str | None = None) -> bool:
     """企业内部机器人发群 markdown（合并多条工单链接用）。走新网关 groupMessages/send。
 
     robotCode + openConversationId + msgKey(sampleMarkdown) + msgParam(title/text)。
     成功返回 True（HTTP 200 且无 code 字段，响应带 processQueryKey）。
     """
     robot_code = settings.dingtalk_robot_code
-    conv_id = settings.dingtalk_notify_group_id
+    conv_id = group_id or settings.dingtalk_notify_group_id
     if not (robot_code and conv_id):
         print("[dingtalk] 群机器人未配置（缺 DINGTALK_ROBOT_CODE/notify_group_id），跳过")
         return False

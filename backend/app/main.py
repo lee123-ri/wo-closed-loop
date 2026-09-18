@@ -6,7 +6,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import admin, auth, bot, config, dashboard, dingtalk, external, imports, pool, workorders
+from app.api import admin, auth, bot, config, dashboard, dingtalk, external, imports, organization, pool, workorders
 from app.api.auth import require_admin, require_auth
 from app.core.config import get_settings
 from app.core.logging import setup_logging
@@ -184,6 +184,7 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api", dependencies=[Depends(require_auth)])
 app.include_router(workorders.router, prefix="/api", dependencies=[Depends(require_auth)])
 app.include_router(config.router, prefix="/api", dependencies=[Depends(require_auth)])
+app.include_router(organization.router, prefix="/api", dependencies=[Depends(require_auth)])
 app.include_router(dingtalk.router, prefix="/api", dependencies=[Depends(require_auth)])
 # 钉钉服务端回调（OA 审批推送）无用户 JWT，走公开路由，靠验签保护
 app.include_router(dingtalk.public_router, prefix="/api")
