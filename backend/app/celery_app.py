@@ -36,13 +36,18 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.daily_reminder",
         "schedule": 1800.0,  # 每30分钟检查（仅9:00-9:59执行）
     },
-    "sync-anomaly-daily": {
+    "sync-anomaly-reason-workorders": {
         "task": "app.tasks.sync_anomaly_daily",
-        "schedule": 300.0,  # 每 5 分钟增量同步异常指标表（只落新增，准实时）
+        # 新增异常只在两个固定窗口进入平台原因工单列表；不在此任务中派发措施或通知。
+        "schedule": crontab(minute=0, hour="10,15"),
     },
     "sync-plan-draft": {
         "task": "app.tasks.sync_plan_draft",
         "schedule": 3600.0,  # 每 1 小时轮询钉盘初稿文件夹导入非EAM计划工单（下载解析较重）
+    },
+    "dispatch-monthly-plan-oa": {
+        "task": "app.tasks.dispatch_monthly_plan_oa",
+        "schedule": crontab(minute=0, hour=9, day_of_month=1),  # 每月 1 日 09:00 自动派发当月计划
     },
     "sweep": {
         "task": "app.tasks.sweep",

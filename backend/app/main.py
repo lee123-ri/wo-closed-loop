@@ -10,6 +10,7 @@ from app.api import admin, auth, bot, config, dashboard, dingtalk, external, imp
 from app.api.auth import require_admin, require_auth
 from app.core.config import get_settings
 from app.core.logging import setup_logging
+from app.core.middleware import AccessLogMiddleware, RequestIDMiddleware
 from app.core.security_middleware import (
     SecurityHeadersMiddleware, SlowAPIMiddleware, limiter, rate_limit_exceeded_handler,
 )
@@ -124,6 +125,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# 请求级中间件：最后 add 的在最外层。目标顺序（外→内）：
+# RequestID → AccessLog → CORS → SecurityHeaders → SlowAPI(限流，最贴近应用)
+app.add_middleware(AccessLogMiddleware)
+app.add_middleware(RequestIDMiddleware)
 
 
 @app.exception_handler(Exception)
@@ -158,6 +163,20 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 @limiter.limit("60/minute")
 def health(request: Request):
     return {"status": "ok", "env": settings.app_env}
+
+
+@app.get("/health/ready", tags=["meta"])
+@limiter.limit("60/minute")
+def readiness(request: Request):
+    """就绪探针：进程存活之外，确认数据库连接可用。"""
+    try:
+        from sqlalchemy import text
+        from app.core.database import engine
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception:
+        return JSONResponse(status_code=503, content={"status": "not_ready", "database": "unavailable"})
+    return {"status": "ready", "database": "ok", "env": settings.app_env}
 
 
 app.include_router(auth.router, prefix="/api")

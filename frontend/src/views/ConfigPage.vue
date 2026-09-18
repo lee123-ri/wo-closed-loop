@@ -1,60 +1,53 @@
 <template>
   <div class="config-page">
-    <div class="header"><div><h1>规则配置</h1><div class="meta">全部可配置 · 改完即时生效</div></div></div>
+    <div class="header"><div><h1>规则配置</h1><div class="meta">按运行链路归类；配置状态和实际消费位置均明确标注</div></div></div>
     <PageError v-if="loadError" title="规则配置加载失败" :message="loadError" @action="retryLoad" />
     <template v-else>
-
-    <!-- 工单类型 -->
-    <div class="card">
-      <div class="card-hd"><h3>📚 工单类型</h3><button class="btn btn-pri btn-sm" @click="openType()">＋ 新增</button></div>
-      <t-table :data="woTypes" :columns="typeColumns" row-key="id" size="small" cell-empty-content="—" hover>
-        <template #type_code="{ row }"><code>{{ row.type_code }}</code></template>
-        <template #name="{ row }"><b @dblclick="editType(row)">{{ row.name }}</b></template>
-        <template #desc="{ row }"><span class="desc">{{ row.desc || '—' }}</span></template>
-        <template #approver="{ row }">{{ userName(row.default_approver_id) }}</template>
-        <template #priority="{ row }"><t-tag :theme="priorityTheme(row.default_priority)" size="small">{{ priorityLabel(row.default_priority) }}</t-tag></template>
-        <template #action="{ row }">
-          <t-space :size="4">
-            <t-button size="small" variant="outline" @click="editType(row)">编辑</t-button>
-            <t-button size="small" variant="outline" theme="danger" @click="delType(row.id)">删除</t-button>
-          </t-space>
-        </template>
-      </t-table>
+    <div class="config-guide">
+      <span><b>工单类型</b>：来源/类型/异常大类三合一，10 内置 + 后台极简新增，配审批人与责任人</span>
+      <span><b>自动判定</b>：优先级正则（仅智能解析/导入/机器人）</span>
+      <span><b>时效与升级</b>：SLA 期限、平台升级路径</span>
+      <span><b>组织映射</b>：区域负责人、角色人员</span>
     </div>
 
-    <!-- 来源 / 状态 -->
+    <!-- 工单类型（统一口径：来源/工单类型/异常指标大类三合一） -->
     <div class="card">
-      <div class="card-hd"><h3>🏷️ 来源与状态</h3><button class="btn btn-pri btn-sm" @click="openDef()">＋ 新增</button></div>
-      <div class="grid2">
-        <div><div class="sub-hd">来源</div>
-          <div class="chip-list"><span v-for="s in sources" :key="s.id" class="chip" @dblclick="editDef(s)"><span class="dot" :style="{background: s.color}"></span>{{ s.name }}<span class="chip-del" @click="delDef(s.id)">×</span></span></div>
-        </div>
-        <div><div class="sub-hd">状态</div>
-          <div class="chip-list"><span v-for="s in statuses" :key="s.id" class="chip" @dblclick="editDef(s)"><span class="dot" :style="{background: s.color}"></span>{{ s.name }}<span class="chip-del" @click="delDef(s.id)">×</span></span></div>
+      <div class="card-hd"><div><h3>📚 工单类型</h3><span class="count">流程区分保留：异常类走五阶段、运营计划走计划流、其余三步；每类配默认审批人（异常类再配默认责任人）</span></div><button class="btn btn-pri btn-sm" @click="openNewType()">＋ 新增（只输名字）</button></div>
+      <div class="region-pmo-grid">
+        <div v-for="t in woTypeList" :key="t.id" class="region-pmo-row">
+          <span class="region-label"><span class="dot" style="display:inline-block" :style="{ background: t.color }"></span>{{ t.name }}<code class="role-code">{{ t.code }}</code><span class="flow-badge">{{ flowLabel(t) }}</span></span>
+          <SearchableSelect
+            :model-value="approverUserId(t)"
+            :options="allUsers"
+            placeholder="默认审批人…"
+            class="region-pmo-select"
+            @update:model-value="(v: number | undefined) => onTypeApproverChange(t, v)"
+          />
+          <SearchableSelect
+            v-if="isAnomalyType(t.code)"
+            :model-value="personUserId(t)"
+            :options="allUsers"
+            placeholder="默认责任人…"
+            class="region-pmo-select"
+            @update:model-value="(v: number | undefined) => onTypePersonChange(t, v)"
+          />
         </div>
       </div>
     </div>
 
-    <!-- 异常指标大类 -->
+    <!-- 状态 -->
     <div class="card">
-      <div class="card-hd"><h3>🧭 异常指标大类</h3><span class="count">监视告警细分 · 每类默认责任人</span></div>
-      <div class="region-pmo-grid">
-        <div v-for="c in anomalyCategories" :key="c.id" class="region-pmo-row">
-          <span class="region-label"><span class="dot" style="display:inline-block" :style="{ background: c.color }"></span>{{ c.name }}<code class="role-code">{{ c.code }}</code></span>
-          <SearchableSelect
-            :model-value="categoryUserId(c)"
-            :options="allUsers"
-            placeholder="默认责任人…"
-            class="region-pmo-select"
-            @update:model-value="(v: number | undefined) => onCategoryPersonChange(c, v)"
-          />
+      <div class="card-hd"><h3>🏷️ 工单状态</h3></div>
+      <div class="grid2">
+        <div><div class="sub-hd">状态</div>
+          <div class="chip-list"><span v-for="s in statuses" :key="s.id" class="chip" @dblclick="editDef(s)"><span class="dot" :style="{background: s.color}"></span>{{ s.name }}</span></div>
         </div>
       </div>
     </div>
 
     <!-- 优先级规则 -->
     <div class="card">
-      <div class="card-hd"><h3>🎯 优先级判定规则</h3><button class="btn btn-pri btn-sm" @click="openPriority()">＋ 新增</button></div>
+      <div class="card-hd"><div><h3>🎯 自动优先级判定</h3><span class="count">已接入智能解析、导入、机器人建单；手工指定优先级优先</span></div><button class="btn btn-pri btn-sm" @click="openPriority()">＋ 新增</button></div>
       <t-table :data="priorityRules" :columns="ruleColumns" row-key="id" size="small" cell-empty-content="—" hover>
         <template #idx="{ rowIndex }">{{ rowIndex + 1 }}</template>
         <template #pattern="{ row }"><code @dblclick="editPriority(row)">{{ row.pattern }}</code></template>
@@ -72,7 +65,7 @@
 
     <!-- SLA -->
     <div class="card">
-      <div class="card-hd"><h3>⏱ SLA 定义</h3></div>
+      <div class="card-hd"><div><h3>⏱ SLA 定义</h3><span class="count">已接入默认截止日、SLA 扫描和管理看板违约统计</span></div></div>
       <t-table :data="slaList" :columns="slaColumns" row-key="id" size="small" cell-empty-content="—">
         <template #priority="{ row }"><t-tag :theme="priorityTheme(row.priority)" size="small">{{ priorityLabel(row.priority) }}</t-tag></template>
         <template #deadline_days="{ row }"><input type="number" v-model.number="row.deadline_days" class="inline-inp" /></template>
@@ -82,9 +75,9 @@
       </t-table>
     </div>
 
-    <!-- 区域PMO -->
+    <!-- 区域负责人（PMO） -->
     <div class="card">
-      <div class="card-hd"><h3>📍 区域PMO配置</h3><span class="count">异常指标工单默认责任人</span></div>
+      <div class="card-hd"><div><h3>📍 区域负责人（PMO）</h3><span class="count">已接入：区域数据可见范围 + 异常指标默认责任人兜底</span></div></div>
       <div class="region-pmo-grid">
         <div v-for="r in REGIONS" :key="r" class="region-pmo-row">
           <span class="region-label">{{ r }}</span>
@@ -101,7 +94,7 @@
 
     <!-- 角色人员配置 -->
     <div class="card">
-      <div class="card-hd"><h3>👤 角色人员配置</h3><span class="count">审批流按角色引用，人名在此配置</span></div>
+      <div class="card-hd"><h3>👤 角色人员映射</h3><span class="count">已接入工单模板的默认审批人角色解析</span></div>
       <div class="region-pmo-grid">
         <div v-for="r in roleAssignments" :key="r.role_code" class="region-pmo-row">
           <span class="region-label"><b>{{ r.role_name }}</b><code class="role-code">{{ r.role_code }}</code></span>
@@ -116,9 +109,24 @@
       </div>
     </div>
 
+    <!-- 数据权限（角色 → 可见范围） -->
+    <div class="card">
+      <div class="card-hd"><div><h3>🔐 数据权限（角色 → 可见范围）</h3><span class="count">每个角色能看到哪些工单；多选取并集去重</span></div></div>
+      <div class="scope-grid">
+        <div v-for="r in roleScopes" :key="r.role_code" class="scope-row">
+          <span class="region-label"><b>{{ r.role_name }}</b><code class="role-code">{{ r.role_code }}</code></span>
+          <label v-for="s in SCOPE_OPTIONS" :key="s.value" class="scope-check" :class="{ disabled: r.is_locked }">
+            <input type="checkbox" :checked="hasScope(r, s.value)" :disabled="r.is_locked" @change="toggleScope(r, s.value)" />
+            {{ s.label }}
+          </label>
+        </div>
+      </div>
+      <div class="scope-hint">管理员固定「全部」不可改；「区域」仅对区域 PMO 生效，具体负责哪几个大区由上方「区域负责人（PMO）」配置；其他角色勾「区域」无对应大区时，该范围视作空。</div>
+    </div>
+
     <!-- 审批流 -->
     <div class="card">
-      <div class="card-hd"><h3>🔄 审批流</h3><span class="count">双击节点编辑</span></div>
+      <div class="card-hd"><div><h3>🔄 平台升级路径</h3><span class="count">已接入平台节点展示和逾期升级目标；不修改钉钉 OA 模板</span></div></div>
       <div class="flow-grid">
         <div v-for="f in approvalFlows" :key="f.id" class="flow-card" :class="flowClass(f.priority)">
           <div class="flow-hd"><h4>{{ emoji(f.priority) }} {{ f.name }}</h4></div>
@@ -133,53 +141,17 @@
       </div>
     </div>
 
-    <!-- 工单类型编辑弹窗 -->
-    <t-dialog v-model:visible="typeModal.open" :header="(typeModal.editing ? '编辑' : '新增') + '工单类型'" width="640" :footer="false">
-      <div class="modal-body-scroll">
-          <!-- 基本信息 -->
-          <h4 class="modal-section-title">基本信息</h4>
-          <div class="form-row">
-            <div class="form-group"><label>编码</label><input v-model="typeModal.type_code" :disabled="!!typeModal.editing" /></div>
-            <div class="form-group"><label>名称</label><input v-model="typeModal.name" /></div>
-          </div>
-          <div class="form-group"><label>说明</label><input v-model="typeModal.desc" /></div>
-          <div class="form-row">
-            <div class="form-group"><label>审批人</label><select v-model="typeModal.default_approver_id"><option :value="undefined">无</option><option v-for="u in approvers" :key="u.id" :value="u.id">{{ u.name }}</option></select></div>
-            <div class="form-group"><label>优先级</label><select v-model="typeModal.default_priority"><option value="P1">P1</option><option value="P2">P2</option><option value="P3">P3</option></select></div>
-          </div>
-
-          <!-- SOP 知识库 -->
-          <h4 class="modal-section-title">📋 SOP 知识库</h4>
-          <div class="form-group"><label>指引编号</label><input v-model="typeModal.guidance_ref" placeholder="如 YWSYB-GLZY-012" /></div>
-          <div class="form-group"><label>目的</label><textarea v-model="typeModal.sop_purpose" rows="2" placeholder="规范XX的全流程管控"></textarea></div>
-          <div class="form-group"><label>流程</label><textarea v-model="typeModal.sop_scope" rows="2" placeholder="描述工作流程和环节"></textarea></div>
-          <div class="form-group">
-            <label>标准步骤（JSON 格式）</label>
-            <textarea v-model="typeModal.sop_steps" rows="6" placeholder='[{"step":1,"action":"...","standard":"...","role":"..."}]'></textarea>
-            <span class="form-hint">JSON 数组，每项含 step/action/standard/role</span>
-          </div>
-          <div class="form-group"><label>验收标准</label><textarea v-model="typeModal.sop_acceptance" rows="2" placeholder="描述验收标准"></textarea></div>
-          <div class="form-group">
-            <label>升级规则（JSON 格式）</label>
-            <textarea v-model="typeModal.sop_escalation" rows="3" placeholder='{"timeout_hours":24,"action":"升级至XX","target":"XX"}'></textarea>
-            <span class="form-hint">JSON 对象，含 timeout_hours/action/target</span>
-          </div>
-          <div class="form-group">
-            <label>关联指引（JSON 格式）</label>
-            <textarea v-model="typeModal.sop_related_guidance" rows="3" placeholder='[{"ref":"YWSYB-GLZY-001","title":"XX指引"}]'></textarea>
-            <span class="form-hint">JSON 数组，每项含 ref/title</span>
-          </div>
-          <div class="form-group">
-            <label class="checkbox-label"><input type="checkbox" v-model="typeModal.sop_backfill_required" /> 要求回填</label>
-          </div>
-        </div>
-        <div class="modal-actions"><t-button variant="outline" @click="typeModal.open = false">取消</t-button><t-button theme="primary" :loading="writing" @click="saveType">保存</t-button></div>
+    <!-- 新增工单类型弹窗（极简：只输名字） -->
+    <t-dialog v-model:visible="newTypeModal.open" header="新增工单类型" width="420" :footer="false">
+      <div class="form-group"><label>名称</label><input v-model="newTypeModal.name" placeholder="如：安全生产工单" /></div>
+      <div class="form-hint" style="margin:4px 0 12px">自动生成编码 custom_N，流程按「运营计划工单」走；审批人/责任人可在下方列表里补。</div>
+      <div class="modal-actions"><t-button variant="outline" @click="newTypeModal.open = false">取消</t-button><t-button theme="primary" :loading="writing" @click="saveNewType">保存</t-button></div>
     </t-dialog>
 
     <!-- 通用弹窗 -->
     <t-dialog v-model:visible="modal.open" :header="modalTitle" width="420" :footer="false">
         <template v-if="modal.type === 'def'">
-          <div class="form-group"><label>类别</label><select v-model="modal.category"><option value="source">来源</option><option value="status">状态</option></select></div>
+          <div class="form-group"><label>类别</label><select v-model="modal.category"><option value="status">状态</option></select></div>
           <div class="form-group"><label>编码</label><input v-model="modal.code" /></div>
           <div class="form-group"><label>名称</label><input v-model="modal.name" /></div>
           <div class="form-group"><label>颜色</label><input v-model="modal.color" /></div>
@@ -207,26 +179,29 @@
 <script setup lang="ts">
 import { toast, confirmDialog } from "@/utils/feedback";
 import { computed, onMounted, reactive, ref } from "vue";
-import { getSources, getStatuses, getProjects, getUsers, getUsersAll, getPriorityRules, getSla, getApprovalFlows, getRegionPMOs, getRoleAssignments, getAnomalyCategories } from "@/api/config";
+import { getStatuses, getProjects, getUsers, getUsersAll, getPriorityRules, getSla, getApprovalFlows, getRegionPMOs, getRoleAssignments, getRoleScopes, updateRoleScope, getWoTypes, addWorkOrderType, updateWorkOrderType } from "@/api/config";
 import * as CC from "@/api/config-crud";
-import { setRegionPMO, deleteRegionPMO, updateRoleAssignment, updateAnomalyCategory } from "@/api/config";
+import { setRegionPMO, deleteRegionPMO, updateRoleAssignment } from "@/api/config";
 import SearchableSelect from "@/components/SearchableSelect.vue";
 import PageError from "@/components/PageError.vue";
 import { priorityLabel, priorityTheme } from "@/utils/wo-display";
 
 const REGIONS = ["华北", "华中", "华东", "华南", "西北", "西南", "东北"];
-const sources = ref<any[]>([]);
+const SCOPE_OPTIONS = [
+  { value: "self", label: "自己相关" },
+  { value: "region", label: "区域" },
+  { value: "all", label: "全部" },
+];
 const statuses = ref<any[]>([]);
 const users = ref<any[]>([]);
 const allUsers = ref<any[]>([]);
-const approvers = computed(() => users.value.filter((u) => u.role === "approver" || u.role === "admin"));
-const woTypes = ref<any[]>([]);
+const woTypeList = ref<any[]>([]);
 const priorityRules = ref<any[]>([]);
 const slaList = ref<any[]>([]);
 const approvalFlows = ref<any[]>([]);
 const regionPMO = reactive<Record<string, any>>({});
 const roleAssignments = ref<any[]>([]);
-const anomalyCategories = ref<any[]>([]);
+const roleScopes = ref<any[]>([]);
 const writing = ref(false);
 const loadError = ref("");
 
@@ -246,14 +221,6 @@ async function writeConfig(action: () => Promise<unknown>): Promise<boolean> {
   return true;
 }
 
-const typeColumns: any[] = [
-  { colKey: "type_code", title: "编码", width: 130 },
-  { colKey: "name", title: "名称", width: 140 },
-  { colKey: "desc", title: "说明" },
-  { colKey: "approver", title: "审批人", width: 90 },
-  { colKey: "priority", title: "优先级", width: 90 },
-  { colKey: "action", title: "操作", width: 150 },
-];
 const ruleColumns: any[] = [
   { colKey: "idx", title: "#", width: 46 },
   { colKey: "pattern", title: "正则", width: 190 },
@@ -270,73 +237,37 @@ const slaColumns: any[] = [
   { colKey: "action", title: "操作", width: 80 },
 ];
 
-function userName(id: number | null) { return id ? users.value.find((u) => u.id === id)?.name || "—" : "—"; }
-
-// 工单类型弹窗（含 SOP 字段）
-const typeModal = reactive({
-  open: false, editing: null as any,
-  type_code: "", name: "", desc: "", default_approver_id: undefined as number | undefined, default_priority: "P2",
-  // SOP 字段
-  guidance_ref: "",
-  sop_purpose: "",
-  sop_scope: "",
-  sop_steps: "",
-  sop_acceptance: "",
-  sop_escalation: "",
-  sop_related_guidance: "",
-  sop_backfill_required: true,
-});
-function openType() {
-  typeModal.editing = null;
-  typeModal.type_code = ""; typeModal.name = ""; typeModal.desc = "";
-  typeModal.default_approver_id = undefined; typeModal.default_priority = "P2";
-  typeModal.guidance_ref = ""; typeModal.sop_purpose = ""; typeModal.sop_scope = "";
-  typeModal.sop_steps = ""; typeModal.sop_acceptance = ""; typeModal.sop_escalation = "";
-  typeModal.sop_related_guidance = ""; typeModal.sop_backfill_required = true;
-  typeModal.open = true;
+// 工单类型（统一口径）：极简新增 + 逐类配审批人/责任人
+const ANOMALY_CODES = new Set(["power_gen", "curtailment", "dual_rule", "reliability", "info_quality", "contract", "cost", "satisfaction"]);
+const FLOW_LABEL: Record<string, string> = { alert: "五阶段", plan: "计划流", default: "三步" };
+const newTypeModal = reactive({ open: false, name: "" });
+function openNewType() { newTypeModal.name = ""; newTypeModal.open = true; }
+async function saveNewType() {
+  if (!newTypeModal.name.trim()) { toast.warning("请填写类型名"); return; }
+  const saved = await writeConfig(() => addWorkOrderType({ name: newTypeModal.name.trim() }));
+  if (saved) newTypeModal.open = false;
 }
-function editType(t: any) {
-  typeModal.editing = t;
-  typeModal.type_code = t.type_code; typeModal.name = t.name; typeModal.desc = t.desc || "";
-  typeModal.default_approver_id = t.default_approver_id; typeModal.default_priority = t.default_priority;
-  typeModal.guidance_ref = t.guidance_ref || "";
-  typeModal.sop_purpose = t.sop_purpose || "";
-  typeModal.sop_scope = t.sop_scope || "";
-  typeModal.sop_steps = t.sop_steps ? JSON.stringify(t.sop_steps, null, 2) : "";
-  typeModal.sop_acceptance = t.sop_acceptance || "";
-  typeModal.sop_escalation = t.sop_escalation ? JSON.stringify(t.sop_escalation, null, 2) : "";
-  typeModal.sop_related_guidance = t.sop_related_guidance ? JSON.stringify(t.sop_related_guidance, null, 2) : "";
-  typeModal.sop_backfill_required = t.sop_backfill_required !== false;
-  typeModal.open = true;
+function isAnomalyType(code: string) { return ANOMALY_CODES.has(code); }
+function flowLabel(t: any) { return FLOW_LABEL[(t.extra || {}).flow] || "三步"; }
+function typeUserName(t: any, key: string) {
+  const n = (t.extra || {})[key] || "";
+  return allUsers.value.find((u) => u.name === n)?.id;
 }
-async function saveType() {
-  try {
-    const data: any = {
-      name: typeModal.name, desc: typeModal.desc,
-      default_approver_id: typeModal.default_approver_id, default_priority: typeModal.default_priority,
-      type_code: typeModal.type_code,
-      guidance_ref: typeModal.guidance_ref || null,
-      sop_purpose: typeModal.sop_purpose || null,
-      sop_scope: typeModal.sop_scope || null,
-      sop_acceptance: typeModal.sop_acceptance || null,
-      sop_backfill_required: typeModal.sop_backfill_required,
-    };
-    // 解析 JSON 字段
-    try { data.sop_steps = typeModal.sop_steps ? JSON.parse(typeModal.sop_steps) : null; } catch { toast.warning("标准步骤 JSON 格式错误"); return; }
-    try { data.sop_escalation = typeModal.sop_escalation ? JSON.parse(typeModal.sop_escalation) : null; } catch { toast.warning("升级规则 JSON 格式错误"); return; }
-    try { data.sop_related_guidance = typeModal.sop_related_guidance ? JSON.parse(typeModal.sop_related_guidance) : null; } catch { toast.warning("关联指引 JSON 格式错误"); return; }
-    const saved = await writeConfig(() => typeModal.editing
-      ? CC.updateWoType(typeModal.editing.id, data)
-      : CC.addWoType(data));
-    if (saved) typeModal.open = false;
-  } catch (e: any) { toast.error(e.message); }
+const approverUserId = (t: any) => typeUserName(t, "default_approver_name");
+const personUserId = (t: any) => typeUserName(t, "default_person_name");
+async function onTypeApproverChange(t: any, v: number | undefined) {
+  const name = v ? allUsers.value.find((u) => u.id === v)?.name || "" : "";
+  await writeConfig(() => updateWorkOrderType(t.id, { default_approver_name: name || null }));
 }
-async function delType(id: number) { if (await confirmDialog("删除？")) await writeConfig(() => CC.delWoType(id)); }
+async function onTypePersonChange(t: any, v: number | undefined) {
+  const name = v ? allUsers.value.find((u) => u.id === v)?.name || "" : "";
+  await writeConfig(() => updateWorkOrderType(t.id, { default_person_name: name || null }));
+}
 
 // 通用弹窗
-const modal = reactive({ open: false, type: "" as string, category: "source", code: "", name: "", color: "", pattern: "", label: "", priority: "P2", editing: null as any });
-const modalTitle = computed(() => ({ def: modal.editing ? "编辑来源/状态" : "新增来源/状态", priority: modal.editing ? "编辑优先级规则" : "新增优先级规则" }[modal.type] || ""));
-function openDef() { modal.editing = null; modal.type = "def"; modal.category = "source"; modal.code = ""; modal.name = ""; modal.color = ""; modal.open = true; }
+const modal = reactive({ open: false, type: "" as string, category: "status", code: "", name: "", color: "", pattern: "", label: "", priority: "P2", editing: null as any });
+const modalTitle = computed(() => ({ def: modal.editing ? "编辑状态" : "新增状态", priority: modal.editing ? "编辑优先级规则" : "新增优先级规则" }[modal.type] || ""));
+function openDef() { modal.editing = null; modal.type = "def"; modal.category = "status"; modal.code = ""; modal.name = ""; modal.color = ""; modal.open = true; }
 function editDef(s: any) { modal.editing = s; modal.type = "def"; modal.category = s.category; modal.code = s.code; modal.name = s.name; modal.color = s.color || ""; modal.open = true; }
 function openPriority() { modal.editing = null; modal.type = "priority"; modal.pattern = ""; modal.label = ""; modal.priority = "P2"; modal.open = true; }
 function editPriority(r: any) { modal.editing = r; modal.type = "priority"; modal.pattern = r.pattern; modal.label = r.label; modal.priority = r.priority; modal.open = true; }
@@ -384,16 +315,16 @@ function nodeTypeLabel(t: string) { return ({ start: "起始", approval: "审批
 
 async function loadAll() {
   loadError.value = "";
-  let s, st, u, wt, pr, sla, flows;
+  let st, u, wt, pr, sla, flows;
   try {
-    [s, st, u, wt, pr, sla, flows] = await Promise.all([
-      getSources(), getStatuses(), getUsers(), CC.getWoTypesFull(), getPriorityRules(), getSla(), getApprovalFlows(),
+    [st, u, wt, pr, sla, flows] = await Promise.all([
+      getStatuses(), getUsers(), getWoTypes(), getPriorityRules(), getSla(), getApprovalFlows(),
     ]);
   } catch (e: any) {
     loadError.value = e.message || "请稍后重试";
     throw e;
   }
-  sources.value = s; statuses.value = st; users.value = u; woTypes.value = wt; priorityRules.value = pr; slaList.value = sla; approvalFlows.value = flows;
+  statuses.value = st; users.value = u; woTypeList.value = wt; priorityRules.value = pr; slaList.value = sla; approvalFlows.value = flows;
   // 加载全部用户（用于区域PMO选择）
   try {
     allUsers.value = await getUsersAll();
@@ -409,9 +340,9 @@ async function loadAll() {
   try {
     roleAssignments.value = await getRoleAssignments();
   } catch { /* 接口可能尚未部署 */ }
-  // 加载异常指标大类配置（失败不影响页面）
+  // 加载数据范围角色配置（失败不影响页面）
   try {
-    anomalyCategories.value = await getAnomalyCategories();
+    roleScopes.value = await getRoleScopes();
   } catch { /* 接口可能尚未部署 */ }
 }
 async function onRegionPMOChange(region: string, userId: number | undefined) {
@@ -440,27 +371,29 @@ async function onRoleChange(code: string, userId: number | undefined) {
   } catch (e: any) { toast.error("保存失败：" + e.message); }
 }
 
-// 异常指标大类：默认责任人按姓名存取，前端做 姓名↔用户id 映射
-function categoryUserId(c: any): number | undefined {
-  const name = c.extra?.default_person_name;
-  if (!name) return undefined;
-  const u = allUsers.value.find((x: any) => x.name === name);
-  return u ? u.id : undefined;
+// 数据范围角色：勾选可见范围（多取并集）
+function hasScope(r: any, s: string) {
+  return (r.scopes || []).includes(s);
 }
-async function onCategoryPersonChange(c: any, userId: number | undefined) {
+async function toggleScope(r: any, s: string) {
+  const scopes: string[] = Array.isArray(r.scopes) ? r.scopes : [];
+  const next = scopes.includes(s) ? scopes.filter((x) => x !== s) : [...scopes, s];
   try {
-    const name = userId ? (allUsers.value.find((u: any) => u.id === userId)?.name ?? null) : null;
-    const result = await updateAnomalyCategory(c.id, { default_person_name: name });
-    const idx = anomalyCategories.value.findIndex((x) => x.id === c.id);
-    if (idx >= 0) anomalyCategories.value[idx] = result;
-  } catch (e: any) { toast.error("保存失败：" + e.message); }
+    const saved = await updateRoleScope(r.role_code, next);
+    const idx = roleScopes.value.findIndex((x) => x.role_code === r.role_code);
+    if (idx >= 0) roleScopes.value[idx] = saved;
+  } catch (e: any) { toast.error("保存失败：" + (e.message || "未知错误")); }
 }
+
 function retryLoad() { loadAll().catch(() => {}); }
 onMounted(retryLoad);
 </script>
 
 <style scoped>
 .config-page .header { margin-bottom: 20px; } .header h1 { font-size: var(--fs-h1); font-weight: 700; } .meta { font-size: 12px; color: var(--muted); }
+.config-guide { display: flex; flex-wrap: wrap; gap: 8px; margin: -6px 0 16px; }
+.config-guide span { background: #f0f5ff; border: 1px solid #d9e6ff; border-radius: 999px; color: #4b5563; font-size: 12px; padding: 5px 10px; }
+.config-guide b { color: var(--brand); }
 .card { background: var(--card); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); margin-bottom: 16px; }
 .card-hd { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
 .card-hd h3 { font-size: 15px; font-weight: 700; } .count { font-size: 12px; color: var(--muted); }
@@ -496,4 +429,11 @@ onMounted(retryLoad);
 .region-pmo-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #f8fafc; border-radius: 8px; border: 1px solid var(--border); }
 .region-label { font-weight: 700; font-size: 13px; min-width: 40px; flex-shrink: 0; }
 .region-pmo-select { flex: 1; min-width: 0; }
+.scope-grid { display: flex; flex-direction: column; gap: 10px; }
+.scope-row { display: flex; align-items: center; gap: 18px; padding: 8px 12px; background: #f8fafc; border-radius: 8px; border: 1px solid var(--border); }
+.scope-row .region-label { min-width: 120px; }
+.scope-check { display: flex; align-items: center; gap: 5px; font-size: 13px; cursor: pointer; }
+.scope-check input { width: auto; }
+.scope-check.disabled { opacity: 0.45; cursor: not-allowed; }
+.scope-hint { font-size: 12px; color: var(--muted); margin-top: 10px; line-height: 1.6; }
 </style>

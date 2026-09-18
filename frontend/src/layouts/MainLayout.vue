@@ -77,6 +77,17 @@
               </div>
             </template>
           </t-popup>
+          <t-divider v-if="store.isAdmin" layout="vertical" />
+          <t-button
+            v-if="store.isAdmin"
+            :theme="paused ? 'danger' : 'warning'"
+            :variant="paused ? 'base' : 'outline'"
+            size="small"
+            :loading="pauseLoading"
+            @click="onTogglePause"
+          >
+            {{ paused ? "恢复发单" : "暂停发单" }}
+          </t-button>
           <t-divider layout="vertical" />
           <span class="user-name">{{ store.user?.name || "管理员" }}</span>
           <t-button theme="default" variant="text" size="small" @click="doLogout">退出</t-button>
@@ -85,6 +96,12 @@
 
       <!-- 内容区 -->
       <t-content class="app-content">
+        <t-alert
+          v-if="paused"
+          theme="warning"
+          message="系统维护中：已暂停发单，新建 / 派发工单暂不可用"
+          style="margin-bottom: 16px"
+        />
         <router-view v-if="!refreshing" v-slot="{ Component }">
           <keep-alive include="WorkOrderList,DataPool,ClosedRecords,ProjectManage,UserManagement">
             <component :is="Component" />
@@ -99,6 +116,8 @@
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { getDashboardStats } from "@/api/dashboard";
+import { getSystemPause, setSystemPause } from "@/api/config";
+import { toast, confirmDialog } from "@/utils/feedback";
 import { statusLabel } from "@/utils/wo-display";
 import { useUserStore } from "@/stores/user";
 import { MENU_GROUPS, FLAT_MENUS } from "@/menu";
@@ -112,6 +131,39 @@ const overdueCount = ref(0);
 const overdueItems = ref<any[]>([]);
 const todoItems = ref<any[]>([]);
 const popupVisible = ref(false);
+const paused = ref(false);
+const pauseLoading = ref(false);
+
+async function loadPauseState() {
+  try {
+    const r = await getSystemPause();
+    paused.value = !!r.paused;
+  } catch {
+    /* ignore */
+  }
+}
+
+async function onTogglePause() {
+  if (pauseLoading.value) return;
+  const next = !paused.value;
+  const ok = await confirmDialog(
+    next
+      ? "确定「暂停发单」？开启后所有新建/派发工单入口将被拦截（含手动建单、外部API、数据池生成、计划/异常自动导入、按月派发、措施工单、Excel/Agent导入）。"
+      : "确定「恢复发单」？",
+    next ? "暂停发单" : "恢复发单"
+  );
+  if (!ok) return;
+  pauseLoading.value = true;
+  try {
+    const r = await setSystemPause(next);
+    paused.value = !!r.paused;
+    toast.success(next ? "已暂停发单" : "已恢复发单");
+  } catch (e: any) {
+    toast.error(e?.message || "操作失败");
+  } finally {
+    pauseLoading.value = false;
+  }
+}
 
 const menus = computed(() => FLAT_MENUS);
 
@@ -176,6 +228,7 @@ async function reload() {
 }
 
 onMounted(async () => {
+  loadPauseState();
   try {
     const s = await getDashboardStats();
     overdueCount.value = s.overdue;

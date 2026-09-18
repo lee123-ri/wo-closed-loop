@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>软工单闭环面板 — 方案设计</title>
+<title>工单闭环面板 — 方案设计</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:#f8f9fb;color:#1a1a2e;padding:24px;line-height:1.6}
@@ -70,14 +70,14 @@ td{padding:10px 12px;border-bottom:1px solid #e5e7eb}
 <body>
 <div class="container">
 
-<h1>软工单闭环面板 · 方案设计</h1>
+<h1>工单闭环面板 · 方案设计</h1>
 <div class="subtitle">李沛东 | 2026-08-06 | 参考：贾总 EAM 原型 v3 + 08-04 听记决议</div>
 
 <!-- ====== 核心定位 ====== -->
 <h2>一、核心定位</h2>
 
 <div class="card">
-  <p style="font-size:14px;margin-bottom:12px;"><strong>软工单面板是一个独立的监控展示层</strong>，不替代钉钉审批流，而是作为"状态聚合 + 发起入口"。</p>
+  <p style="font-size:14px;margin-bottom:12px;"><strong>工单面板是一个独立的监控展示层</strong>，不替代钉钉审批流，而是作为"状态聚合 + 发起入口"。</p>
 
   <div class="arch">
     <div style="margin-bottom:12px;font-size:13px;color:#6b7280">架构关系</div>
@@ -85,15 +85,15 @@ td{padding:10px 12px;border-bottom:1px solid #e5e7eb}
     <span class="arch-arr">→</span>
     <span class="arch-box gray">监视Agent</span>
     <span class="arch-arr">→</span>
-    <span class="arch-box green">软工单面板<br><small>发起入口 · 状态聚合</small></span>
+    <span class="arch-box green">工单面板<br><small>发起入口 · 状态聚合</small></span>
     <br><br>
     <span class="arch-box">钉钉 OA 审批流<br><small>派发 · 审批 · 闭环</small></span>
     <span class="arch-arr">⇄</span>
-    <span class="arch-box purple">软工单面板<br><small>状态回读 · 结果展示</small></span>
+    <span class="arch-box purple">工单面板<br><small>状态回读 · 结果展示</small></span>
   </div>
 
   <table style="margin-top:16px">
-    <tr><th style="width:120px">职责</th><th>软工单面板</th><th>钉钉 OA 审批</th></tr>
+    <tr><th style="width:120px">职责</th><th>工单面板</th><th>钉钉 OA 审批</th></tr>
     <tr><td>工单创建</td><td>✅ 表单填写 → 触发审批</td><td>—</td></tr>
     <tr><td>派发责任人</td><td>—</td><td>✅ 审批节点指派</td></tr>
     <tr><td>审批流程</td><td>—</td><td>✅ 多级审批</td></tr>
@@ -332,13 +332,13 @@ td{padding:10px 12px;border-bottom:1px solid #e5e7eb}
     </table>
   </div>
   <div class="col card">
-    <h3>软工单面板差异化</h3>
+    <h3>工单面板差异化</h3>
     <table>
       <tr><td>风格</td><td>现代简洁，非 Maximo 企业风格</td></tr>
       <tr><td>来源列</td><td>🆕 年度计划 / 监视告警 / 判定会 / 手动</td></tr>
       <tr><td>OA 联动</td><td>🆕 审批进度条 + OA单号可点击</td></tr>
       <tr><td>升级机制</td><td>🆕 逾期红色标记 + 倒计时</td></tr>
-      <tr><td>入场资料</td><td>❌ 不需要（软工单不涉及）</td></tr>
+      <tr><td>入场资料</td><td>❌ 不需要（工单不涉及）</td></tr>
       <tr><td>风险等级</td><td>❌ 改为紧急/普通/低优先级</td></tr>
     </table>
   </div>

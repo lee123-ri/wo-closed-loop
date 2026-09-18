@@ -1,18 +1,37 @@
 <template>
   <div class="dashboard" v-loading="loading">
     <PageError v-if="!loading && loadError" title="看板加载失败" :message="loadError" @action="loadStats" />
-    <!-- 空状态 -->
-    <t-card v-else-if="!loading && stats.total === 0" class="empty-card">
-      <div class="empty-banner">
-        <div class="empty-icon">📋</div>
-        <div class="empty-title">暂无工单</div>
-        <div class="empty-desc">系统已就绪。前往「新建工单」创建第一条，或在钉钉群里 <code>@机器人 创建工单：…</code> 快速录入。</div>
-        <t-button theme="primary" @click="router.push('/create')">＋ 新建第一条工单</t-button>
+
+    <template v-if="!loading && !loadError">
+      <div class="filter-bar">
+        <t-select v-model="filters.project_id" placeholder="全部项目" clearable filterable @change="applyFilters" style="width:220px">
+          <t-option v-for="p in projectOptions" :key="p.id" :value="p.id" :label="p.name" />
+        </t-select>
+        <t-select v-model="filters.region" placeholder="全部区域" clearable @change="applyFilters" style="width:150px">
+          <t-option v-for="r in regions" :key="r" :value="r" :label="r" />
+        </t-select>
+        <t-date-picker v-model="filters.month" mode="month" value-type="YYYY-MM" placeholder="全部月份" clearable @change="applyFilters" style="width:160px" />
+        <span v-if="hasActiveFilters" class="filter-hint">已按此条件筛选全部卡片与趋势</span>
+        <t-button v-if="hasActiveFilters" theme="default" variant="text" @click="resetFilters">清除筛选</t-button>
       </div>
-    </t-card>
+
+      <!-- 空状态 -->
+      <t-card v-if="stats.total === 0 && !hasActiveFilters" class="empty-card">
+        <div class="empty-banner">
+          <div class="empty-icon">📋</div>
+          <div class="empty-title">暂无工单</div>
+          <div class="empty-desc">系统已就绪。前往「新建工单」创建第一条，或在钉钉群里 <code>@机器人 创建工单：…</code> 快速录入。</div>
+          <t-button theme="primary" @click="router.push('/create')">＋ 新建第一条工单</t-button>
+        </div>
+      </t-card>
+      <div v-else-if="stats.total === 0" class="filter-empty">当前筛选条件下没有匹配的工单，请调整项目 / 区域 / 月份</div>
+    </template>
 
     <template v-if="!loadError && stats.total > 0">
-      <!-- 统计卡片 -->
+      <div class="management-lead">
+        <div><h2>管理摘要</h2><p>先处理逾期与 P1 风险，再跟进执行和验收。</p></div>
+        <t-button variant="outline" @click="goToList({})">查看全部工单</t-button>
+      </div>
       <div class="card-row">
         <t-card v-for="s in statCards" :key="s.key" class="stat-card" :class="s.cls" hover @click="goCard(s)">
           <div class="stat-num" :style="{ color: s.color }">{{ s.value }}</div>
@@ -20,7 +39,7 @@
         </t-card>
       </div>
 
-      <!-- SLA 指标 -->
+      <div class="section-kicker">时效与闭环</div>
       <div class="card-row">
         <t-card class="kpi-card">
           <t-statistic title="SLA 合规率" :value="stats.sla_compliance" suffix="%" :color="slaColor" />
@@ -45,9 +64,9 @@
         </div>
       </t-card>
 
-      <!-- 待办 + 来源分布 -->
+      <div class="section-kicker">需要处置</div>
       <div class="two-col">
-        <t-card title="📋 待办工单" :subtitle="`共 ${stats.todo_items.length} 条`" class="todo-card">
+        <t-card title="优先跟进" subtitle="按逾期、P1、截止时间排序" class="todo-card">
           <t-list :split="true">
             <t-list-item v-for="w in paginatedTodos" :key="w.id" @click="goDetail(w.id)" class="todo-item" :class="{overdue: w.status==='overdue'}">
               <t-list-item-meta>
@@ -79,7 +98,7 @@
           />
         </t-card>
 
-        <t-card title="📊 来源分布" class="dist-card">
+        <t-card title="风险来源与时效" class="dist-card">
           <div v-for="s in stats.source_dist" :key="s.code" class="dist-item" @click="goToList({ source_code: s.code })">
             <div class="dist-row">
               <span class="src-tag" :class="srcClass(s.code)">{{ s.name }}</span>
@@ -101,7 +120,7 @@
         </t-card>
       </div>
 
-      <!-- 趋势图表 -->
+      <div class="section-kicker">管理分析</div>
       <div class="two-col" style="--left:2; --right:1">
         <t-card title="月度趋势">
           <div ref="trendChart" style="height:240px"></div>
@@ -115,10 +134,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, nextTick } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref, nextTick } from "vue";
 import { useRouter } from "vue-router";
 import { getDashboardStats, type DashboardStats } from "@/api/dashboard";
 import { getTrends } from "@/api/pool";
+import { getProjectsAll } from "@/api/config";
 import { statusLabel, statusTheme, escLabel } from "@/utils/wo-display";
 import PageError from "@/components/PageError.vue";
 import * as echarts from "echarts/core";
@@ -132,6 +152,42 @@ const router = useRouter();
 const stats = ref<DashboardStats>(empty());
 const loading = ref(true);
 const loadError = ref("");
+
+const regions = ["华北", "华中", "华东", "华南", "西北", "西南", "东北"];
+const projectOptions = ref<any[]>([]);
+const filters = reactive<{ project_id: number | undefined; region: string | undefined; month: string | undefined }>({
+  project_id: undefined,
+  region: undefined,
+  month: undefined,
+});
+const hasActiveFilters = computed(() => !!filters.project_id || !!filters.region || !!filters.month);
+
+function statsParams() {
+  const p: any = {};
+  if (filters.project_id != null) p.project_id = filters.project_id;
+  if (filters.region) p.region = filters.region;
+  if (filters.month) p.month = filters.month;
+  return p;
+}
+function trendParams() {
+  const p: any = {};
+  if (filters.project_id != null) p.project_id = filters.project_id;
+  if (filters.region) p.region = filters.region;
+  return p;
+}
+function listQuery(f: any = {}) {
+  const q: any = { ...f };
+  if (filters.project_id != null) q.project_id = filters.project_id;
+  if (filters.region) q.region = filters.region;
+  return q;
+}
+function applyFilters() { loadStats(); }
+function resetFilters() {
+  filters.project_id = undefined;
+  filters.region = undefined;
+  filters.month = undefined;
+  loadStats();
+}
 
 function empty(): DashboardStats {
   return { total: 0, executing: 0, pending_verify: 0, overdue: 0, closed: 0, sla_compliance: 0,
@@ -168,7 +224,7 @@ const srcClassMap: Record<string, string> = { plan: "src-plan", alert: "src-aler
 const srcColor = (c: string) => srcColorMap[c] ?? "#8c8c8c";
 const srcClass = (c: string) => srcClassMap[c] ?? "";
 
-function goToList(f: any) { router.push({ path: "/work-orders", query: f }); }
+function goToList(f: any = {}) { router.push({ path: "/work-orders", query: listQuery(f) }); }
 function goCard(s: any) {
   // 已闭环默认归档：看闭环记录页，其余状态卡仍跳主列表筛选
   if (s.key === "closed") router.push("/closed");
@@ -189,7 +245,7 @@ function disposeCharts() {
 async function initCharts() {
   await nextTick();
   try {
-    const trends = await getTrends();
+    const trends = await getTrends(trendParams());
     if (trendChart.value) {
       trendInstance?.dispose();
       const c = echarts.init(trendChart.value);
@@ -227,7 +283,7 @@ async function loadStats() {
   loading.value = true;
   loadError.value = "";
   try {
-    stats.value = await getDashboardStats();
+    stats.value = await getDashboardStats(statsParams());
   } catch (e: any) {
     loadError.value = e?.message || "请检查网络连接后重试";
     stats.value = empty();
@@ -237,12 +293,23 @@ async function loadStats() {
   if (!loadError.value && stats.value.total > 0) await initCharts();
 }
 
-onMounted(() => { window.addEventListener("resize", resizeCharts); loadStats(); });
+onMounted(async () => {
+  window.addEventListener("resize", resizeCharts);
+  try { projectOptions.value = await getProjectsAll(); } catch { /* 项目列表加载失败不影响看板 */ }
+  loadStats();
+});
 onUnmounted(() => { window.removeEventListener("resize", resizeCharts); disposeCharts(); });
 </script>
 
 <style scoped>
 .dashboard { display: flex; flex-direction: column; gap: 16px; }
+.filter-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--card); border-radius: var(--radius); padding: 12px 16px; box-shadow: var(--shadow); }
+.filter-hint { font-size: 12px; color: var(--muted); margin-left: auto; }
+.filter-empty { text-align: center; padding: 48px 16px; color: var(--muted); font-size: 14px; background: var(--card); border-radius: var(--radius); }
+.management-lead { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.management-lead h2 { font-size: var(--fs-h1); margin: 0; }
+.management-lead p { color: var(--muted); font-size: var(--fs-meta); margin: 4px 0 0; }
+.section-kicker { color: var(--muted); font-size: var(--fs-meta); font-weight: 700; letter-spacing: .04em; margin-bottom: -8px; }
 
 .empty-card .empty-banner { text-align: center; padding: 32px 20px; }
 .empty-icon { font-size: 48px; }

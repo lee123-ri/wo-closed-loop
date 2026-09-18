@@ -16,4 +16,5 @@ export interface DashboardStats {
   todo_items: { id: number; code: string; title: string; status: string; priority: string; person: string; deadline: string | null; escalation_level: number }[];
 }
 
-export const getDashboardStats = () => http.get<any, DashboardStats>("/dashboard/stats");
+export const getDashboardStats = (params?: { project_id?: number; region?: string; month?: string }) =>
+  http.get<any, DashboardStats>("/dashboard/stats", { params });

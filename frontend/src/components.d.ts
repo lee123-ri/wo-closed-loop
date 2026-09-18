@@ -1,0 +1,1 @@
+/* 占位：TDesign 按需加载不生成全局组件类型声明（见 vite.config.ts 说明），此文件留空以免 vue-tsc 误收。 */

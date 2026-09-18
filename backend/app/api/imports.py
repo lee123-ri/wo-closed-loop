@@ -9,10 +9,11 @@ from sqlalchemy.orm import Session
 from app.core.security_middleware import limiter
 
 from app.core.database import get_db
-from app.models import Project, User, WorkOrder, WorkOrderTypeKB, StatusLog, AgentImportBatch, AnomalyOccurrence
+from app.models import Project, User, WorkOrder, WorkOrderTypeKB, StatusLog, AgentImportBatch, AnomalyOccurrence, ConfigDefinition
 from app.services.llm_service import parse_minutes
 from app.services.priority_service import match_priority
 from app.services.project_names import clean_project_name
+from app.services.maintenance import ensure_open
 from datetime import date, datetime, timedelta, timezone
 
 router = APIRouter(prefix="/import", tags=["import"])
@@ -165,7 +166,9 @@ def _preview_rows(db: Session, rows: list[dict]) -> dict:
     """
     users = {u.name: u for u in db.query(User).all()}
     projects_by_name, projects_by_code = _project_indexes(db)
-    type_kbs = {t.name: t for t in db.query(WorkOrderTypeKB).all()}
+    _wo_types = db.query(ConfigDefinition).filter_by(category="work_order_type").all()
+    type_cfgs = {t.name: t for t in _wo_types}
+    type_cfgs.update({t.code: t for t in _wo_types})
 
     out: list[dict] = []
     for i, raw in enumerate(rows, 2):
@@ -190,7 +193,7 @@ def _preview_rows(db: Session, rows: list[dict]) -> dict:
 
         project = _resolve_project(project_name, projects_by_name, projects_by_code)
         person = users.get(person_name) if person_name else None
-        type_kb = type_kbs.get(type_name) if type_name else None
+        type_cd = type_cfgs.get(type_name) if type_name else None
 
         item["project_name"] = project_name
         item["project_id"] = project.id if project else None
@@ -198,7 +201,7 @@ def _preview_rows(db: Session, rows: list[dict]) -> dict:
         item["person_name"] = person_name
         item["person_ok"] = bool(person) or not person_name
         item["type_name"] = type_name
-        item["type_ok"] = bool(type_kb) or not type_name
+        item["type_ok"] = bool(type_cd) or not type_name
 
         priority = match_priority(db, f"{title} {row.get('reason', '')}", "manual")
         item["priority"] = priority
@@ -214,6 +217,7 @@ def _preview_rows(db: Session, rows: list[dict]) -> dict:
 
 
 def _import_rows(db: Session, rows: list[dict]) -> tuple[int, list[str]]:
+    ensure_open(db)  # 暂停发单开关：表格导入（预览走 _preview_rows，不受影响）
     created = 0
     errors: list[str] = []
     year = date.today().year
@@ -221,7 +225,9 @@ def _import_rows(db: Session, rows: list[dict]) -> tuple[int, list[str]]:
     seq = max([int(c.rsplit("-", 1)[-1]) for c in existing_codes if c.rsplit("-", 1)[-1].isdigit()], default=0) + 1
     users = {u.name: u for u in db.query(User).all()}
     projects_by_name, projects_by_code = _project_indexes(db)
-    type_kbs = {t.name: t for t in db.query(WorkOrderTypeKB).all()}
+    _wo_types = db.query(ConfigDefinition).filter_by(category="work_order_type").all()
+    type_cfgs = {t.name: t for t in _wo_types}
+    type_cfgs.update({t.code: t for t in _wo_types})
 
     for i, raw in enumerate(rows, 2):
         row = _normalize_row(raw)
@@ -235,7 +241,7 @@ def _import_rows(db: Session, rows: list[dict]) -> tuple[int, list[str]]:
 
         person = users.get(person_name) if person_name else None
         project = _resolve_project(project_name, projects_by_name, projects_by_code)
-        type_kb = type_kbs.get(type_name) if type_name else None
+        type_cd = type_cfgs.get(type_name) if type_name else None
 
         # 项目必填且须能解析到已有项目：否则静默落空 → 列表「无项目名」（历史 bug），这里显式跳过
         if not project:
@@ -251,15 +257,18 @@ def _import_rows(db: Session, rows: list[dict]) -> tuple[int, list[str]]:
         code = f"RW-{year}-{seq:04d}"
         seq += 1
 
+        # 工单类型：表格「类型」列匹配到则用；否则兜底「关键会议」（仍属 10 类，非游离「其他」）
+        final_type = type_cd.code if type_cd else "meeting"
+        approver_name = ((type_cd.extra or {}).get("default_approver_name") or None) if type_cd else None
+        approver = users.get(approver_name) if approver_name else None
         wo = WorkOrder(
             code=code, title=title,
             reason=(row.get("reason") or "表格导入").strip(),
             action=(row.get("action") or title).strip(),
             project_id=project.id if project else None,
             person_id=person.id if person else None,
-            approver_id=type_kb.default_approver_id if type_kb else None,
-            type_id=type_kb.id if type_kb else None,
-            source_code="manual", status="pending", priority=priority,
+            approver_id=approver.id if approver else None,
+            source_code=final_type, status="pending", priority=priority,
             created_date=date.today(), deadline=deadline,
         )
         db.add(wo)
@@ -400,6 +409,7 @@ def _import_agent_batch(db: Session, body: AgentWorkOrderBatchIn) -> dict:
 
     批次去重：项目+指标+周期 构成 batch_key，同批次重导直接跳过整批。
     """
+    ensure_open(db)  # 暂停发单开关：Agent 出参导入同样拦截
     project = db.query(Project).filter(Project.name == body.project).first()
 
     # 批次去重：项目|指标|周期
@@ -437,16 +447,10 @@ def _import_agent_batch(db: Session, body: AgentWorkOrderBatchIn) -> dict:
             "subtype": wo_in.subtype or "",
         })
 
-    # 宿主工单类型：oa_type -> WorkOrderTypeKB（仅宿主；措施类型由人工逐条选）
-    first = body.workorders[0] if body.workorders else None
-    host_type_kb = None
-    for tname in ((first.oa_type if first else None), "设备预警工单", "其他"):
-        if not tname:
-            continue
-        host_type_kb = db.query(WorkOrderTypeKB).filter(WorkOrderTypeKB.name == tname).first()
-        if host_type_kb:
-            break
-    host_approver = db.get(User, host_type_kb.default_approver_id) if host_type_kb else None
+    # 宿主工单类型：可靠性Agent → 设备可靠性异常工单（reliability，走五阶段）
+    host_type = db.query(ConfigDefinition).filter_by(category="work_order_type", code="reliability").first()
+    host_approver_name = ((host_type.extra or {}).get("default_approver_name") or None) if host_type else None
+    host_approver = db.query(User).filter(User.name == host_approver_name).first() if host_approver_name else None
 
     title = f"【指标异常处置】{indicator or '—'}" + (f"（{period}）" if period else "")
     reason_text = f"{indicator or '—'} 指标在 {period or '—'} 出现异常，经可靠性Agent归因分析，需生成措施工单整改。"
@@ -470,8 +474,7 @@ def _import_agent_batch(db: Session, body: AgentWorkOrderBatchIn) -> dict:
         project_id=project.id if project else None,
         person_id=None,
         approver_id=host_approver.id if host_approver else None,
-        type_id=host_type_kb.id if host_type_kb else None,
-        source_code="alert", status="judging", priority="P1",
+        source_code="reliability", metric_type="reliability", status="judging", priority="P1",
         alert_phase="confirming",  # 进入五阶段①：分析结果确认
         region=project.region if project else None,
         created_date=date.today(),
@@ -487,7 +490,7 @@ def _import_agent_batch(db: Session, body: AgentWorkOrderBatchIn) -> dict:
     db.add(AnomalyOccurrence(
         host_wo_id=wo.id,
         occurred_at=date.today(),
-        metric_type=None,
+        metric_type="reliability",
         indicator_type=indicator or None,
         note="可靠性Agent导入",
     ))
@@ -495,8 +498,6 @@ def _import_agent_batch(db: Session, body: AgentWorkOrderBatchIn) -> dict:
     unmapped = []
     if not project:
         unmapped.append(f"项目({body.project})")
-    if not host_type_kb:
-        unmapped.append(f"工单类型({(first.oa_type if first else '未给')})")
     missing_person = sum(1 for t in tasks if not t["person_name"])
     if missing_person:
         unmapped.append(f"责任人({missing_person}条措施未匹配)")

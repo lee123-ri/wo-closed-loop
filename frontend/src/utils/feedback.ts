@@ -1,4 +1,5 @@
-import { DialogPlugin, MessagePlugin } from "tdesign-vue-next";
+import { MessagePlugin } from "tdesign-vue-next/es/message";
+import { DialogPlugin } from "tdesign-vue-next/es/dialog";
 
 /** 统一轻提示（替代原生 alert） */
 export const toast = {

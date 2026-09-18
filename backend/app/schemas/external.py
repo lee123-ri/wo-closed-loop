@@ -35,11 +35,11 @@ class ExternalWorkOrderCreate(BaseModel):
     person_name: str | None = Field(None, description="责任人姓名")
     approver_name: str | None = Field(None, description="审批人姓名")
 
-    # 工单类型：type_code 优先于 type_name
-    type_code: str | None = Field(None, description="工单类型编码")
-    type_name: str | None = Field(None, description="工单类型名称")
+    # 工单类型：type_code 优先于 type_name；二者皆缺时用 source_code，仍无则兜底「关键会议」
+    type_code: str | None = Field(None, description="工单类型编码（统一类型，如 plan/power_gen/meeting）")
+    type_name: str | None = Field(None, description="工单类型名称（精确匹配）")
 
-    source_code: str = Field("external", description="来源：alert/plan/meeting/manual/external")
+    source_code: str | None = Field(None, description="工单类型 code（兜底，优先用 type_code/type_name）")
     priority: str | None = Field(None, description="优先级 P1/P2/P3；留空按来源推断（alert→P1 否则 P2）")
     region: str | None = Field(None, description="区域：华北/华中/华东/华南/西北/西南/东北")
 

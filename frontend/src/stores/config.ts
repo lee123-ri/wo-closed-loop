@@ -1,15 +1,15 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import { getSources, getStatuses, getSla } from "@/api/config";
+import { getStatuses, getSla, getWoTypes } from "@/api/config";
 
 interface DictItem { code: string; name: string; color?: string | null; }
 
 /**
- * 运行时业务字典：从后端 /config 读状态、来源、SLA，
+ * 运行时业务字典：从后端 /config 读状态、工单类型、SLA，
  * 前端显示层据此渲染，后端可改配置自由调整；读不到时回退硬编码兜底。
  */
 export const useConfigStore = defineStore("config", () => {
-  const sources = ref<DictItem[]>([]);
+  const sources = ref<DictItem[]>([]); // 工单类型（统一口径，source_code 现承载类型）
   const statuses = ref<DictItem[]>([]);
   const sla = ref<{ priority: string; deadline_days: number }[]>([]);
   const loaded = ref(false);
@@ -17,7 +17,7 @@ export const useConfigStore = defineStore("config", () => {
   async function ensureLoaded() {
     if (loaded.value) return;
     try {
-      const [src, sts, sl] = await Promise.all([getSources(), getStatuses(), getSla()]);
+      const [src, sts, sl] = await Promise.all([getWoTypes(), getStatuses(), getSla()]);
       sources.value = (src as any[]).map((x) => ({ code: x.code, name: x.name, color: x.color ?? null }));
       statuses.value = (sts as any[]).map((x) => ({ code: x.code, name: x.name, color: x.color ?? null }));
       sla.value = (sl as any[]).map((x) => ({ priority: x.priority, deadline_days: x.deadline_days }));

@@ -208,3 +208,17 @@ class RoleAssignmentOut(BaseModel):
 
 class RoleAssignmentUpdate(BaseModel):
     user_id: int | None = None
+
+
+class RoleDataScopeOut(BaseModel):
+    id: int
+    role_code: str
+    role_name: str | None = None
+    scopes: list | None = None
+    is_locked: bool = False
+    sort_order: int
+    model_config = {"from_attributes": True}
+
+
+class RoleDataScopeUpdate(BaseModel):
+    scopes: list[str]

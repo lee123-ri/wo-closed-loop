@@ -9,6 +9,7 @@ from app.services.region_map import normalize_region
 
 class WorkOrderBase(BaseModel):
     title: str = Field(..., max_length=256)
+    service: str | None = Field(None, max_length=128)
     reason: str | None = None
     action: str | None = None
     project_id: int | None = None
@@ -20,6 +21,7 @@ class WorkOrderBase(BaseModel):
     priority: str | None = None  # None=未指定，建单时按文本自动定级
     planned_start_date: date | None = None
     deadline: date | None = None
+    task_deliverable: str | None = Field(None, description="任务目标交付物（年度计划类必填，提示该传什么附件才能闭环）")
 
     @field_validator("region")
     @classmethod
@@ -40,6 +42,7 @@ class WorkOrderBasicUpdate(BaseModel):
     """
 
     title: str | None = None
+    service: str | None = Field(None, max_length=128)
     reason: str | None = None
     action: str | None = None
     conclusion: str | None = None
@@ -52,6 +55,7 @@ class WorkOrderBasicUpdate(BaseModel):
     planned_start_date: date | None = None
     deadline: date | None = None
     completed_date: date | None = None
+    task_deliverable: str | None = None
 
     @field_validator("region")
     @classmethod
@@ -61,6 +65,7 @@ class WorkOrderBasicUpdate(BaseModel):
 
 class WorkOrderUpdate(BaseModel):
     title: str | None = None
+    service: str | None = Field(None, max_length=128)
     reason: str | None = None
     action: str | None = None
     status: str | None = None
@@ -74,6 +79,7 @@ class WorkOrderUpdate(BaseModel):
     deadline: date | None = None
     completed_date: date | None = None
     conclusion: str | None = None
+    task_deliverable: str | None = None
 
     @field_validator("region")
     @classmethod
@@ -93,6 +99,7 @@ class WorkOrderOut(WorkOrderBase):
     client_request_id: str | None = None
     metric_type: str | None = None
     alert_phase: str | None = None
+    is_measure: bool = False
     status: str
     type_id: int | None
     created_date: date

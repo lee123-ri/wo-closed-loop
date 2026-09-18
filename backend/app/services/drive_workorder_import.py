@@ -307,6 +307,7 @@ def _parse_sheet(file_path: Path) -> list[dict]:
     plan_idx = col("计划完成时间", "计划完成", "计划时间", "计划月份", "时间窗口")  # 结束 → deadline
     start_idx = col("计划开始时间", "计划开始")  # 开始 → planned_start
     person_idx = col("负责角色", "责任人", "责任部门")
+    approver_idx = col("审批人", "审批角色")
     action_idx = col("做什么事", "怎么干")
     accept_idx = col("交付物", "验收")
     target_idx = col("预期效果", "对目标的价值", "预计带来的效果")
@@ -342,6 +343,7 @@ def _parse_sheet(file_path: Path) -> list[dict]:
             "plan": g(plan_idx),
             "start": g(start_idx),
             "person": g(person_idx),
+            "approver": g(approver_idx),
             "accept": g(accept_idx),
             "carrier": g(carrier_idx),
         })
@@ -384,7 +386,7 @@ def _match_project_by_content(file_path: Path, projects: list[Project]) -> Proje
 
 
 def import_drive_workorder_versions() -> dict:
-    """一键导入钉盘「工单版」：搜索→下载→解析→导入（按 项目+标题 去重）。"""
+    """导入钉盘「工单版」并补派本月计划：搜索→下载→解析→导入（按 项目+标题 去重）。"""
     files, warnings = find_workorder_versions()
     if not files:
         return {"imported": 0, "skipped_file": 0, "backfilled": 0,
@@ -392,7 +394,14 @@ def import_drive_workorder_versions() -> dict:
 
     projects = _load_projects()
     db = SessionLocal()
+    from app.services.maintenance import is_paused
+    if is_paused(db):
+        db.close()
+        return {"imported": 0, "skipped_file": 0, "backfilled": 0,
+                "errors": ["系统暂停发单，跳过计划初稿导入"], "files": len(files), "paused": True}
     users = {u.name: u for u in db.query(User).all()}
+    from app.services.dingtalk import plan_completeness_missing
+    default_approver_id = _default_approver(db)
     imported = 0
     skipped_file = 0
     backfilled = 0
@@ -460,37 +469,55 @@ def import_drive_workorder_versions() -> dict:
                 reason = w["reason"]
                 if w.get("target"):
                     reason = f"{reason}\n【预期】{w['target']}".strip()
-                action = w["action"]
-                if w.get("accept"):
-                    action = f"{action}\n【验收】{w['accept']}"
+                action = w["action"] or title
+                # 任务目标交付物：独立字段（不再拼进 action），计划类进列表必填
+                task_deliverable = (w.get("accept") or "").strip() or None
                 year = date.today().year
                 cnt = db.query(WorkOrder).filter(WorkOrder.code.like(f"RW-{year}-%")).count()
                 code = f"RW-{year}-{cnt + 1:04d}"
                 person_user = users.get((w.get("person") or "").strip())
+                approver_user = users.get((w.get("approver") or "").strip())
                 wo = WorkOrder(
-                    code=code, title=title, reason=reason or None, action=action or title,
+                    code=code, title=title, reason=reason or None, action=action,
+                    task_deliverable=task_deliverable,
                     project_id=project.id,
                     person_id=person_user.id if person_user else None,
-                    source_code="plan", status="pending", priority=_map_priority(w["priority"]),
+                    approver_id=approver_user.id if approver_user else default_approver_id,
+                    source_code="plan", status="scheduled", priority=_map_priority(w["priority"]),
                     region=project.region,
                     created_date=date.today(),
                     deadline=parse_deadline(w["plan"] or w.get("start")),
                     planned_start_date=_planned_start(w),
                 )
+                # 计划类完整性门禁：必填项不全 → 不建单，报结构化错误（不塞默认值糊弄）
+                missing = plan_completeness_missing(wo)
+                if missing:
+                    errors.append(f"{f['name']}·原编号{w['code']}·缺必填:{'/'.join(missing)}")
+                    continue
                 db.add(wo)
                 db.flush()
                 note = f"年度计划工单导入(钉盘)·原编号{w['code']}"
                 if not has_carrier:
                     note += "·无载体列按非EAM导入"
-                if not person_user and w.get("person"):
-                    note += f"·责任人待确认({w['person']})"
-                db.add(StatusLog(work_order_id=wo.id, from_status=None, to_status="pending", note=note))
+                note += "·排期待派发(scheduled)"
+                db.add(StatusLog(work_order_id=wo.id, from_status=None, to_status="scheduled", note=note))
                 imported += 1
         db.commit()
     finally:
         db.close()
+    # 钉盘扫到的当月计划无需等下一次月初任务：导入成功后立即补派。
+    # 未来月份仍维持 scheduled，由每月 1 日的 Beat 任务统一派发。
+    dispatch = _dispatch_current_month_imports(imported)
     return {"imported": imported, "skipped_file": skipped_file, "backfilled": backfilled,
-            "errors": errors, "files": len(files)}
+            "errors": errors, "files": len(files), "current_month_dispatch": dispatch}
+
+
+def _dispatch_current_month_imports(imported: int) -> dict:
+    """只有本轮成功写入计划时才补派当月 scheduled 工单，避免空扫描触发 OA 调用。"""
+    if not imported:
+        return {"dispatched": 0, "skipped_incomplete": 0, "failed": 0}
+    from app.services.plan_dispatch import dispatch_monthly_plans
+    return dispatch_monthly_plans()
 
 
 def _load_projects() -> list[Project]:
@@ -499,3 +526,18 @@ def _load_projects() -> list[Project]:
         return db.query(Project).all()
     finally:
         db.close()
+
+
+def _default_approver(db):
+    """运营计划工单（plan 类型）的默认审批人（配置 category=work_order_type, code=plan）。
+
+    name → user id（按姓名匹配）；配不到返回 None（由导入门禁拦截补，不塞默认值）。
+    """
+    from app.models import ConfigDefinition, User
+
+    cd = db.query(ConfigDefinition).filter_by(category="work_order_type", code="plan").first()
+    name = ((cd.extra or {}).get("default_approver_name") or None) if cd else None
+    if not name:
+        return None
+    user = db.query(User).filter(User.name == name).first()
+    return user.id if user else None

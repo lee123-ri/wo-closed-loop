@@ -31,7 +31,7 @@
         <t-select v-model="filters.region" placeholder="区域" clearable @change="applyFilters" style="width:120px">
           <t-option v-for="r in regions" :key="r" :value="r" :label="r" />
         </t-select>
-        <t-select v-model="filters.source_code" placeholder="来源" clearable @change="applyFilters" style="width:120px">
+        <t-select v-model="filters.source_code" placeholder="工单类型" clearable @change="applyFilters" style="width:130px">
           <t-option v-for="s in sources" :key="s.code" :value="s.code" :label="s.name" />
         </t-select>
         <t-select v-model="filters.status" placeholder="状态" clearable @change="applyFilters" style="width:120px">
@@ -108,7 +108,7 @@ import { toast, confirmDialog } from "@/utils/feedback";
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { listWorkOrders, transitionWorkOrder, type WorkOrderList } from "@/api/workorders";
-import { getSources, getStatuses, getUsersAll, type ConfigItem } from "@/api/config";
+import { getStatuses, getUsersAll, getWoTypes, type ConfigItem } from "@/api/config";
 import { importAgentHtml, type AgentHtmlImportResult } from "@/api/imports";
 import { statusLabel, sourceLabel } from "@/utils/wo-display";
 import WorkbenchTable from "@/components/WorkbenchTable.vue";
@@ -208,10 +208,10 @@ async function batchReset() {
 /* ---------- 导出 ---------- */
 function exportCSV(rows: any[]) {
   if (!rows.length) { toast.warning("当前没有可导出的工单"); return; }
-  const head = ["编号", "项目", "区域", "标题", "触发原因", "行动要求", "类型", "优先级", "责任人", "审批人", "计划开始", "截止", "状态", "来源"];
+  const head = ["编号", "项目", "区域", "标题", "触发原因", "行动要求", "工单类型", "优先级", "责任人", "审批人", "计划开始", "截止", "状态"];
   const data = rows.map((w) => [w.code, w.project_name, w.region, w.title, w.reason, w.action,
-    w.type_name, w.priority, w.person_name, w.approver_name, w.planned_start_date,
-    w.deadline, statusLabel(w.status), sourceLabel(w.source_code)]);
+    sourceLabel(w.source_code), w.priority, w.person_name, w.approver_name, w.planned_start_date,
+    w.deadline, statusLabel(w.status)]);
   downloadCsv([head, ...data], `工单列表_${dayjs().format("YYYY-MM-DD")}.csv`);
 }
 function exportSelectedCSV() {
@@ -256,7 +256,9 @@ onMounted(async () => {
   filters.status = q.status || undefined;
   filters.source_code = q.source_code || undefined;
   filters.priority = q.priority || undefined;
-  const [s, st, u] = await Promise.all([getSources(), getStatuses(), getUsersAll()]);
+  filters.project_id = q.project_id ? Number(q.project_id) : undefined;
+  filters.region = q.region || undefined;
+  const [s, st, u] = await Promise.all([getWoTypes(), getStatuses(), getUsersAll()]);
   sources.value = s;
   statuses.value = st.filter((x: any) => x.code !== "closed");
   allUsers.value = u;
@@ -267,10 +269,12 @@ watch(
   () => route.query,
   (q) => {
     if (q.status === "closed") { router.replace("/closed"); return; }
-    if (q.status === undefined && q.source_code === undefined && q.priority === undefined) return;
+    if (q.status === undefined && q.source_code === undefined && q.priority === undefined && q.project_id === undefined && q.region === undefined) return;
     filters.status = q.status || undefined;
     filters.source_code = q.source_code || undefined;
     filters.priority = q.priority || undefined;
+    filters.project_id = q.project_id ? Number(q.project_id) : undefined;
+    filters.region = q.region || undefined;
     page.value = 1;
     reload();
   },

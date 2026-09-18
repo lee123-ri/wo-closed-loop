@@ -11,10 +11,10 @@ def test_dashboard_stats(client_auth):
     assert "overdue_items" in d
 
 
-def test_config_sources(client_auth):
-    r = client_auth.get("/api/config/sources")
+def test_config_work_order_types(client_auth):
+    r = client_auth.get("/api/config/work-order-types")
     assert r.status_code == 200
-    assert len(r.json()) >= 4  # plan/alert/meeting/manual
+    assert len(r.json()) >= 10  # plan + 8 异常 + meeting
 
 
 def test_config_parsing_rules_crud(client_auth):
@@ -31,10 +31,11 @@ def test_config_parsing_rules_crud(client_auth):
 
 
 def test_work_order_type_crud(client_auth):
-    r = client_auth.post("/api/config/work-order-types", json={"type_code": "tt", "name": "测试类型", "default_priority": "P3"})
+    # SOP 类型 CRUD 已挪到 /sop-types（本轮不迁 SOP，工单类型统一口径走 /work-order-types）
+    r = client_auth.post("/api/config/sop-types", json={"type_code": "tt", "name": "测试类型", "default_priority": "P3"})
     assert r.status_code == 201
     tid = r.json()["id"]
-    client_auth.delete(f"/api/config/work-order-types/{tid}")
+    client_auth.delete(f"/api/config/sop-types/{tid}")
 
 
 def test_sla_update(client_auth):

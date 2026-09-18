@@ -157,12 +157,38 @@ kubectl exec -it deploy/wo-backend -- python -c \
   "from app.api.admin import clear_transactional_data; from app.core.database import SessionLocal; print(clear_transactional_data(SessionLocal()))"
 ```
 
+### 8.1 日志落地策略（上线前需部署方确认）
+
+后端日志两条路落：文件日志（`logs/app.log` 全量 + `logs/error.log` 仅 ERROR 带 traceback）+ 双写 stderr/stdout。
+**当前问题**：`logs/` 写在 Pod 临时盘，Pod 重启/重调度即丢失，且 2 副本各记各的、无集中检索。二选一（推荐 b，省事）：
+
+- **a. 挂持久卷采集文件**：给 `wo-backend` 挂 PVC 存 `logs/`，再接 Logtail 采文件。
+- **b. 依赖 stdout 采集**：应用已设 `LOG_TO_STDERR=true` 双写 stdout，只需在 ACK 开通 SLS 日志服务，对 `wo-backend`/`wo-worker` 开 stdout 采集即可，文件日志仅作本地兜底。
+
+> 未确认前 `kubectl logs` 能看到当次运行日志，但 Pod 重建后历史 error.log 会丢，故障回溯窗口有限。
+
+### 8.2 用 request_id 串日志定位问题
+
+每个请求带 `X-Request-Id`（响应头也回传），日志里 `[requestid] [name]` 的 requestid 即该值。定位「某次请求为什么 500」：
+
+```bash
+# 慢请求 / 错误（访问日志一行一条，含 method path status 耗时 ip uid）
+kubectl logs deploy/wo-backend | grep -E '\[SLOW\]| 500 '
+
+# 拿到 requestid 后，串出这次请求的完整日志（含 error.log 的 traceback）
+kubectl logs deploy/wo-backend | grep <requestid>
+```
+
+慢请求阈值 `ACCESS_LOG_SLOW_MS`（默认 1000ms），超过访问日志升级为 `[SLOW] WARNING`。
+> 多副本时一条请求只落其中一个 Pod，用 `kubectl logs -l app=wo-backend --prefix | grep <requestid>` 跨副本检索。
+
 ## 9. 监控（建议接入）
 
 - ACK 控制台自带 Pod CPU/内存监控
 - RDS/Tair 性能监控控制台
 - 接入阿里云 ARMS（应用实时监控）看 API 慢请求和错误
 - `/health` 接 SLB 健康检查
+- 上线前并发压测：跑 `scripts/loadtest/`（见其 README），出 TPS / p95 延迟 / 错误率基线再定副本数
 
 ## 10. 备份
 

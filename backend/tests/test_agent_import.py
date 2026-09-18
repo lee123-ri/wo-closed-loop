@@ -52,7 +52,7 @@ def test_import_creates_host_wo_with_9_tasks(client_auth, db, tk_project):
     assert wo is not None
     assert wo.status == "judging"
     assert wo.judgment_status == "judging"
-    assert wo.source_code == "alert"
+    assert wo.source_code == "reliability"
     assert wo.priority == "P1"
     assert wo.project_id == tk_project.id
     assert len(wo.triggered_wo_tasks or []) == 9
@@ -114,7 +114,7 @@ def test_import_html_parses_9_workorders(client_auth, db, tk_project):
 
     wo = db.query(WorkOrder).filter(WorkOrder.code == out["results"][0]["code"]).first()
     assert wo.status == "judging"
-    assert wo.source_code == "alert"
+    assert wo.source_code == "reliability"
 
 
 def test_import_html_batch_dedup(client_auth, db, tk_project):
@@ -133,7 +133,7 @@ def test_reset_workorder_to_pending(client_auth, db):
     resp = client_auth.post("/api/work-orders", json={
         "title": "重置流转测试", "reason": "测", "action": "做",
         "project_id": 1, "person_id": 1, "approver_id": 2, "type_id": 1,
-        "source_code": "alert", "priority": "P1",
+        "source_code": "meeting", "priority": "P1",
         "deadline": "2026-08-30", "planned_start_date": "2026-08-25",
     })
     assert resp.status_code in (200, 201), resp.text

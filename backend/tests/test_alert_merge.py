@@ -11,7 +11,7 @@ def _make_host(db, code, phase="confirming", metric_type="power_gen", project_id
         code=code,
         title=f"测试异常{code}",
         reason="触发原因", action="行动要求",
-        source_code="alert", status="judging", alert_phase=phase,
+        source_code=metric_type, status="judging", alert_phase=phase,
         priority="P1", region=None, created_date=date.today(),
         metric_type=metric_type, project_id=project_id,
         person_id=1, approver_id=11, type_id=1,
@@ -57,7 +57,7 @@ def test_redispatch_back_to_tracking(client_auth, db):
     assert len(links) == 1
     m = db.get(WorkOrder, links[0].measure_wo_id)
     assert m.status == "dispatched"
-    assert m.source_code == "measure"
+    assert m.source_code == "power_gen"
 
 
 def test_redispatch_wrong_phase_409(client_auth, db):

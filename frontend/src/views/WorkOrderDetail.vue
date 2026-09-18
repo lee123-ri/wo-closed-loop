@@ -7,7 +7,7 @@
       </div>
       <div class="header-actions">
         <!-- alert 主单五阶段按钮 -->
-        <template v-if="wo.source_code === 'alert'">
+        <template v-if="isAnomalyHost">
           <button v-if="wo.alert_phase === 'confirming'" class="btn btn-pri btn-sm" :disabled="savingTasks" @click="confirmAnalysis">
             {{ savingTasks ? '处理中…' : '✅ 确认分析结果 → 生成措施工单' }}
           </button>
@@ -46,8 +46,8 @@
 
     <!-- 审批流 / 判断流程可视化 -->
     <div class="card">
-      <div class="card-hd"><h3>{{ wo.source_code === 'alert' ? '五阶段闭环' : '审批流转' }}</h3>
-        <span v-if="wo.source_code === 'alert' && wo.measure_progress" class="progress-hint">{{ wo.measure_progress.closed }}/{{ wo.measure_progress.total }} 措施已闭环</span></div>
+      <div class="card-hd"><h3>{{ isAnomalyHost ? '五阶段闭环' : '审批流转' }}</h3>
+        <span v-if="isAnomalyHost && wo.measure_progress" class="progress-hint">{{ wo.measure_progress.closed }}/{{ wo.measure_progress.total }} 措施已闭环</span></div>
       <div class="flow">
         <template v-for="(s, i) in flow.steps" :key="s.code">
           <div v-if="i > 0" class="flow-arrow" :class="{ done: s.state === 'done' }"></div>
@@ -66,14 +66,15 @@
       <div class="card">
         <div class="card-hd"><h3>基本信息</h3></div>
         <div class="info-grid">
-          <div class="lbl">来源</div><div class="val"><span class="src-tag" :class="sourceTagClass(wo.source_code)">{{ sourceLabel(wo.source_code) }}</span></div>
+          <div class="lbl">工单类型</div><div class="val"><span class="src-tag" :class="sourceTagClass(wo.source_code)">{{ sourceLabel(wo.source_code) }}</span></div>
           <div class="lbl">优先级</div><div class="val"><span class="tag" :class="priorityTag(wo.priority)">{{ priorityLabel(wo.priority) }}</span></div>
           <div class="lbl">状态</div>
           <div class="val">
-            <span class="tag" :class="statusTag(wo.status)">{{ wo.source_code === 'alert' && wo.alert_phase ? statusLabel(wo.alert_phase) : statusLabel(wo.status) }}</span>
+            <span class="tag" :class="statusTag(wo.status)">{{ isAnomalyHost && wo.alert_phase ? statusLabel(wo.alert_phase) : statusLabel(wo.status) }}</span>
             <span v-if="wo.escalation_level > 0" class="tag" :class="escTag(wo.escalation_level)">{{ escLabel[wo.escalation_level] }}</span>
           </div>
           <div class="lbl">项目</div><div class="val">{{ wo.project_name || "—" }}</div>
+          <div class="lbl">服务</div><div class="val">{{ wo.service || "—" }}</div>
           <div class="lbl">区域</div><div class="val">{{ wo.region || "—" }}</div>
           <div class="lbl">工单类型</div><div class="val">{{ wo.type_name || "—" }}</div>
           <div class="lbl">责任人</div>
@@ -123,6 +124,10 @@
           <label>行动要求</label>
           <div class="detail-val">{{ wo.action || "—" }}</div>
         </div>
+        <div class="detail-block" v-if="wo.task_deliverable">
+          <label>任务目标交付物</label>
+          <div class="detail-val">{{ wo.task_deliverable }}</div>
+        </div>
         <div class="detail-block" v-if="wo.conclusion">
           <label>执行结论</label>
           <div class="detail-val conclusion">{{ wo.conclusion }}</div>
@@ -140,9 +145,9 @@
     </div>
 
     <!-- 回填 · 仅 alert 来源显示（普通 OA 工单不需要回填，避免噪音） -->
-    <div class="card" v-if="wo.source_code === 'alert' && wo.status !== 'closed'">
+    <div class="card" v-if="isAnomalyHost && wo.status !== 'closed'">
       <div class="card-hd"><h3>回填 · 原因与措施</h3>
-        <span v-if="wo.source_code === 'alert'" class="badge-alert">监视告警</span>
+        <span v-if="isAnomalyHost" class="badge-alert">监视告警</span>
       </div>
       <div v-if="backfill.work_order_id">
         <!-- 已回填内容展示 -->
@@ -176,7 +181,7 @@
 
       <!-- 根因分析 + 措施工单列表（合并一步，避免「应对措施」另填一遍）：
            待回填(pending)填完点「提交回填」进入确认；确认(confirming)复核后用头部「确认分析结果」一键生成工单 -->
-      <div v-if="wo.source_code === 'alert' && (wo.status === 'pending' || wo.alert_phase === 'confirming')" class="measure-wo-form">
+      <div v-if="isAnomalyHost && (wo.status === 'pending' || wo.alert_phase === 'confirming')" class="measure-wo-form">
         <div v-if="wo.status === 'pending'" class="form-group">
           <label>根因分析</label>
           <textarea v-model="bfForm.reason" placeholder="分析异常/事项的根本原因"></textarea>
@@ -241,7 +246,7 @@
       </div>
 
       <!-- 判断Agent 导出/导入（alert 待回填阶段显示） -->
-      <div v-if="wo.source_code === 'alert' && wo.status === 'pending'" class="judgment-toolbar">
+      <div v-if="isAnomalyHost && wo.status === 'pending'" class="judgment-toolbar">
         <div class="judgment-toolbar-title">🤖 判断Agent（离线协作）</div>
         <div class="judgment-toolbar-desc">
           ① 导出 → ② Agent归因分析 → ③ 导入结果自动回填
@@ -258,7 +263,7 @@
       </div>
 
       <!-- 已生成的措施工单（派发/跟踪/复核/已恢复阶段） -->
-      <div class="card" v-if="wo.source_code === 'alert' && wo.alert_phase && ['dispatching', 'tracking', 'reexamining', 'recovered'].includes(wo.alert_phase) && wo.measure_progress && (wo.measure_progress.measures || []).length">
+      <div class="card" v-if="isAnomalyHost && wo.alert_phase && ['dispatching', 'tracking', 'reexamining', 'recovered'].includes(wo.alert_phase) && wo.measure_progress && (wo.measure_progress.measures || []).length">
         <div class="card-hd"><h3>📋 措施工单（{{ wo.measure_progress.closed }}/{{ wo.measure_progress.total }} 已闭环）</h3></div>
         <div class="measure-list">
           <div v-for="m in wo.measure_progress.measures" :key="m.id" class="measure-row">
@@ -270,7 +275,7 @@
       </div>
 
       <!-- 相似异常主单（复用/合并）+ 发生记录 -->
-      <div class="card" v-if="wo.source_code === 'alert' && wo.status !== 'closed'">
+      <div class="card" v-if="isAnomalyHost && wo.status !== 'closed'">
         <div class="card-hd"><h3>🔁 相似异常（同项目同类）</h3></div>
         <div v-if="similarHosts.length === 0" class="empty-backfill">暂无同项目同类的其它开着主单</div>
         <div v-for="h in similarHosts" :key="h.id" class="similar-row">
@@ -350,6 +355,10 @@
           <SearchableSelect :model-value="dispatchApproverId" :options="allUsers" placeholder="搜索姓名…" @update:model-value="(v: number | undefined) => dispatchApproverId = v" />
         </div>
         <div class="confirm-row di-edit">
+          <span class="confirm-lbl">任务目标交付物</span>
+          <textarea v-model="dispatchDeliverable" class="di-input" placeholder="计划类必填：该传什么附件才能闭环" rows="2"></textarea>
+        </div>
+        <div class="confirm-row di-edit">
           <span class="confirm-lbl">计划开始时间</span>
           <input type="date" v-model="dispatchPlannedStart" class="di-input" />
         </div>
@@ -393,6 +402,10 @@
       <div class="form-group form-full">
         <label><span class="req">*</span>标题</label>
         <input v-model="basicForm.title" placeholder="一句话概括工单内容" />
+      </div>
+      <div class="form-group">
+        <label>服务</label>
+        <input v-model="basicForm.service" placeholder="填写对应服务" maxlength="128" />
       </div>
       <div class="form-group">
         <label>项目</label>
@@ -449,6 +462,10 @@
         <textarea v-model="basicForm.action" placeholder="具体要做什么、达到什么标准" rows="2"></textarea>
       </div>
       <div class="form-group form-full">
+        <label>任务目标交付物</label>
+        <textarea v-model="basicForm.task_deliverable" placeholder="年度计划类必填：该传什么附件才能闭环" rows="2"></textarea>
+      </div>
+      <div class="form-group form-full">
         <label>执行结论</label>
         <textarea v-model="basicForm.conclusion" placeholder="验收结论（闭环后填写）" rows="2"></textarea>
       </div>
@@ -497,6 +514,7 @@ const dispatchDeadline = ref<string>("");
 const dispatchPlannedStart = ref<string>("");
 const dispatchReason = ref<string>("");
 const dispatchAction = ref<string>("");
+const dispatchDeliverable = ref<string>("");
 const importFileInput = ref<HTMLInputElement | null>(null);
 const importError = ref("");
 const importSuccess = ref("");
@@ -516,8 +534,10 @@ const showBasicEdit = ref(false);
 const basicSaving = ref(false);
 const basicForm = reactive({
   title: "",
+  service: "",
   reason: "",
   action: "",
+  task_deliverable: "",
   conclusion: "",
   project_id: null as number | null,
   type_id: null as number | null,
@@ -553,9 +573,12 @@ interface MeasureTask {
 }
 const measureTasks = ref<MeasureTask[]>([]);
 
+// 异常主单（非措施工单且带 metric_type）→ 五阶段；措施工单走普通三步
+const isAnomalyHost = computed(() => !!wo.value?.metric_type && !wo.value?.is_measure);
+
 const flow = computed(() => flowProgress(
   wo.value?.status ?? "pending",
-  wo.value?.source_code,
+  wo.value?.metric_type,
   wo.value?.alert_phase,
 ));
 
@@ -616,7 +639,7 @@ async function load() {
   try { attachments.value = await getWorkOrderAttachments(id); } catch { /* 附件拉取失败忽略 */ }
   try { backfill.value = await getBackfill(id); } catch { /* 回填可能为空 */ }
   // 初始化措施工单任务列表
-  if (w.source_code === 'alert') {
+  if (w.metric_type && !w.is_measure) {
     const tasks = (w as any).triggered_wo_tasks;
     if (Array.isArray(tasks) && tasks.length > 0) {
       measureTasks.value = tasks.map((t: any) => ({
@@ -842,7 +865,7 @@ async function submitRedispatch() {
 
 // 相似异常主单：复用措施 / 合并
 async function loadSimilar() {
-  if (!wo.value || wo.value.source_code !== "alert" || wo.value.status === "closed") return;
+  if (!wo.value || !(wo.value.metric_type && !wo.value.is_measure) || wo.value.status === "closed") return;
   try {
     const r = await getSimilarHosts(wo.value.id);
     similarHosts.value = (r.items || []);
@@ -879,6 +902,7 @@ async function openDispatchConfirm() {
   dispatchPlannedStart.value = wo.value?.planned_start_date ?? "";
   dispatchReason.value = wo.value?.reason ?? "";
   dispatchAction.value = wo.value?.action ?? "";
+  dispatchDeliverable.value = wo.value?.task_deliverable ?? "";
   showDispatchConfirm.value = true;
 }
 
@@ -887,13 +911,13 @@ async function confirmDispatch() {
   // 前端空校验：与 OA 模板必填项一致，缺失则拦截并提示补齐
   const missing: string[] = [];
   if (!dispatchProjectId.value) missing.push("项目");
-  if (!dispatchTypeId.value) missing.push("工单类型");
   if (!dispatchReason.value.trim()) missing.push("触发原因");
   if (!dispatchAction.value.trim()) missing.push("行动要求");
   if (!dispatchPersonId.value) missing.push("责任人");
   if (!dispatchApproverId.value) missing.push("审批人");
   if (!dispatchPlannedStart.value) missing.push("计划开始时间");
   if (!dispatchDeadline.value) missing.push("截止时间");
+  if (wo.value?.source_code === "plan" && !dispatchDeliverable.value.trim()) missing.push("任务目标交付物");
   if (missing.length) {
     toast.warning("请先补齐必填字段：" + missing.join("、"));
     return;
@@ -902,13 +926,13 @@ async function confirmDispatch() {
   try {
     await updateWorkOrder(wo.value.id, {
       project_id: dispatchProjectId.value ?? null,
-      type_id: dispatchTypeId.value ?? null,
       person_id: dispatchPersonId.value,
       approver_id: dispatchApproverId.value,
       planned_start_date: dispatchPlannedStart.value || null,
       deadline: dispatchDeadline.value || null,
       reason: dispatchReason.value,
       action: dispatchAction.value,
+      task_deliverable: dispatchDeliverable.value.trim() || null,
     });
     await transition("dispatch");
     showDispatchConfirm.value = false;
@@ -1002,8 +1026,10 @@ async function savePerson(field: "person_id" | "approver_id", userId: number | u
 function openBasicEdit() {
   if (!wo.value) return;
   basicForm.title = wo.value.title || "";
+  basicForm.service = wo.value.service || "";
   basicForm.reason = wo.value.reason || "";
   basicForm.action = wo.value.action || "";
+  basicForm.task_deliverable = wo.value.task_deliverable || "";
   basicForm.conclusion = wo.value.conclusion || "";
   basicForm.project_id = wo.value.project_id ?? null;
   basicForm.type_id = wo.value.type_id ?? null;
@@ -1027,8 +1053,10 @@ async function saveBasicEdit() {
   try {
     await updateWorkOrderBasic(wo.value.id, {
       title: basicForm.title.trim(),
+      service: basicForm.service.trim() || null,
       reason: basicForm.reason || null,
       action: basicForm.action || null,
+      task_deliverable: basicForm.task_deliverable.trim() || null,
       conclusion: basicForm.conclusion || null,
       project_id: basicForm.project_id ?? null,
       type_id: basicForm.type_id ?? null,

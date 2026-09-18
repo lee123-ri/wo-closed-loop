@@ -112,3 +112,49 @@ def test_fallback_when_no_tasks(db, monkeypatch):
     r = apply_oa_event({"processInstanceId": "proc-1", "result": "agree",
                         "activityName": "责任节点"}, db)
     assert r["status"] == "verifying"
+
+
+def test_redirect_regresses_to_approving(db, monkeypatch):
+    """退回上一节点：不新增 returned 状态，回退到当前活跃节点对应状态（OA↔平台一一对应）。"""
+    import app.services.dingtalk as dt
+
+    # 先推进到 verifying（责任人已提交佐证）
+    wo = _make_wo(db, code="RW-OAT-0005")
+    monkeypatch.setattr(dt, "query_oa_approval", lambda pid: _info(approved=1))
+    apply_oa_event({"processInstanceId": "proc-1"}, db)
+    db.refresh(wo)
+    assert wo.status == "verifying"
+
+    # 审批人退回责任人：实例 result=redirect，责任人节点回到未通过(active=0)
+    redirect_tasks = [
+        {"userid": "u0", "task_status": "REDIRECTED", "task_result": "NONE"},
+        {"userid": "u1", "task_status": "RUNNING", "task_result": "NONE"},
+    ]
+    monkeypatch.setattr(dt, "query_oa_approval",
+                        lambda pid: {"process_instance_id": "proc-1", "status": "RUNNING",
+                                     "result": "redirect", "form_component_values": [],
+                                     "tasks": redirect_tasks})
+    r = apply_oa_event({"processInstanceId": "proc-1", "result": "redirect",
+                        "activityName": "审批人"}, db)
+    assert r["status"] == "approving"
+    db.refresh(wo)
+    assert wo.status == "approving"
+
+
+def test_redirect_active_node_mapping(db, monkeypatch):
+    """退回但仍停在审批人节点（责任人节点仍 AGREE）→ 仍 verifying，不回退过头。"""
+    import app.services.dingtalk as dt
+
+    wo = _make_wo(db, code="RW-OAT-0006")
+    tasks = [
+        {"userid": "u0", "task_status": "COMPLETED", "task_result": "AGREE"},
+        {"userid": "u1", "task_status": "RUNNING", "task_result": "REDIRECTED"},
+    ]
+    monkeypatch.setattr(dt, "query_oa_approval",
+                        lambda pid: {"process_instance_id": "proc-1", "status": "RUNNING",
+                                     "result": "redirect", "form_component_values": [],
+                                     "tasks": tasks})
+    r = apply_oa_event({"processInstanceId": "proc-1", "result": "redirect"}, db)
+    assert r["status"] == "verifying"
+    db.refresh(wo)
+    assert wo.status == "verifying"

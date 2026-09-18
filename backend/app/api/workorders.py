@@ -23,6 +23,7 @@ from app.schemas.pool import BackfillRequest
 from app.services.priority_service import normalize_priority
 from app.services.roles import resolve_role_user_id
 from app.services.scope import apply_scope_to_query
+from app.services.maintenance import ensure_open
 
 router = APIRouter(prefix="/work-orders", tags=["work-orders"])
 log = get_logger(__name__)
@@ -38,13 +39,15 @@ def _enrich(wo: WorkOrder, db: Session) -> WorkOrderOut:
     proj = db.get(Project, wo.project_id) if wo.project_id else None
     person = db.get(User, wo.person_id) if wo.person_id else None
     approver = db.get(User, wo.approver_id) if wo.approver_id else None
-    wtype = db.get(WorkOrderTypeKB, wo.type_id) if wo.type_id else None
+    from app.services.work_order_types import type_name as _type_name
     d = {
         "id": wo.id, "code": wo.code, "client_request_id": wo.client_request_id,
         "title": wo.title, "reason": wo.reason,
-        "action": wo.action, "project_id": wo.project_id, "person_id": wo.person_id,
+        "action": wo.action, "task_deliverable": wo.task_deliverable,
+        "project_id": wo.project_id, "person_id": wo.person_id,
         "approver_id": wo.approver_id, "type_id": wo.type_id, "source_code": wo.source_code,
         "metric_type": wo.metric_type, "alert_phase": wo.alert_phase,
+        "is_measure": db.query(WorkOrderMeasureLink).filter(WorkOrderMeasureLink.measure_wo_id == wo.id, WorkOrderMeasureLink.removed_at.is_(None)).first() is not None,
         "priority": wo.priority, "status": wo.status, "created_date": wo.created_date,
         "planned_start_date": wo.planned_start_date, "deadline": wo.deadline,
         "completed_date": wo.completed_date, "oa_id": wo.oa_id,
@@ -53,7 +56,7 @@ def _enrich(wo: WorkOrder, db: Session) -> WorkOrderOut:
         "project_name": proj.name if proj else None,
         "person_name": person.name if person else None,
         "approver_name": approver.name if approver else None,
-        "type_name": wtype.name if wtype else None,
+        "type_name": _type_name(db, wo.source_code),
         "region": wo.region,
         # 回填
         "backfill_status": wo.backfill_status,
@@ -69,8 +72,8 @@ def _enrich(wo: WorkOrder, db: Session) -> WorkOrderOut:
         "judgment_requested_at": wo.judgment_requested_at,
         "judgment_completed_at": wo.judgment_completed_at,
     }
-    # alert 主单补充措施进度（2/11）+ 发生记录
-    if wo.source_code == "alert":
+    # 异常主单补充措施进度（2/11）+ 发生记录（异常工单带 metric_type 才走五阶段）
+    if wo.metric_type is not None:
         from app.services.pool_service import measure_progress
         if wo.alert_phase:
             d["measure_progress"] = measure_progress(db, wo.id)
@@ -114,6 +117,9 @@ def _project_options(
         q = q.where(WorkOrder.region == region)
     if scope == "mine":
         q = apply_scope_to_query(q, db, user)
+    elif scope == "personal":
+        from app.services.scope import apply_personal_scope_to_query
+        q = apply_personal_scope_to_query(q, user)
     ids = sorted({rid for (rid,) in db.execute(q.distinct()).all() if rid is not None})
     if not ids:
         return []
@@ -132,7 +138,8 @@ def list_work_orders(
     person_name: str | None = None,
     search: str | None = None,
     include_closed: bool = False,
-    scope: str | None = Query(None, description="mine=按当前用户行级范围过滤（admin满量/区域PMO区域/本人）"),
+    scope: Literal["mine", "personal"] | None = Query(None, description="mine=管理行级范围；personal=仅本人作为责任人或审批人"),
+    role: Literal["all", "responsible", "approver", "both"] = Query("all", description="scope=personal 时的细分：all/责任/审批/双角色"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -141,7 +148,7 @@ def list_work_orders(
     """主列表（活跃工作台）：已闭环工单默认归档不显示，归档视图走 /closed/list（闭环记录页）。
 
     include_closed=true 含归档；显式 status=closed 视为查归档，同样返回。
-    scope=mine 时按登录人行级范围过滤（「我的工单」页使用）。
+    scope=mine 时按管理行级范围过滤；scope=personal 时仅限本人双角色范围（「我的工单」页使用）。
     """
     q = select(WorkOrder).order_by(WorkOrder.created_date.desc(), WorkOrder.id.desc())
     if project_id:
@@ -173,6 +180,9 @@ def list_work_orders(
         q = q.where(WorkOrder.title.ilike(f"%{search}%"))
     if scope == "mine":
         q = apply_scope_to_query(q, db, user)
+    elif scope == "personal":
+        from app.services.scope import apply_personal_scope_to_query
+        q = apply_personal_scope_to_query(q, user, role)
 
     proj_options = _project_options(db, user, region=region, scope=scope, closed_only=False)
 
@@ -187,7 +197,7 @@ def list_closed(
     project_id: int | None = None,
     source_code: str | None = None,
     region: str | None = None,
-    scope: str | None = Query(None, description="mine=按当前用户行级范围过滤（闭环记录页）"),
+    scope: Literal["mine", "personal"] | None = Query(None, description="mine=管理行级范围；personal=仅本人双角色范围"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -203,6 +213,9 @@ def list_closed(
         q = q.where(WorkOrder.region == region)
     if scope == "mine":
         q = apply_scope_to_query(q, db, user)
+    elif scope == "personal":
+        from app.services.scope import apply_personal_scope_to_query
+        q = apply_personal_scope_to_query(q, user)
     proj_options = _project_options(db, user, region=region, scope=scope, closed_only=True)
     total = db.scalar(select(func.count()).select_from(q.subquery()))
     rows = db.execute(q.offset((page - 1) * page_size).limit(page_size)).scalars().all()
@@ -228,18 +241,22 @@ def get_work_order(wo_id: int, db: Session = Depends(get_db)):
 
 @router.post("", response_model=WorkOrderOut, status_code=201)
 def create_work_order(body: WorkOrderCreate, db: Session = Depends(get_db), user: User | None = Depends(require_auth)):
+    ensure_open(db)  # 暂停发单开关：拦截手动建单
     # 优先级按来源定（业务规则 2026-08-20）：
     #   alert(监视告警/异常指标)→P1；plan(年度计划) 由计划自带；meeting/manual 手填，未填兜底 P2
+    from app.services.work_order_types import is_anomaly_type, type_approver_name
     if body.priority is None:
-        body.priority = "P1" if body.source_code == "alert" else "P2"
+        body.priority = "P1" if is_anomaly_type(body.source_code) else "P2"
     else:
         body.priority = normalize_priority(body.priority) or "P2"
 
-    # 未指定审批人时，按工单类型的默认审批人角色解析（后台可配置角色→人名）
-    if body.approver_id is None and body.type_id is not None:
-        wtype = db.get(WorkOrderTypeKB, body.type_id)
-        if wtype:
-            body.approver_id = resolve_role_user_id(db, wtype.default_approver_role) or wtype.default_approver_id
+    # 未指定审批人时，按工单类型的默认审批人（后台配置）解析
+    if body.approver_id is None and body.source_code:
+        _an = type_approver_name(db, body.source_code)
+        if _an:
+            au = db.query(User).filter(User.name == _an).first()
+            if au:
+                body.approver_id = au.id
 
     # 若未指定截止日期，按 SLA 默认
     if not body.deadline:
@@ -251,8 +268,9 @@ def create_work_order(body: WorkOrderCreate, db: Session = Depends(get_db), user
     wo = WorkOrder(
         code=_next_code(db),
         title=body.title, reason=body.reason, action=body.action,
+        task_deliverable=body.task_deliverable,
         project_id=body.project_id, person_id=body.person_id, approver_id=body.approver_id,
-        type_id=body.type_id, source_code=body.source_code, priority=body.priority,
+        source_code=body.source_code, priority=body.priority,
         region=body.region,
         planned_start_date=body.planned_start_date, deadline=body.deadline,
         created_date=date.today(),
@@ -460,6 +478,10 @@ def transition_work_order(wo_id: int, action: str, db: Session = Depends(get_db)
     if action not in transitions:
         raise HTTPException(400, f"未知操作: {action}")
 
+    # 暂停发单开关：派发/生成措施工单 属于「发单」，一律拦截；其余状态流转不受影响
+    if action in {"dispatch", "dispatch_measures", "confirm_analysis"}:
+        ensure_open(db)
+
     # 已关联真实钉钉审批单（非本地占位 "OA-..."）的工单，状态由钉钉审批流驱动，
     # 平台手工流转只会在本地改状态、与 OA 脱节，故拦截（reset 保留作兜底）。
     _oa_driven_actions = {"dispatch", "start_exec", "submit_evidence", "close", "reject"}
@@ -566,7 +588,7 @@ def transition_work_order(wo_id: int, action: str, db: Session = Depends(get_db)
               detail={"action": action, "from": prev_status, "to": to})
     wo.status = to
     if to == "closed":
-        if wo.source_code == "alert" and wo.alert_phase:
+        if wo.metric_type and wo.alert_phase:
             # 异常主单闭环（confirm_recovered 或「无需措施直接闭环」）
             wo.alert_phase = "recovered"
         else:
@@ -616,10 +638,11 @@ class _MergeRequest(BaseModel):
 @router.post("/{wo_id}/redispatch", response_model=WorkOrderOut)
 def redispatch_measures(wo_id: int, body: _RedispatchRequest, db: Session = Depends(get_db), user: User | None = Depends(require_auth)):
     """阶段④指标异常 → 手动补派发新措施工单 → 回到③跟踪（redispatch）。"""
+    ensure_open(db)  # 暂停发单开关：补派发也属「发单」
     wo = db.get(WorkOrder, wo_id)
     if not wo:
         raise HTTPException(404, "工单不存在")
-    if wo.source_code != "alert" or not wo.alert_phase:
+    if not wo.metric_type or not wo.alert_phase:
         raise HTTPException(400, "仅异常指标主单支持补派发")
     if wo.alert_phase != "reexamining":
         raise HTTPException(409, f"当前阶段 {wo.alert_phase} 不允许补派发（需 reexamining）")
@@ -676,11 +699,10 @@ def similar_hosts(wo_id: int, db: Session = Depends(get_db)):
     wo = db.get(WorkOrder, wo_id)
     if not wo:
         raise HTTPException(404, "工单不存在")
-    if wo.source_code != "alert" or not wo.metric_type:
+    if not wo.metric_type:
         return {"items": []}
     from app.services.pool_service import measure_progress
     rows = db.query(WorkOrder).filter(
-        WorkOrder.source_code == "alert",
         WorkOrder.metric_type == wo.metric_type,
         WorkOrder.project_id == wo.project_id,
         WorkOrder.status != "closed",
@@ -702,7 +724,7 @@ def reuse_measures(wo_id: int, body: _ReuseRequest, db: Session = Depends(get_db
     wo = db.get(WorkOrder, wo_id)
     if not wo:
         raise HTTPException(404, "工单不存在")
-    if wo.source_code != "alert" or not wo.alert_phase or wo.status == "closed":
+    if not wo.metric_type or not wo.alert_phase or wo.status == "closed":
         raise HTTPException(400, "仅开着且未闭环的异常指标主单支持挂载复用")
     from app.services.pool_service import _link_measure, measure_progress
     from app.services.audit import log_audit
@@ -838,7 +860,7 @@ def backfill_work_order(
 
         # alert 来源：回填后进入「已回填」，同时把回填措施写入工单的 action 字段
         wo = db.get(WorkOrder, wo_id)
-        if wo and wo.source_code == "alert" and wo.status == "pending":
+        if wo and wo.metric_type and wo.status == "pending":
             wo.status = "judging"
             wo.judgment_status = "judging"
             wo.alert_phase = "confirming"  # 进入五阶段①：分析结果确认
@@ -899,7 +921,7 @@ def export_judgment(wo_id: int, db: Session = Depends(get_db)):
     wo = db.get(WorkOrder, wo_id)
     if not wo:
         raise HTTPException(404, "工单不存在")
-    if wo.source_code != "alert":
+    if not wo.metric_type:
         raise HTTPException(400, "仅监视告警来源的工单支持导出判断")
 
     # 获取项目名

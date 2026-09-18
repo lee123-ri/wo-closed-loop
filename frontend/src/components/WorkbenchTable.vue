@@ -1,5 +1,9 @@
 <template>
   <div class="workbench">
+    <div ref="topScroller" class="top-scroller" aria-label="工单表格横向滚动" @scroll="syncFromTop">
+      <div class="top-scroll-content"></div>
+    </div>
+    <div ref="tableViewport" class="table-viewport" @scroll="syncFromTable">
     <t-table
       :data="items"
       :columns="columns"
@@ -23,7 +27,6 @@
             <span v-if="row.source_code" class="tag" :class="sourceTagClass(row.source_code)">{{ sourceLabel(row.source_code) }}</span>
             <span class="tag" :class="prioTagCls(row.priority)">{{ priorityLabel(row.priority) }}</span>
             <span v-if="row.escalation_level > 0" class="tag" :class="row.escalation_level >= 3 ? 'tag-red' : 'tag-amber'">{{ escLabel[row.escalation_level] }}</span>
-            <span v-if="row.metric_type" class="tag tag-gray">{{ row.metric_type }}</span>
           </div>
           <div class="info-title" :title="row.title">{{ row.title }}</div>
           <div class="info-sub">{{ row.project_name || "—" }}<template v-if="row.region"> · {{ row.region }}</template></div>
@@ -36,6 +39,10 @@
           <div class="who-line"><span class="who-k">责任人</span><span class="who-v">{{ row.person_name || "—" }}</span></div>
           <div class="who-line"><span class="who-k">审批人</span><span class="who-v">{{ row.approver_name || "—" }}</span></div>
         </div>
+      </template>
+
+      <template #service="{ row }">
+        <span class="service" :title="row.service || ''">{{ row.service || "—" }}</span>
       </template>
 
       <!-- 时间列 -->
@@ -80,7 +87,7 @@
             <span class="hand-label">判断</span>
             <span class="tag" :class="judgmentTheme(row.judgment_status)">{{ judgmentLabel(row.judgment_status) }}</span>
           </div>
-          <div v-if="row.source_code === 'alert' && row.measure_progress && row.measure_progress.total" class="hand-item">
+          <div v-if="row.measure_progress && row.measure_progress.total" class="hand-item">
             <span class="hand-label">措施闭环</span>
             <span class="hand-measure">{{ row.measure_progress.closed }}/{{ row.measure_progress.total }}</span>
             <span class="hand-bar"><span class="hand-fill" :style="{ width: pct(row.measure_progress.closed, row.measure_progress.total) + '%', background: row.measure_progress.closed === row.measure_progress.total ? 'var(--green)' : 'var(--blue)' }"></span></span>
@@ -108,6 +115,7 @@
         </div>
       </template>
     </t-table>
+    </div>
 
     <!-- 抽屉：派发（发起OA审批） -->
     <t-drawer v-model:visible="dispatchDrawer.visible" header="发起审批 · 派发工单" size="420px" :footer="false">
@@ -209,18 +217,37 @@ const emit = defineEmits<{
 }>();
 
 const selKeys = computed(() => props.selectedRowKeys ?? []);
+const topScroller = ref<HTMLElement | null>(null);
+const tableViewport = ref<HTMLElement | null>(null);
+let syncingHorizontalScroll = false;
+
+function syncFromTop() {
+  if (syncingHorizontalScroll || !topScroller.value || !tableViewport.value) return;
+  syncingHorizontalScroll = true;
+  tableViewport.value.scrollLeft = topScroller.value.scrollLeft;
+  syncingHorizontalScroll = false;
+}
+
+function syncFromTable() {
+  if (syncingHorizontalScroll || !topScroller.value || !tableViewport.value) return;
+  syncingHorizontalScroll = true;
+  topScroller.value.scrollLeft = tableViewport.value.scrollLeft;
+  syncingHorizontalScroll = false;
+}
 
 /* ---------- 显示辅助 ---------- */
 const stepIcon = (s: string) => (s === "done" ? "✓" : s === "active" ? "●" : s === "warn" ? "⚠" : "○");
 const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
 const prioTagCls = (p: string) => (priorityTheme(p) === "danger" ? "tag-red" : priorityTheme(p) === "warning" ? "tag-amber" : "tag-blue");
+// 异常主单（非措施工单且带 metric_type）→ 五阶段；措施工单走普通三步
+const isAnomalyHost = (row: WorkOrder) => !!row.metric_type && !row.is_measure;
 
 function flowSteps(row: WorkOrder) {
-  const fp = flowProgress(row.status, row.source_code, row.alert_phase);
+  const fp = flowProgress(row.status, row.metric_type, row.alert_phase);
   return fp.steps.map((s) => ({ code: s.code, state: s.state, label: statusMap[s.code]?.label ?? s.code }));
 }
 function flowPhase(row: WorkOrder) {
-  const phase = row.source_code === "alert" && row.alert_phase ? "五阶段闭环" : "三步口径";
+  const phase = isAnomalyHost(row) && row.alert_phase ? "五阶段闭环" : "三步口径";
   const cur = row.alert_phase ? (statusMap[row.alert_phase]?.label ?? row.alert_phase) : (statusMap[row.status]?.label ?? row.status);
   return `${phase} · ${cur}`;
 }
@@ -263,7 +290,7 @@ interface OpBtn {
   text?: string;
 }
 function opButtons(row: WorkOrder): OpBtn[] {
-  if (row.source_code === "alert") {
+  if (isAnomalyHost(row)) {
     if (row.alert_phase === "confirming") {
       return [
         { kind: "drawer", drawer: "measures", label: "✍️ 填写措施工单", primary: true },
@@ -511,6 +538,7 @@ function onPageChange(p: { current: number; pageSize: number }) {
 const columns = [
   { colKey: "row-select", type: "multiple" as const, width: 44, fixed: "left" as const },
   { colKey: "info", title: "工单信息", width: 300 },
+  { colKey: "service", title: "服务", width: 150, ellipsis: true },
   { colKey: "who", title: "责任人 / 审批人", width: 120 },
   { colKey: "time", title: "时间", width: 120 },
   { colKey: "flow", title: "流程进度", width: 248 },
@@ -521,6 +549,19 @@ const columns = [
 </script>
 
 <style scoped>
+/* 只保留一条置顶横向滑条；操作列始终固定在右侧。 */
+.workbench {
+  --td-scrollbar-color: rgba(0, 0, 0, 0.35);
+  --td-scrollbar-hover-color: rgba(0, 0, 0, 0.55);
+}
+.top-scroller { position: sticky; top: 0; z-index: 3; overflow-x: auto; overflow-y: hidden; height: 12px; margin: 0 0 8px; background: var(--card, #fff); }
+.top-scroll-content { width: 1px; min-width: 1602px; height: 1px; }
+.table-viewport { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.table-viewport::-webkit-scrollbar { display: none; }
+.table-viewport :deep(.t-table) { min-width: 1602px; }
+.workbench :deep(.t-table__content) { scrollbar-width: none; }
+.workbench :deep(.t-table__content::-webkit-scrollbar) { display: none; }
+.service { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .workbench :deep(.t-table__row) { cursor: pointer; }
 .info-tags { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-bottom: 4px; }
 .info-code { font-family: monospace; font-size: 12px; color: var(--muted); }

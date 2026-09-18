@@ -1,0 +1,2242 @@
+{
+  "fetched_at": "2026-09-11",
+  "baseId": "OG9lyrgJPzMw9B5jSvpyvdQLWzN67Mw4",
+  "tableId": "j5hkt042bpz1m88o46iup",
+  "fields": [
+    {
+      "fieldId": "310xw35huv0ofcqcuk0p5",
+      "fieldName": "序号",
+      "type": "text",
+      "options": []
+    },
+    {
+      "fieldId": "06h8ukzbt5k6lit2wupf2",
+      "fieldName": "OA项目名称",
+      "type": "singleSelect",
+      "options": [
+        {
+          "id": "uG9uh2MA4I",
+          "name": "上电萧县官山2026"
+        },
+        {
+          "id": "ggfKaUwqkA",
+          "name": "协合措美二期"
+        },
+        {
+          "id": "BGsZY7xQ1v",
+          "name": "胜科鹿邑博德"
+        },
+        {
+          "id": "4aENeNi1w9",
+          "name": "协合乌兰花DE"
+        },
+        {
+          "id": "l6Tlk9LhWM",
+          "name": "协合松北一期"
+        },
+        {
+          "id": "QhiCSUCHa8",
+          "name": "协合依兰"
+        },
+        {
+          "id": "aI9dxjCVtc",
+          "name": "协合襄北储能"
+        },
+        {
+          "id": "jdPkSzytPG",
+          "name": "协合圣境山"
+        },
+        {
+          "id": "c6HfEWa0yr",
+          "name": "协合栗溪"
+        },
+        {
+          "id": "FCQPY9zReI",
+          "name": "国电投上电中旗"
+        },
+        {
+          "id": "ZU6NNwA1pK",
+          "name": "上电秦皇岛宏伟光伏2025"
+        },
+        {
+          "id": "ACA1boeiha",
+          "name": "中信泰富"
+        },
+        {
+          "id": "6KJrjIjQMO",
+          "name": "三峡徐五林"
+        },
+        {
+          "id": "nrmJx2fv0u",
+          "name": "协合南大港二期"
+        },
+        {
+          "id": "95jZsgY0BQ",
+          "name": "博枫绿能汤庄2026"
+        },
+        {
+          "id": "j8aezSTrsG",
+          "name": "协合沱江"
+        },
+        {
+          "id": "tnczAz6wuN",
+          "name": "协合四马桥"
+        },
+        {
+          "id": "LgblhTcdWV",
+          "name": "协合祥霖铺"
+        },
+        {
+          "id": "FJXUqnHsi0",
+          "name": "协合洪塘"
+        },
+        {
+          "id": "jdiIhgoKuV",
+          "name": "协合萌渚岭"
+        },
+        {
+          "id": "RPBXA1lKoe",
+          "name": "协合界牌"
+        },
+        {
+          "id": "rK2CASaz6p",
+          "name": "新疆能源塔城"
+        },
+        {
+          "id": "D2DrRIDO5R",
+          "name": "国能灵武一期2026"
+        },
+        {
+          "id": "3nCR5k72oc",
+          "name": "国能宁夏霞光、曙光储能"
+        },
+        {
+          "id": "rNCcjYmllD",
+          "name": "湖南宜杨玉门储能"
+        },
+        {
+          "id": "MrcHHoIBj5",
+          "name": "吉电三塘湖"
+        },
+        {
+          "id": "9uxDMVT1RI",
+          "name": "粤电黄家林"
+        },
+        {
+          "id": "8R3sPD2hOK",
+          "name": "云能投永宁2025"
+        },
+        {
+          "id": "M3CoMosfsx",
+          "name": "西电乌东德"
+        },
+        {
+          "id": "nqh0W8Xkrb",
+          "name": "中能建梭山"
+        },
+        {
+          "id": "30dIp6fdte",
+          "name": "江苏保龙双营、秀水、五里岗"
+        },
+        {
+          "id": "657PlFE7fz",
+          "name": "云能投大海梁子2025"
+        },
+        {
+          "id": "I8vKfaNd4v",
+          "name": "协合师宗"
+        },
+        {
+          "id": "J3zHbP0H87",
+          "name": "云能投石头寨"
+        },
+        {
+          "id": "d9ODGsJv4a",
+          "name": "中煤鲁甸小寨"
+        },
+        {
+          "id": "cUVKsqwO4a",
+          "name": "中广核太康"
+        },
+        {
+          "id": "pk07qSIb5i",
+          "name": "胜科护城"
+        },
+        {
+          "id": "Ei3mKC2Dht",
+          "name": "水发鸡西"
+        },
+        {
+          "id": "p89Jakz8mn",
+          "name": "国电投蒙东荆门2026"
+        },
+        {
+          "id": "HAVOdyQGDz",
+          "name": "协合峪山二期"
+        },
+        {
+          "id": "04wZmH32M4",
+          "name": "博枫宿州永安2026"
+        },
+        {
+          "id": "DFG4n5jkPB",
+          "name": "国电投阳信、四户王"
+        },
+        {
+          "id": "4efIGtOkGY",
+          "name": "博枫钦州"
+        },
+        {
+          "id": "xkvLbA9mjC",
+          "name": "中节能安马第三"
+        },
+        {
+          "id": "sxXmjYQJJc",
+          "name": "协合开远"
+        },
+        {
+          "id": "UqxQkvayCp",
+          "name": "北京金晟上甸子2026"
+        },
+        {
+          "id": "ieAGP8RLnv",
+          "name": "国电投繁峙"
+        },
+        {
+          "id": "9FJzsvpvUR",
+          "name": "国电投蒲城洛滨2026"
+        },
+        {
+          "id": "8uUJF3Lp9A",
+          "name": "国电投珠日河、道老杜2026"
+        },
+        {
+          "id": "UOetagzQmX",
+          "name": "国能灵武二期"
+        },
+        {
+          "id": "wQy8514W1b",
+          "name": "山东铁投阁山2026"
+        },
+        {
+          "id": "gQKcLfBWD8",
+          "name": "上海电气汕头智慧2026"
+        },
+        {
+          "id": "CroPawLZ9k",
+          "name": "上海电气盐锅峡光伏2026"
+        },
+        {
+          "id": "92nwjLIomg",
+          "name": "胜科武强龙治河2025"
+        },
+        {
+          "id": "YjEPCFY0dW",
+          "name": "协合东兰红水河"
+        },
+        {
+          "id": "GZCubejRVz",
+          "name": "协合高邮渔光互补"
+        },
+        {
+          "id": "ci70wLIWJ0",
+          "name": "协合桥头铺"
+        },
+        {
+          "id": "njj33Foc1B",
+          "name": "协合狮子岭"
+        },
+        {
+          "id": "jCXTNu0We1",
+          "name": "协合狮子岭二期"
+        },
+        {
+          "id": "uJP1jFLenj",
+          "name": "协合狮子岭三期"
+        },
+        {
+          "id": "jd1i2CaxWK",
+          "name": "协合通河"
+        },
+        {
+          "id": "v0ySQ8nqdM",
+          "name": "协合襄北"
+        },
+        {
+          "id": "2gCBIHzLOp",
+          "name": "协合襄北风储"
+        },
+        {
+          "id": "Ee2e6qtb4x",
+          "name": "协合依兰风光储一期"
+        },
+        {
+          "id": "mwlgvLez54",
+          "name": "粤电靖远"
+        },
+        {
+          "id": "juoVtjnnF7",
+          "name": "粤电仙人山"
+        },
+        {
+          "id": "TMdjlPpGOH",
+          "name": "云能投大中山2025"
+        },
+        {
+          "id": "wNU63X0ZR5",
+          "name": "中国能建南高崖2026"
+        },
+        {
+          "id": "lS5eQNSHEd",
+          "name": "中国氢能张北光伏"
+        },
+        {
+          "id": "gRFoS0RQ2c",
+          "name": "中鑫武坚2026"
+        },
+        {
+          "id": "07jQ7YcLAa",
+          "name": "北京华祥安徽阜南"
+        },
+        {
+          "id": "h1MoLdptvV",
+          "name": "青岛城投突泉"
+        },
+        {
+          "id": "2dQTitDcYP",
+          "name": "邯郸张西堡"
+        },
+        {
+          "id": "zxSaaSOctv",
+          "name": "辽宁和展昌图润荣"
+        },
+        {
+          "id": "yGM63LzSLT",
+          "name": "三一浪川"
+        },
+        {
+          "id": "Pp0lSdoH5q",
+          "name": "协合朝东"
+        },
+        {
+          "id": "3RwiGOWwuK",
+          "name": "协合谯东二期"
+        },
+        {
+          "id": "gd6KpYwEyt",
+          "name": "协合瓮安建中"
+        },
+        {
+          "id": "VXVOFq0YK2",
+          "name": "国电投蒙东大伾山2026"
+        },
+        {
+          "id": "ZY6aL1r6R2",
+          "name": "晋控富家山2026"
+        },
+        {
+          "id": "54hQfzR2jU",
+          "name": "三一五寨"
+        },
+        {
+          "id": "A4PfxMfkH3",
+          "name": "协合宾县"
+        },
+        {
+          "id": "RlWFbObN8H",
+          "name": "协合峪山"
+        },
+        {
+          "id": "qLayhnqVPl",
+          "name": "运达依兰"
+        },
+        {
+          "id": "jfvkxihlAL",
+          "name": "中国电建金湖"
+        },
+        {
+          "id": "0Nm2WjH0xZ",
+          "name": "协合东大"
+        },
+        {
+          "id": "VtcJIYWk55",
+          "name": "协合平达"
+        },
+        {
+          "id": "DZLfLHoIR1",
+          "name": "协合乌兰花F新发D"
+        },
+        {
+          "id": "41Naa3F9Ml",
+          "name": "中电安北第二"
+        },
+        {
+          "id": "MFRYzBHrKK",
+          "name": "国电投寿阳"
+        },
+        {
+          "id": "tqAyvWyNI4",
+          "name": "中煤平朔"
+        },
+        {
+          "id": "VjIMIxKHQ6",
+          "name": "运达新泰禹村"
+        },
+        {
+          "id": "Pj4D2ivPmC",
+          "name": "华夏金租临泉金朔风储"
+        },
+        {
+          "id": "TbxPQvsles",
+          "name": "三一定南智慧"
+        },
+        {
+          "id": "pzhppYZ9ef",
+          "name": "沙电信阳商城"
+        },
+        {
+          "id": "ubMUPc5Fsn",
+          "name": "京能共和"
+        },
+        {
+          "id": "YsXv6J6o0W",
+          "name": "京能共和源通"
+        },
+        {
+          "id": "5OipuA1hwj",
+          "name": "国电投格尔木"
+        },
+        {
+          "id": "Chf1NxeKuV",
+          "name": "中节能胶泥梁"
+        },
+        {
+          "id": "XwpyW1xFPB",
+          "name": "粤电海湾石"
+        },
+        {
+          "id": "21zNpe7XKE",
+          "name": "国电投阿拉善、陶力2025"
+        },
+        {
+          "id": "UxE1ZcKntx",
+          "name": "上海电气莫高储能"
+        },
+        {
+          "id": "9ls3S7yRjD",
+          "name": "中核宁夏含光"
+        },
+        {
+          "id": "Rb6CuA5kKl",
+          "name": "青岛城投麟游"
+        },
+        {
+          "id": "fMgmcoVk8V",
+          "name": "协合瓜州二期2025"
+        },
+        {
+          "id": "T2HuY8581C",
+          "name": "沙能黑龙江勃利"
+        },
+        {
+          "id": "BeH53lucPP",
+          "name": "三峡安怀变"
+        },
+        {
+          "id": "bpUBogJzuI",
+          "name": "三峡仓房、白泥井"
+        },
+        {
+          "id": "dMQhYNSTNO",
+          "name": "沙电息县"
+        },
+        {
+          "id": "AXYB3aWdIz",
+          "name": "中建投俊能"
+        },
+        {
+          "id": "P42vUocUmm",
+          "name": "上电秦皇岛冀电光伏2025"
+        },
+        {
+          "id": "SfD35UQnTI",
+          "name": "中能建英吉沙"
+        },
+        {
+          "id": "BLsSKkz1oZ",
+          "name": "协合措美"
+        },
+        {
+          "id": "AD9Kbkhtad",
+          "name": "国电投蒙东开鲁2026"
+        },
+        {
+          "id": "5mqxwd0Tfa",
+          "name": "山阴漳泽吴马营"
+        },
+        {
+          "id": "7c9kPNacZ1",
+          "name": "青岛城投新城光伏"
+        },
+        {
+          "id": "j0EW4xld2L",
+          "name": "协合江孜"
+        },
+        {
+          "id": "3z6zcZHmWN",
+          "name": "协合乃东"
+        },
+        {
+          "id": "0PeNTyIFW2",
+          "name": "上海电气北部滩2026"
+        },
+        {
+          "id": "HFQ47f74z1",
+          "name": "博枫全州"
+        },
+        {
+          "id": "EYhLbPKSyJ",
+          "name": "青岛城投伊通"
+        },
+        {
+          "id": "322k8HcYGb",
+          "name": "国电投达拉特"
+        },
+        {
+          "id": "HD1lGGS3Wj",
+          "name": "国电投内蒙古兴库"
+        },
+        {
+          "id": "pJEjeqpB8R",
+          "name": "中建投故城储能"
+        },
+        {
+          "id": "t4fqF959Dk",
+          "name": "贵银金租山东中至"
+        },
+        {
+          "id": "jh7A7EuHpU",
+          "name": "国电投蒙东扎旗2026"
+        },
+        {
+          "id": "KIGapFfAEH",
+          "name": "青岛城投华中农业"
+        },
+        {
+          "id": "iE6Hhk2LJY",
+          "name": "胜科钦南2026"
+        },
+        {
+          "id": "RY1xFeOARe",
+          "name": "沙电阳山岩口"
+        },
+        {
+          "id": "mmRqoYH0Z3",
+          "name": "三一平台村、老盐池"
+        },
+        {
+          "id": "D80qEbqu17",
+          "name": "国电投别力古台500MW"
+        },
+        {
+          "id": "VH676gPP5l",
+          "name": "协合海力板"
+        },
+        {
+          "id": "GcZZG8uSzD",
+          "name": "国电投兴安盟突泉2026"
+        },
+        {
+          "id": "HjDijHvMKF",
+          "name": "青岛城投木垒昌盛"
+        },
+        {
+          "id": "2RDwKjk9A6",
+          "name": "青岛城投东丰"
+        },
+        {
+          "id": "59grYXqdiI",
+          "name": "浙能安能变"
+        },
+        {
+          "id": "ZqwT6jlVF5",
+          "name": "青岛城投乌海海南光伏"
+        },
+        {
+          "id": "hckl5hwDDR",
+          "name": "中煤昌吉木垒四十个井子"
+        },
+        {
+          "id": "bzA6t7IyM8",
+          "name": "协合盐源"
+        },
+        {
+          "id": "2QYGu2XkaG",
+          "name": "粤电长山箐"
+        },
+        {
+          "id": "YrAiszzNZW",
+          "name": "国电投阿右旗2025"
+        },
+        {
+          "id": "4i8KjB7UX3",
+          "name": "河北东垣海子洼"
+        },
+        {
+          "id": "MvhHFk796K",
+          "name": "国电投蒙东扎旗一期"
+        },
+        {
+          "id": "eTWQjF9CVg",
+          "name": "青岛城投商都扶贫光伏"
+        },
+        {
+          "id": "o5TIv4cx6U",
+          "name": "上电宿州清水2026"
+        },
+        {
+          "id": "IYxE2m3s7Y",
+          "name": "协合新造"
+        },
+        {
+          "id": "TCr8Qa1Wuz",
+          "name": "国电投蒙东开鲁一期"
+        },
+        {
+          "id": "yg7r9L9unS",
+          "name": "申能额济纳风机"
+        },
+        {
+          "id": "ciErGgtxdx",
+          "name": "国电投阿巴嘎"
+        },
+        {
+          "id": "lcISKYakFZ",
+          "name": "中电投保力图"
+        },
+        {
+          "id": "Jna8G4AWxf",
+          "name": "晋控织女泉二期"
+        },
+        {
+          "id": "Mq0nUcxjlX",
+          "name": "水发承德隆化"
+        },
+        {
+          "id": "yX7LdryIGF",
+          "name": "闽东电力富裕"
+        },
+        {
+          "id": "mCTnYTirrC",
+          "name": "中能建天等把荷"
+        },
+        {
+          "id": "0P0jJ07QTZ",
+          "name": "国网衢州开化"
+        },
+        {
+          "id": "gLn5jiWbTy",
+          "name": "国电投甘泉堡"
+        },
+        {
+          "id": "jJCljoOsyD",
+          "name": "国能灵武一期"
+        },
+        {
+          "id": "FG9qP30NV6",
+          "name": "协合瓜州二期"
+        },
+        {
+          "id": "Do8spCQtvp",
+          "name": "国网张北"
+        },
+        {
+          "id": "IFBHK2i7Fm",
+          "name": "协合方正团结"
+        },
+        {
+          "id": "swGCpdMtyT",
+          "name": "协合桥头铺湖南集控"
+        },
+        {
+          "id": "HOmmk3sFDf",
+          "name": "汇来丰盐城储能"
+        },
+        {
+          "id": "ffkAvUA61I",
+          "name": "协合西台"
+        },
+        {
+          "id": "NIbGAkuPXq",
+          "name": "协合西台二期"
+        },
+        {
+          "id": "jDlm7A2rEK",
+          "name": "华电金泉"
+        },
+        {
+          "id": "GEo7Qj7qhL",
+          "name": "山东铁投阁山"
+        },
+        {
+          "id": "Vb0xTqal67",
+          "name": "协合金大山"
+        },
+        {
+          "id": "UsZKfUzElr",
+          "name": "苹果审章塘"
+        },
+        {
+          "id": "iNYDafWS4S",
+          "name": "通用武威红沙岗"
+        },
+        {
+          "id": "owOqRUlFtG",
+          "name": "中国电建金水口"
+        },
+        {
+          "id": "s6ioBlRLWR",
+          "name": "协合商城风机"
+        },
+        {
+          "id": "0dx9ZgLdkd",
+          "name": "中电建山西阔远"
+        },
+        {
+          "id": "gj4pnp8JDd",
+          "name": "中电建贵州墨家沟"
+        },
+        {
+          "id": "cNHqopbTIv",
+          "name": "国电投寿阳2025"
+        },
+        {
+          "id": "KLl7U8NTv9",
+          "name": "懿晟包头达茂旗"
+        },
+        {
+          "id": "p7HjM1KzZH",
+          "name": "津能大神堂2025"
+        },
+        {
+          "id": "r8w3Sls3d0",
+          "name": "灵寿汇能200MW农光互补"
+        },
+        {
+          "id": "46Vn9I8pZ1",
+          "name": "青岛城投包头沉陷区光伏"
+        },
+        {
+          "id": "1IwPKbk6jy",
+          "name": "青岛城投商都科技大棚光伏"
+        },
+        {
+          "id": "AnqYQXeC7Z",
+          "name": "中节能云飞"
+        },
+        {
+          "id": "wviSjrWRZK",
+          "name": "三一青铜峡"
+        },
+        {
+          "id": "LlFwuIvslI",
+          "name": "中国电建金水口2025"
+        },
+        {
+          "id": "gwWZtVh8iX",
+          "name": "中电建陇南礼县二期"
+        },
+        {
+          "id": "oXzTychBAB",
+          "name": "云能投回龙梁子2025"
+        },
+        {
+          "id": "V1vvKjZ0Wr",
+          "name": "云能投天星老尖山"
+        },
+        {
+          "id": "9TJXIy8oy3",
+          "name": "云能投新屯"
+        },
+        {
+          "id": "IvaeAryrEY",
+          "name": "云能投永宁阿朝2025"
+        },
+        {
+          "id": "7d1mt2jMvD",
+          "name": "云能投老尖山2026"
+        },
+        {
+          "id": "hYljjNDHIP",
+          "name": "云能投通泉2025"
+        },
+        {
+          "id": "MwyfwY9q4x",
+          "name": "云能投金钟2025"
+        },
+        {
+          "id": "mke4cOgN97",
+          "name": "华电大坝梁子2025"
+        },
+        {
+          "id": "02CR57y4Qr",
+          "name": "国能投临沧农光互补"
+        },
+        {
+          "id": "TNBLVpdwmH",
+          "name": "中电建洛宁上岭"
+        },
+        {
+          "id": "X5xgZTO3Dl",
+          "name": "国电投开封祥符"
+        },
+        {
+          "id": "FIAp0T2Lyu",
+          "name": "浙能兰考三义寨变电2026"
+        },
+        {
+          "id": "07lY8uGUuE",
+          "name": "青岛城投澄城一期"
+        },
+        {
+          "id": "1NCeQ5czer",
+          "name": "三一丰城"
+        },
+        {
+          "id": "dbIbsIlbaj",
+          "name": "新加坡能源南大港二期"
+        },
+        {
+          "id": "h250olOLJq",
+          "name": "三峡徐五林二期"
+        },
+        {
+          "id": "x1sosxSTKI",
+          "name": "华电新和"
+        },
+        {
+          "id": "7n7cc9s8Ao",
+          "name": "景泰远阳"
+        },
+        {
+          "id": "qzXSn4YTGv",
+          "name": "如东绿谱2025"
+        },
+        {
+          "id": "01Wor683Pt",
+          "name": "颍泉黑茨河"
+        },
+        {
+          "id": "cpnYhGmVC4",
+          "name": "睿电陇南礼县"
+        },
+        {
+          "id": "HKHuRcfpII",
+          "name": "云能投永三2025"
+        },
+        {
+          "id": "4XH5IfHOj6",
+          "name": "北京华祥查山"
+        },
+        {
+          "id": "wOyeR3PNYW",
+          "name": "北京华祥沿淮"
+        },
+        {
+          "id": "I8JKQxYOXn",
+          "name": "泰胜鸣皋"
+        },
+        {
+          "id": "X8hngmhehv",
+          "name": "水发鸡西2026"
+        },
+        {
+          "id": "EWJxWPKMBL",
+          "name": "融信汇能西沟流2025"
+        },
+        {
+          "id": "LJ3hwSh29q",
+          "name": "中国能建阳曲2026"
+        },
+        {
+          "id": "35ZjiUcEIi",
+          "name": "中节能昶源"
+        },
+        {
+          "id": "bvVF4IN0J4",
+          "name": "川投宁夏石嘴山"
+        },
+        {
+          "id": "NRZ5MrkOex",
+          "name": "浙能乌图美仁二期"
+        },
+        {
+          "id": "weH8d5kdH9",
+          "name": "浙能新蔡变电2026"
+        },
+        {
+          "id": "do2ed9nKNx",
+          "name": "上海纵昂如东2026"
+        },
+        {
+          "id": "3gJSP8IFKW",
+          "name": "粤电和润"
+        },
+        {
+          "id": "FVm3zie8c2",
+          "name": "运达白彦"
+        },
+        {
+          "id": "UwlguLSit5",
+          "name": "沙电阳山黎埠镇50MW"
+        },
+        {
+          "id": "SYHm7ice3t",
+          "name": "京能格尔木"
+        },
+        {
+          "id": "k1GueyfCCM",
+          "name": "京能润峰"
+        },
+        {
+          "id": "gMNxggcn37",
+          "name": "吉电干河口第八2025"
+        },
+        {
+          "id": "UfsqNJ6Y6u",
+          "name": "国能盐池"
+        },
+        {
+          "id": "052iSlhvrY",
+          "name": "通用武威红沙岗2026"
+        },
+        {
+          "id": "ClkJWoTyuk",
+          "name": "国电投蒙东荆门"
+        },
+        {
+          "id": "0E6cVSmdWt",
+          "name": "协合瑶都储能"
+        },
+        {
+          "id": "IZUCwnGHDZ",
+          "name": "协合湘阴储能"
+        },
+        {
+          "id": "tqol80OLMt",
+          "name": "协合三合隆"
+        },
+        {
+          "id": "SpBxlyYMNm",
+          "name": "协合浠水"
+        },
+        {
+          "id": "HoRucAxvHf",
+          "name": "协合南大港"
+        },
+        {
+          "id": "qMFZ27zulr",
+          "name": "巽能景县储能"
+        },
+        {
+          "id": "65C05KvVzP",
+          "name": "信发小草湖"
+        },
+        {
+          "id": "1Kt1wtVKrx",
+          "name": "青岛城投台安"
+        },
+        {
+          "id": "Ce8kNT886S",
+          "name": "国电投左中图布信"
+        },
+        {
+          "id": "mHbMWNwPn9",
+          "name": "国电投东至"
+        },
+        {
+          "id": "u8CEmDeAFJ",
+          "name": "苏州精控周山储能"
+        },
+        {
+          "id": "gmHyMdVvT0",
+          "name": "国能宁夏皓月储能二期"
+        },
+        {
+          "id": "JnzC1D4sgw",
+          "name": "巨化玉门北山"
+        },
+        {
+          "id": "19a11oWMk0",
+          "name": "三一果木"
+        },
+        {
+          "id": "KZa3Au94uE",
+          "name": "泰康师宗"
+        },
+        {
+          "id": "EdlOjrZ0F6",
+          "name": "协合依兰扶贫"
+        },
+        {
+          "id": "Grb7cBd3Dw",
+          "name": "青岛城投杏树岗"
+        },
+        {
+          "id": "cHmFYcIVPE",
+          "name": "青岛城投阜蒙"
+        },
+        {
+          "id": "qr6EKAiD0F",
+          "name": "国电投蒙东花灯一期变电"
+        },
+        {
+          "id": "RK74h24PqA",
+          "name": "国电投蒙东花灯2026"
+        },
+        {
+          "id": "FDPZxxT3YG",
+          "name": "襄阳片区检修中心"
+        },
+        {
+          "id": "pke4Le0zvK",
+          "name": "青岛城投太旗扶贫光伏"
+        },
+        {
+          "id": "jApVITJFLb",
+          "name": "津能汉沽渔光互补"
+        },
+        {
+          "id": "g4wpVM0aKX",
+          "name": "健安诚太仆寺旗2026"
+        },
+        {
+          "id": "tvB1ODwHlz",
+          "name": "国电投右玉高家堡2025"
+        },
+        {
+          "id": "MU7e4IS5ch",
+          "name": "协合饮马湖"
+        },
+        {
+          "id": "kylk1G52nx",
+          "name": "协合莲花山"
+        },
+        {
+          "id": "VUnCGDhIaj",
+          "name": "协合夹沟"
+        },
+        {
+          "id": "9iZyEqHRuP",
+          "name": "泰康谯东二期"
+        },
+        {
+          "id": "kvt3CiKqvp",
+          "name": "申能东田2024"
+        },
+        {
+          "id": "CL1T1qT4zH",
+          "name": "江华片区检修中心"
+        },
+        {
+          "id": "tSTZv5xHmJ",
+          "name": "中源智信板桥储能"
+        },
+        {
+          "id": "SCAjEL543D",
+          "name": "国能宁夏宋堡储能"
+        },
+        {
+          "id": "rsMrND0TEX",
+          "name": "中国氢能青阳"
+        },
+        {
+          "id": "VSppl6u0wc",
+          "name": "协合洱源"
+        },
+        {
+          "id": "BizHmfWXtC",
+          "name": "协合商城"
+        },
+        {
+          "id": "Daki9hgiuQ",
+          "name": "三峡白泥井"
+        },
+        {
+          "id": "j6bPg1hpNp",
+          "name": "中煤平朔2026"
+        },
+        {
+          "id": "8BDejBuoSO",
+          "name": "中元科创同心"
+        },
+        {
+          "id": "ZZT1zCBcks",
+          "name": "浙能项城变电2026"
+        },
+        {
+          "id": "J8sWaqBfD3",
+          "name": "协合吴营"
+        },
+        {
+          "id": "dMSVsLjCPl",
+          "name": "国电投靖边"
+        },
+        {
+          "id": "5B82Gnk37V",
+          "name": "沙电阳山黎埠镇40MW"
+        },
+        {
+          "id": "gFxpEBxDjw",
+          "name": "国电投甘泉堡2026"
+        },
+        {
+          "id": "r4ZTI1kGXR",
+          "name": "晋控织女泉二期2026"
+        },
+        {
+          "id": "XvlMcpb8Ba",
+          "name": "国电博纳鹏晋储能"
+        },
+        {
+          "id": "tsV3QfaY0H",
+          "name": "国电投志丹锐佳"
+        },
+        {
+          "id": "TNbgJgWAoJ",
+          "name": "晋控闻喜汤王山"
+        },
+        {
+          "id": "3fd7rm3w6Z",
+          "name": "青岛城投磴口"
+        },
+        {
+          "id": "SpqnDTkrCU",
+          "name": "国电投东胜"
+        },
+        {
+          "id": "fpYqJL9AjT",
+          "name": "星源潍坊储能一期"
+        },
+        {
+          "id": "zjEtrwcla5",
+          "name": "华电融安白云岭"
+        },
+        {
+          "id": "i6ope9MheR",
+          "name": "华电三江八江"
+        },
+        {
+          "id": "Td5eSokjXT",
+          "name": "华电三江二期"
+        },
+        {
+          "id": "vPn14oijYF",
+          "name": "苹果井塘"
+        },
+        {
+          "id": "LUWWSdeFvP",
+          "name": "远景广西钦南三期"
+        },
+        {
+          "id": "8r5topcLtG",
+          "name": "国能甘肃永靖"
+        },
+        {
+          "id": "pQOqQyCiJl",
+          "name": "国电投甘泉堡二期"
+        },
+        {
+          "id": "b7ao3zMcaj",
+          "name": "阿巴嘎储能"
+        },
+        {
+          "id": "EzaVWGd59X",
+          "name": "三峡皇后"
+        },
+        {
+          "id": "504NJ0UcMy",
+          "name": "国电投明沙"
+        },
+        {
+          "id": "o9QqbDohNJ",
+          "name": "国电投峡口"
+        },
+        {
+          "id": "HTSCHj7TFX",
+          "name": "国综绿能金昌2025"
+        },
+        {
+          "id": "IZSBNGXL2H",
+          "name": "华锐永发"
+        },
+        {
+          "id": "MnG4GXZb3h",
+          "name": "博海方舟中都"
+        },
+        {
+          "id": "dynlwK0Gzb",
+          "name": "华能阜新午阳光伏"
+        },
+        {
+          "id": "dXmfmF9hFj",
+          "name": "中电投保力图2025"
+        },
+        {
+          "id": "YW4Nb051bU",
+          "name": "国电投玛瑙湖"
+        },
+        {
+          "id": "YZRJHodTVU",
+          "name": "健安诚太仆寺旗2025"
+        },
+        {
+          "id": "KBzJ1GgGEh",
+          "name": "华能宁武东马坊"
+        },
+        {
+          "id": "bvZFoR54XU",
+          "name": "中国能建石仔岭2025"
+        },
+        {
+          "id": "fST1FMFnXc",
+          "name": "钦州民海间隔维护"
+        },
+        {
+          "id": "Am3AMsHfpd",
+          "name": "华电九元山"
+        },
+        {
+          "id": "pxruNQlzZM",
+          "name": "顺风巴里坤"
+        },
+        {
+          "id": "AlJ6KSMU4o",
+          "name": "晋控富家山"
+        },
+        {
+          "id": "stCYukzIve",
+          "name": "青岛城投东北农业"
+        },
+        {
+          "id": "focT1D9YGY",
+          "name": "国电投兴安盟突泉"
+        },
+        {
+          "id": "rAGM65hLIS",
+          "name": "湖北集控中心"
+        },
+        {
+          "id": "GiB652a7Af",
+          "name": "青岛城投华北农业"
+        },
+        {
+          "id": "Hgw2jNQV0S",
+          "name": "中国铝业达茂旗"
+        },
+        {
+          "id": "vOEwmZ8K14",
+          "name": "协合丰宁光储"
+        },
+        {
+          "id": "oBHLEIFVFw",
+          "name": "博枫绿能汤庄"
+        },
+        {
+          "id": "UqwyoQpHTH",
+          "name": "湖南集控中心"
+        },
+        {
+          "id": "YZv8MxXHoO",
+          "name": "国电投蒙东江华"
+        },
+        {
+          "id": "elMV5X527M",
+          "name": "协合白芒营三期"
+        },
+        {
+          "id": "VURYJowOCR",
+          "name": "国能宁夏皓月储能"
+        },
+        {
+          "id": "0MBjVTncJf",
+          "name": "云能投老尖山"
+        },
+        {
+          "id": "mE3o15KBkC",
+          "name": "协合依兰泰霆"
+        },
+        {
+          "id": "s1ve2faYaF",
+          "name": "上海电气赤峰大板"
+        },
+        {
+          "id": "5Rtvet8QXd",
+          "name": "华电后龙山2025"
+        },
+        {
+          "id": "WMdS06UJbJ",
+          "name": "云能投对门梁子2025"
+        },
+        {
+          "id": "U8lSRCEwP7",
+          "name": "华电长青"
+        },
+        {
+          "id": "nVEUAYtC6Q",
+          "name": "晋控织女泉三期"
+        },
+        {
+          "id": "rp9CCU2aiu",
+          "name": "协合襄北风储二期"
+        },
+        {
+          "id": "TPkKn90cAz",
+          "name": "协合金壁"
+        },
+        {
+          "id": "admb2jxteV",
+          "name": "中能投国综华池2025"
+        },
+        {
+          "id": "NWjeB2HYa5",
+          "name": "国电投蒙东花灯二期变电"
+        },
+        {
+          "id": "M71LfepM6O",
+          "name": "国电投蒙东扎旗四期"
+        },
+        {
+          "id": "Ki8UJal9jx",
+          "name": "国电投蒙东扎旗三期"
+        },
+        {
+          "id": "VQXX1ueCLW",
+          "name": "国电投蒙东扎旗二期"
+        },
+        {
+          "id": "QJaOoSVUiV",
+          "name": "协合回龙"
+        },
+        {
+          "id": "FqDCVXPRFX",
+          "name": "国电投蒙东开鲁二期运维"
+        },
+        {
+          "id": "L2cotXKdle",
+          "name": "博枫砀山2026"
+        },
+        {
+          "id": "F2bkFaUsCR",
+          "name": "云能投葫芦地光伏2025"
+        },
+        {
+          "id": "MUWIjuqoBv",
+          "name": "通用武威红沙岗2025"
+        },
+        {
+          "id": "ktymHesmcw",
+          "name": "协合哈尔滨增量配网"
+        },
+        {
+          "id": "ApOuGnkTYV",
+          "name": "湖南宜杨福冲储能"
+        },
+        {
+          "id": "ZFCXe41zwi",
+          "name": "国综绿能河清滩2025"
+        },
+        {
+          "id": "iIWEIlFZ3V",
+          "name": "国综绿能德强2025"
+        },
+        {
+          "id": "WwCa3SpzzM",
+          "name": "国电投蒙东通辽中心"
+        },
+        {
+          "id": "da0iFG88IQ",
+          "name": "远景广西钦南三期2026"
+        },
+        {
+          "id": "Lps3mwN5FF",
+          "name": "胜科钦南"
+        },
+        {
+          "id": "UjOoa99Cbn",
+          "name": "协合白芒营"
+        },
+        {
+          "id": "tShLV05SvF",
+          "name": "万家营子"
+        },
+        {
+          "id": "RXvtIXZhwP",
+          "name": "东兰一期"
+        },
+        {
+          "id": "HqlvO1pjMf",
+          "name": "东方分布式"
+        },
+        {
+          "id": "riMn259tHT",
+          "name": "五河金大山"
+        },
+        {
+          "id": "u6pdJRSGhn",
+          "name": "五河饮马湖"
+        },
+        {
+          "id": "KmHvJjLxD9",
+          "name": "亳州谯东二期"
+        },
+        {
+          "id": "gWj9ZJQxGM",
+          "name": "依兰"
+        },
+        {
+          "id": "1LCTYRmhKc",
+          "name": "依兰混改一期"
+        },
+        {
+          "id": "GxTcfgo9hU",
+          "name": "北留智风电场"
+        },
+        {
+          "id": "y9PIGbY24O",
+          "name": "印坪"
+        },
+        {
+          "id": "ygbvEhD6xG",
+          "name": "哈尔滨聚合"
+        },
+        {
+          "id": "QP6KnxzDwe",
+          "name": "商城迎山庙"
+        },
+        {
+          "id": "7Zmpol4FUR",
+          "name": "国电投扎旗白音"
+        },
+        {
+          "id": "WaGPMoUPpH",
+          "name": "埇桥夹沟"
+        },
+        {
+          "id": "lgC2FR4N6O",
+          "name": "埇桥符离"
+        },
+        {
+          "id": "q76YKH9aXC",
+          "name": "大柴旦西台"
+        },
+        {
+          "id": "lZ5Mm6nxkW",
+          "name": "大柴旦西台二期"
+        },
+        {
+          "id": "0gV5JbcNBU",
+          "name": "师宗丹凤"
+        },
+        {
+          "id": "0hpLW6ygHL",
+          "name": "开远仙人洞坡"
+        },
+        {
+          "id": "eu787MwXgz",
+          "name": "开鲁建华一期"
+        },
+        {
+          "id": "mgAadBoPh8",
+          "name": "开鲁建华二期"
+        },
+        {
+          "id": "ij8SOERo1E",
+          "name": "扎旗光伏"
+        },
+        {
+          "id": "OFVZwxFbRv",
+          "name": "承德丰宁"
+        },
+        {
+          "id": "MFj6ISlXEp",
+          "name": "措美"
+        },
+        {
+          "id": "PfGWmcXs6A",
+          "name": "昌图辽能协鑫"
+        },
+        {
+          "id": "y35O9hPIl4",
+          "name": "朝阳三合隆"
+        },
+        {
+          "id": "jePtOMvtu1",
+          "name": "楚雄西电花福山"
+        },
+        {
+          "id": "MoMbDOwZqP",
+          "name": "江华东大"
+        },
+        {
+          "id": "wlz1uxux0I",
+          "name": "江华回龙"
+        },
+        {
+          "id": "ZSoVUz7M7F",
+          "name": "江华桥头铺"
+        },
+        {
+          "id": "cCKk7U1W3M",
+          "name": "江华沱江"
+        },
+        {
+          "id": "HJsdfY28gq",
+          "name": "江华洪塘"
+        },
+        {
+          "id": "x3Jvk4HWi8",
+          "name": "江华界牌"
+        },
+        {
+          "id": "c3JPaaqf4G",
+          "name": "江华白芒营"
+        },
+        {
+          "id": "WSuZkTXXJ2",
+          "name": "江华白芒营三期"
+        },
+        {
+          "id": "SiDKg7KTyK",
+          "name": "江华萌渚岭"
+        },
+        {
+          "id": "o3HdQNT9aD",
+          "name": "江华金壁"
+        },
+        {
+          "id": "hXYS5qu24V",
+          "name": "浚县火龙岗"
+        },
+        {
+          "id": "jLDjJZJOEp",
+          "name": "浠水渔光"
+        },
+        {
+          "id": "obL0KvigfF",
+          "name": "瓜州安北"
+        },
+        {
+          "id": "U6yg2TcAy2",
+          "name": "瓜州干河口"
+        },
+        {
+          "id": "usMjEfPuRb",
+          "name": "盐源下大沟"
+        },
+        {
+          "id": "yyEoSXqV8N",
+          "name": "福山亿豪"
+        },
+        {
+          "id": "C2yvrBcQKA",
+          "name": "绿晟风电场"
+        },
+        {
+          "id": "GzjNYSvR3D",
+          "name": "肥西"
+        },
+        {
+          "id": "AQCA87BlpR",
+          "name": "荆门圣境山"
+        },
+        {
+          "id": "cajF4mYy3w",
+          "name": "荆门子陵铺"
+        },
+        {
+          "id": "tPsdeWK1yL",
+          "name": "荆门栗溪"
+        },
+        {
+          "id": "RVLG8FckkY",
+          "name": "萧县灵山"
+        },
+        {
+          "id": "VKEA4uqxJQ",
+          "name": "融安狮子岭一期"
+        },
+        {
+          "id": "eAIYQScXXm",
+          "name": "融安狮子岭三期"
+        },
+        {
+          "id": "JmceHSBkNQ",
+          "name": "融安狮子岭二期"
+        },
+        {
+          "id": "hMTVLrOPOk",
+          "name": "襄北农光"
+        },
+        {
+          "id": "G02aUYGP1B",
+          "name": "襄北风储一期"
+        },
+        {
+          "id": "PVEqJOFYpf",
+          "name": "襄州吴营"
+        },
+        {
+          "id": "9e8fVge439",
+          "name": "襄州峪山一期"
+        },
+        {
+          "id": "ShXIAtEUMM",
+          "name": "襄州峪山二期"
+        },
+        {
+          "id": "u2P1l9CDY0",
+          "name": "通榆乌兰花D"
+        },
+        {
+          "id": "VlpBMFnKEU",
+          "name": "通榆乌兰花E"
+        },
+        {
+          "id": "qJXl9XYKaN",
+          "name": "通榆乌兰花F"
+        },
+        {
+          "id": "XjRZfMFB07",
+          "name": "通榆新发D"
+        },
+        {
+          "id": "rwtt3n4GiI",
+          "name": "道县井塘"
+        },
+        {
+          "id": "SbLJAUT5tJ",
+          "name": "道县四马桥"
+        },
+        {
+          "id": "7SsHrUFgBz",
+          "name": "道县审章塘"
+        },
+        {
+          "id": "of2xDok6jp",
+          "name": "道县祥霖铺"
+        },
+        {
+          "id": "9h7GvS4dKo",
+          "name": "镇赉林场一期"
+        },
+        {
+          "id": "YVwQO37QkI",
+          "name": "阜西古力本皋"
+        },
+        {
+          "id": "ct40bpvyyN",
+          "name": "阜西海力板"
+        },
+        {
+          "id": "zRYWzoGth6",
+          "name": "阜西马牛虎"
+        },
+        {
+          "id": "4K4nhUGJDi",
+          "name": "阿拉善分散式"
+        },
+        {
+          "id": "Y2BZmTL0oZ",
+          "name": "黑鱼泡一期"
+        },
+        {
+          "id": "1O1vs5Xr3O",
+          "name": "山东绿能东明"
+        },
+        {
+          "id": "Qea47svkvC",
+          "name": "山东铁投观水"
+        },
+        {
+          "id": "oxotHap4MI",
+          "name": "新加坡能源南大港"
+        },
+        {
+          "id": "Jo8RMpXUln",
+          "name": "国综绿能金昌河清滩2026"
+        },
+        {
+          "id": "vfKCgxDnCt",
+          "name": "泰康金大山"
+        },
+        {
+          "id": "lW8Wl9OKV4",
+          "name": "融信泰安西沟流2026"
+        },
+        {
+          "id": "qpX9oBsFbr",
+          "name": "青岛城投呼市2026"
+        },
+        {
+          "id": "M4m7vYjQkU",
+          "name": "青岛城投商都四期2026"
+        },
+        {
+          "id": "R2kiwrujmd",
+          "name": "浙能乌图美仁一期"
+        },
+        {
+          "id": "VnZjT4mWIp",
+          "name": "国电投蒙东阿日昆都楞2026"
+        },
+        {
+          "id": "MnPhNFvvNN",
+          "name": "胜科周口宸风2026"
+        }
+      ]
+    },
+    {
+      "fieldId": "0etvvac67e2f3g0n8twpx",
+      "fieldName": "EAM名称",
+      "type": "text",
+      "options": []
+    },
+    {
+      "fieldId": "xvesfbfxm69hc4u148xm2",
+      "fieldName": "实际整改完成时间",
+      "type": "filterUp",
+      "options": []
+    },
+    {
+      "fieldId": "1ym8i1iehz05ilrbkobrp",
+      "fieldName": "目前状态",
+      "type": "filterUp",
+      "options": []
+    },
+    {
+      "fieldId": "ukuwwitayaklwxpot64sa",
+      "fieldName": "备注图片",
+      "type": "filterUp",
+      "options": []
+    },
+    {
+      "fieldId": "xyflaonxfsr57nfnt5df4",
+      "fieldName": "原因分类",
+      "type": "filterUp",
+      "options": []
+    },
+    {
+      "fieldId": "4ob6q2d4pxso2p66yzdc7",
+      "fieldName": "实际情况/具体原因",
+      "type": "text",
+      "options": []
+    },
+    {
+      "fieldId": "dudwqcjgwobfozvuhgu7l",
+      "fieldName": "异常指标",
+      "type": "singleSelect",
+      "options": [
+        {
+          "id": "M2A8lnJCPn",
+          "name": "信息化使用-0缺陷"
+        },
+        {
+          "id": "RLn00c2Pls",
+          "name": "信息化使用-故障管理-漏报值"
+        },
+        {
+          "id": "XxyaodftzP",
+          "name": "信息化使用-故障延迟上报条数"
+        },
+        {
+          "id": "MMkbcSujMU",
+          "name": "B.5 变配电设备可利用率-实际值"
+        },
+        {
+          "id": "JVvWoWrjKC",
+          "name": "B.8 变电设备故障时长-实际值"
+        },
+        {
+          "id": "Wlu7SXSmOz",
+          "name": "B.9.1 整场风机可利用率-实际值"
+        },
+        {
+          "id": "talYnKBMG2",
+          "name": "B.11 平均故障时长-实际值"
+        },
+        {
+          "id": "wvp12NIPIz",
+          "name": "B.10 故障频次-实际值"
+        },
+        {
+          "id": "Ql6jNJnJcL",
+          "name": "客户满意度≤80分"
+        },
+        {
+          "id": "VKWnG6E1mX",
+          "name": "信息化使用-新建工单未派发未执行"
+        },
+        {
+          "id": "EGDCeSBxYb",
+          "name": "应签未签-P0风险（逾期天数超合同期）"
+        },
+        {
+          "id": "wf5tdpTqD3",
+          "name": "应签未签-P0风险（逾期天数超历史最高）"
+        },
+        {
+          "id": "tvdrq6rc34",
+          "name": "应签未签-P1风险（逾期天数超P90）"
+        },
+        {
+          "id": "Qc4is72ev0",
+          "name": "成本管理-外委费用执行率低于10%"
+        },
+        {
+          "id": "wkLFsPlxlR",
+          "name": "成本管理-安全专项费用执行率低于10%"
+        },
+        {
+          "id": "tpgiif4zCY",
+          "name": "成本管理-备品备件审批超预算"
+        },
+        {
+          "id": "mBzLJVpgvS",
+          "name": "电量指标-2026上半年发电量完成率偏低"
+        },
+        {
+          "id": "aXL5kJOgAZ",
+          "name": "限电指标-2026年上半年比2025年上半年增幅较多"
+        },
+        {
+          "id": "xcWAHsBeKf",
+          "name": "损失电量-变电故障损失电量超对标值"
+        },
+        {
+          "id": "Mpa8qT5b0R",
+          "name": "损失电量-风机故障损失电量超对标值"
+        },
+        {
+          "id": "iu1hHfG7lW",
+          "name": "损失电量-计划性停机损失电量超对标值"
+        },
+        {
+          "id": "JGBdlC2sLq",
+          "name": "双细则考核指标-低于中位数"
+        },
+        {
+          "id": "Fl3EYEjps1",
+          "name": "客户满意度有效建议"
+        },
+        {
+          "id": "vb2601J3kR",
+          "name": "信息化使用-未按时上传风机离线数据"
+        },
+        {
+          "id": "guAj6zkMaA",
+          "name": "信息化使用-EAM无巡检计划工单"
+        },
+        {
+          "id": "sJmVHf6MFx",
+          "name": "应签未签-单据修改中"
+        },
+        {
+          "id": "vAuL9k9s5u",
+          "name": "应签未签-签约延误"
+        },
+        {
+          "id": "nsKqFLMeYR",
+          "name": "应签未签-正在沟通考核"
+        },
+        {
+          "id": "OJzuef3Ztp",
+          "name": "车辆成本超支-实际值多于计划值"
+        },
+        {
+          "id": "QGHbEF0UY9",
+          "name": "人工成本超支-实际值多于计划值"
+        },
+        {
+          "id": "EXjUKE98iq",
+          "name": "每50MW变电设备-年故障损失电量"
+        },
+        {
+          "id": "jiYdFbJj3x",
+          "name": "每50MW发电设备-年故障损失电量"
+        },
+        {
+          "id": "iyJNtjLJHP",
+          "name": "每50MW计划损失电量"
+        },
+        {
+          "id": "pemsFrkYhm",
+          "name": "日常费用-实际值多于计划值"
+        },
+        {
+          "id": "Es3Ku0wdd7",
+          "name": "生产成本-实际值多于计划值"
+        },
+        {
+          "id": "5bc8ggJpeT",
+          "name": "全年累计还原限电小时数超过阈值范围"
+        },
+        {
+          "id": "15YcRS7spX",
+          "name": "全年累计电量完成率低于90%"
+        },
+        {
+          "id": "0rXUnkSvXB",
+          "name": "每50MW风机损失超过标准"
+        },
+        {
+          "id": "jzRa3DjNWx",
+          "name": "每50MW变电故障超过标准"
+        },
+        {
+          "id": "vsVSwGWubF",
+          "name": "每50MW计划性停机超过标准"
+        },
+        {
+          "id": "kZ4kaKKpnH",
+          "name": "全年累计还原限电小时数高于上边界"
+        },
+        {
+          "id": "4pPSqDx67Q",
+          "name": "全年累计还原限电小时数低于下边界"
+        },
+        {
+          "id": "ZPWY7g3V12",
+          "name": "双细则低于中位数"
+        }
+      ]
+    },
+    {
+      "fieldId": "9gn8s91n149i6xozh6kn0",
+      "fieldName": "预计整改完成时间",
+      "type": "filterUp",
+      "options": []
+    },
+    {
+      "fieldId": "6xwktuomtdhlqqd3iqh3q",
+      "fieldName": "异常月份",
+      "type": "singleSelect",
+      "options": [
+        {
+          "id": "mcu5bbxgg0fy8jmbzmlkv",
+          "name": "25年分析"
+        },
+        {
+          "id": "4cxl19mb1xv06di6vvjs6",
+          "name": "1月"
+        },
+        {
+          "id": "3ohoplhqbzw9fqbyuodoa",
+          "name": "2月"
+        },
+        {
+          "id": "1hueogbmd73w3kaa4ywvn",
+          "name": "5月"
+        },
+        {
+          "id": "nrrkhjxgobyabj3n4xbp6",
+          "name": "3月"
+        },
+        {
+          "id": "zip8hd123qkes1wpwmbhl",
+          "name": "4月"
+        },
+        {
+          "id": "idt7C0NwPE",
+          "name": "6月"
+        },
+        {
+          "id": "0PJdidJ1Zn",
+          "name": "7月"
+        }
+      ]
+    },
+    {
+      "fieldId": "xy8zri8s7l8jb6jhq85rn",
+      "fieldName": "备注",
+      "type": "filterUp",
+      "options": []
+    },
+    {
+      "fieldId": "21u5bcnk51pdctkjy6758",
+      "fieldName": "目前进展",
+      "type": "filterUp",
+      "options": []
+    },
+    {
+      "fieldId": "bas952t3iarei29d7e8ca",
+      "fieldName": "具体情况描述",
+      "type": "filterUp",
+      "options": []
+    },
+    {
+      "fieldId": "1kgnhr6fqota0ct19aqn6",
+      "fieldName": "PMO",
+      "type": "singleSelect",
+      "options": [
+        {
+          "id": "6g5x1voah3bmf30xsbf0k",
+          "name": "王磊阳"
+        },
+        {
+          "id": "17wqxr8ea6fsta2xietje",
+          "name": "陈亮"
+        },
+        {
+          "id": "qbvvcjfivwv76aiz856v3",
+          "name": "王爽"
+        },
+        {
+          "id": "cxjise0baudn42h4ghuwh",
+          "name": "任慧敏"
+        },
+        {
+          "id": "q8p90s4in4j2mkew2ls4d",
+          "name": "谢远操"
+        },
+        {
+          "id": "mo48j8li996gj9i8dwwbv",
+          "name": "席鹏程"
+        },
+        {
+          "id": "2qEyKLoM8r",
+          "name": "赵金平"
+        }
+      ]
+    },
+    {
+      "fieldId": "gvq1gwov1akrqhvdpjftd",
+      "fieldName": "措施",
+      "type": "filterUp",
+      "options": []
+    },
+    {
+      "fieldId": "rmnmea3m114npk2s537em",
+      "fieldName": "区域",
+      "type": "singleSelect",
+      "options": [
+        {
+          "id": "BEYkmm8qzm",
+          "name": "华东区域中心"
+        },
+        {
+          "id": "eyJf2DPquY",
+          "name": "西南区域中心"
+        },
+        {
+          "id": "zP12UcWvai",
+          "name": "豫西交付中心"
+        },
+        {
+          "id": "JN6ymA17ZL",
+          "name": "东北区域中心"
+        },
+        {
+          "id": "89h8tPBsZi",
+          "name": "鄂赣交付中心"
+        },
+        {
+          "id": "zI0EiBS3k8",
+          "name": "华北区域子公司"
+        },
+        {
+          "id": "8f0p1BDcRC",
+          "name": "华南区域中心"
+        },
+        {
+          "id": "fVatpP8SIO",
+          "name": "西北区域子公司"
+        }
+      ]
+    },
+    {
+      "fieldId": "v6mn5bqeigdt6xmm4a45b",
+      "fieldName": "整改人",
+      "type": "filterUp",
+      "options": []
+    },
+    {
+      "fieldId": "oWJyRA6",
+      "fieldName": "最近更新日期",
+      "type": "lastModifiedTime",
+      "options": []
+    },
+    {
+      "fieldId": "Ab3Tn5c",
+      "fieldName": "PMO手动审核",
+      "type": "filterUp",
+      "options": []
+    }
+  ],
+  "sampleRecords": [
+    {
+      "recordId": "00way3Maco",
+      "cells": {
+        "06h8ukzbt5k6lit2wupf2": {
+          "id": "65C05KvVzP",
+          "name": "信发小草湖"
+        },
+        "0etvvac67e2f3g0n8twpx": "110kV信发小草湖南风电一场",
+        "1kgnhr6fqota0ct19aqn6": {
+          "id": "mo48j8li996gj9i8dwwbv",
+          "name": "席鹏程"
+        },
+        "1ym8i1iehz05ilrbkobrp": {
+          "refFieldType": "singleSelect",
+          "value": [
+            {
+              "id": "zcm6z7CP74",
+              "name": "已完成"
+            }
+          ]
+        },
+        "21u5bcnk51pdctkjy6758": {
+          "refFieldType": "text",
+          "value": [
+            "已完成"
+          ]
+        },
+        "4ob6q2d4pxso2p66yzdc7": "136%",
+        "6xwktuomtdhlqqd3iqh3q": {
+          "id": "3ohoplhqbzw9fqbyuodoa",
+          "name": "2月"
+        },
+        "9gn8s91n149i6xozh6kn0": {
+          "refFieldType": "number",
+          "value": [
+            46112
+          ]
+        },
+        "Ab3Tn5c": {
+          "refFieldType": "singleSelect",
+          "value": []
+        },
+        "bas952t3iarei29d7e8ca": {
+          "refFieldType": "text",
+          "value": [
+            "不涉及"
+          ]
+        },
+        "dudwqcjgwobfozvuhgu7l": {
+          "id": "QGHbEF0UY9",
+          "name": "人工成本超支-实际值多于计划值"
+        },
+        "gvq1gwov1akrqhvdpjftd": {
+          "refFieldType": "text",
+          "value": [
+            "无"
+          ]
+        },
+        "oWJyRA6": "2026-07-17T14:47:28+08:00",
+        "rmnmea3m114npk2s537em": {
+          "id": "fVatpP8SIO",
+          "name": "西北区域子公司"
+        },
+        "xvesfbfxm69hc4u148xm2": {
+          "refFieldType": "number",
+          "value": [
+            46078
+          ]
+        },
+        "xyflaonxfsr57nfnt5df4": {
+          "refFieldType": "multipleSelect",
+          "value": [
+            [
+              {
+                "id": "d5aseui9krdhg5447ym4u",
+                "name": "不可抗力"
+              }
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "recordId": "017FoUG4MI",
+      "cells": {
+        "06h8ukzbt5k6lit2wupf2": {
+          "id": "juoVtjnnF7",
+          "name": "粤电仙人山"
+        },
+        "0etvvac67e2f3g0n8twpx": "仙人山风电场",
+        "1kgnhr6fqota0ct19aqn6": {
+          "id": "q8p90s4in4j2mkew2ls4d",
+          "name": "谢远操"
+        },
+        "1ym8i1iehz05ilrbkobrp": {
+          "refFieldType": "singleSelect",
+          "value": [
+            {
+              "id": "zcm6z7CP74",
+              "name": "已完成"
+            }
+          ]
+        },
+        "21u5bcnk51pdctkjy6758": {
+          "refFieldType": "text",
+          "value": [
+            "已完成"
+          ]
+        },
+        "4ob6q2d4pxso2p66yzdc7": "0",
+        "6xwktuomtdhlqqd3iqh3q": {
+          "id": "1hueogbmd73w3kaa4ywvn",
+          "name": "5月"
+        },
+        "9gn8s91n149i6xozh6kn0": {
+          "refFieldType": "number",
+          "value": [
+            46228
+          ]
+        },
+        "Ab3Tn5c": {
+          "refFieldType": "singleSelect",
+          "value": []
+        },
+        "bas952t3iarei29d7e8ca": {
+          "refFieldType": "text",
+          "value": [
+            "2026 年 1-5 月无风机故障记录，实际情况需核实"
+          ]
+        },
+        "dudwqcjgwobfozvuhgu7l": {
+          "id": "RLn00c2Pls",
+          "name": "信息化使用-故障管理-漏报值"
+        },
+        "gvq1gwov1akrqhvdpjftd": {
+          "refFieldType": "text",
+          "value": [
+            "业主建设无故障风场；暂不允许上传故障信息"
+          ]
+        },
+        "oWJyRA6": "2026-07-17T14:47:28+08:00",
+        "rmnmea3m114npk2s537em": {
+          "id": "eyJf2DPquY",
+          "name": "西南区域中心"
+        },
+        "xvesfbfxm69hc4u148xm2": {
+          "refFieldType": "number",
+          "value": [
+            46198
+          ]
+        },
+        "xyflaonxfsr57nfnt5df4": {
+          "refFieldType": "multipleSelect",
+          "value": [
+            [
+              {
+                "id": "d5aseui9krdhg5447ym4u",
+                "name": "不可抗力"
+              }
+            ]
+          ]
+        }
+      }
+    }
+  ]
+}

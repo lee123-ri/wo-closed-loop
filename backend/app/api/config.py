@@ -4,10 +4,10 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.api.auth import require_auth
+from app.api.auth import require_admin, require_auth
 from app.models import (
     ApprovalFlow, ConfigDefinition, NotificationPolicy, ParsingRule, PriorityRule, Project, SLADefinition,
-    User, WorkOrderTypeKB, PersonProjectMap, RegionPMO, RoleAssignment,
+    User, WorkOrderTypeKB, PersonProjectMap, RegionPMO, RoleAssignment, RoleDataScope,
 )
 from app.schemas.config import (
     ApprovalFlowOut, ConfigDefCreate, ConfigDefinitionOut, NotificationPolicyCreate,
@@ -15,14 +15,30 @@ from app.schemas.config import (
     PriorityRuleCreate, PriorityRuleOut, PriorityRuleUpdate, ProjectOut, SLADefinitionOut, UserOut,
     WorkOrderTypeCreate, WorkOrderTypeOut, WorkOrderTypeUpdate,
     RegionPMOOut, RegionPMOCreate, RoleAssignmentOut, RoleAssignmentUpdate,
+    RoleDataScopeOut, RoleDataScopeUpdate,
 )
 
 router = APIRouter(prefix="/config", tags=["config"])
 
 
-@router.get("/sources", response_model=list[ConfigDefinitionOut])
-def list_sources(db: Session = Depends(get_db)):
-    return db.query(ConfigDefinition).filter_by(category="source").order_by(ConfigDefinition.sort_order).all()
+# ── 暂停发单开关（仅管理员可切换） ─────────────────────
+
+class SystemPauseBody(BaseModel):
+    enabled: bool
+
+
+@router.get("/system-pause")
+def get_system_pause(db: Session = Depends(get_db)):
+    """读取「暂停发单」状态（任意已登录用户，前端据此显示横幅）。"""
+    from app.services.maintenance import state
+    return state(db)
+
+
+@router.put("/system-pause")
+def set_system_pause(body: SystemPauseBody, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    """切换「暂停发单」（仅管理员）。开启后所有新建/派发工单入口返回 423。"""
+    from app.services.maintenance import set_paused
+    return set_paused(db, body.enabled, actor_id=user.id)
 
 
 @router.get("/statuses", response_model=list[ConfigDefinitionOut])
@@ -30,49 +46,67 @@ def list_statuses(db: Session = Depends(get_db)):
     return db.query(ConfigDefinition).filter_by(category="status").order_by(ConfigDefinition.sort_order).all()
 
 
-@router.get("/anomaly-categories", response_model=list[ConfigDefinitionOut])
-def list_anomaly_categories(db: Session = Depends(get_db)):
-    """异常指标大类（source=alert 的细分维度），extra 含 default_person_name / agent"""
-    return db.query(ConfigDefinition).filter_by(category="anomaly_type").order_by(ConfigDefinition.sort_order).all()
+# ── 工单类型（统一口径：来源/工单类型/异常指标大类三合一）──────────
+
+@router.get("/work-order-types", response_model=list[ConfigDefinitionOut])
+def list_work_order_types(db: Session = Depends(get_db)):
+    """10 个内置 + 后台新增的工单类型。extra 含 flow / default_approver_name / default_person_name。"""
+    return db.query(ConfigDefinition).filter_by(category="work_order_type").order_by(ConfigDefinition.sort_order).all()
 
 
-class AnomalyCategoryUpdate(BaseModel):
-    name: str | None = None
+class WorkOrderTypeConfigCreate(BaseModel):
+    """极简新增：只输名字即可建；其余走默认（flow=plan，按运营计划工单流程）。"""
+    name: str
+    default_approver_name: str | None = None
     default_person_name: str | None = None
-    agent: str | None = None
 
 
-@router.patch("/anomaly-categories/{def_id}", response_model=ConfigDefinitionOut)
-def update_anomaly_category(def_id: int, body: AnomalyCategoryUpdate, db: Session = Depends(get_db)):
-    """编辑异常大类的显示名 / 默认责任人 / 分析 Agent（空串清空默认责任人）"""
-    c = db.get(ConfigDefinition, def_id)
-    if not c or c.category != "anomaly_type":
-        raise HTTPException(404, "异常大类不存在")
-    extra = dict(c.extra or {})
-    if body.name is not None:
-        c.name = body.name
-    if body.default_person_name is not None:
-        extra["default_person_name"] = body.default_person_name or None
-    if body.agent is not None:
-        extra["agent"] = body.agent or None
-    c.extra = extra
-    db.commit()
-    db.refresh(c)
+class WorkOrderTypeConfigUpdate(BaseModel):
+    name: str | None = None
+    flow: str | None = None
+    default_approver_name: str | None = None
+    default_person_name: str | None = None
+
+
+@router.post("/work-order-types", response_model=ConfigDefinitionOut, status_code=201)
+def add_work_order_type(body: WorkOrderTypeConfigCreate, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    """新增工单类型：只输名字即建（自动 code=custom_N，flow=plan 走运营计划流程）。"""
+    if not (body.name or "").strip():
+        raise HTTPException(400, "类型名不能为空")
+    mx = db.query(ConfigDefinition).filter_by(category="work_order_type").count()
+    c = ConfigDefinition(
+        category="work_order_type",
+        code=f"custom_{mx + 1}",
+        name=body.name.strip(),
+        sort_order=mx,
+        extra={
+            "flow": "plan",
+            "default_approver_name": body.default_approver_name or None,
+            "default_person_name": body.default_person_name or None,
+        },
+    )
+    db.add(c); db.commit(); db.refresh(c)
     return c
 
 
-@router.get("/work-order-types", response_model=list[ConfigDefinitionOut])
-def list_wo_types(db: Session = Depends(get_db)):
-    """工单类型（从 workorder_type_kb 取）"""
-    rows = db.query(WorkOrderTypeKB).order_by(WorkOrderTypeKB.sort_order).all()
-    return [
-        ConfigDefinitionOut(
-            id=r.id, category="workorder_type", code=r.type_code, name=r.name,
-            color=None, sort_order=r.sort_order,
-            extra={"desc": r.desc, "default_priority": r.default_priority},
-        )
-        for r in rows
-    ]
+@router.patch("/work-order-types/{def_id}", response_model=ConfigDefinitionOut)
+def update_work_order_type(def_id: int, body: WorkOrderTypeConfigUpdate, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    """编辑类型显示名 / 流程 / 默认审批人 / 默认责任人（空串清空）。"""
+    c = db.get(ConfigDefinition, def_id)
+    if not c or c.category != "work_order_type":
+        raise HTTPException(404, "工单类型不存在")
+    extra = dict(c.extra or {})
+    if body.name is not None:
+        c.name = body.name
+    if body.flow is not None:
+        extra["flow"] = body.flow or None
+    if body.default_approver_name is not None:
+        extra["default_approver_name"] = body.default_approver_name or None
+    if body.default_person_name is not None:
+        extra["default_person_name"] = body.default_person_name or None
+    c.extra = extra
+    db.commit(); db.refresh(c)
+    return c
 
 
 @router.get("/projects", response_model=list[ProjectOut])
@@ -213,7 +247,7 @@ def list_wo_types_full(db: Session = Depends(get_db)):
     return db.query(WorkOrderTypeKB).order_by(WorkOrderTypeKB.sort_order).all()
 
 
-@router.post("/work-order-types", response_model=WorkOrderTypeOut, status_code=201)
+@router.post("/sop-types", response_model=WorkOrderTypeOut, status_code=201)
 def add_wo_type(body: WorkOrderTypeCreate, db: Session = Depends(get_db)):
     mx = db.query(WorkOrderTypeKB).count()
     t = WorkOrderTypeKB(
@@ -233,7 +267,7 @@ def add_wo_type(body: WorkOrderTypeCreate, db: Session = Depends(get_db)):
     return t
 
 
-@router.patch("/work-order-types/{type_id}", response_model=WorkOrderTypeOut)
+@router.patch("/sop-types/{type_id}", response_model=WorkOrderTypeOut)
 def update_wo_type(type_id: int, body: WorkOrderTypeUpdate, db: Session = Depends(get_db)):
     t = db.get(WorkOrderTypeKB, type_id)
     if not t: raise HTTPException(404, "类型不存在")
@@ -244,7 +278,7 @@ def update_wo_type(type_id: int, body: WorkOrderTypeUpdate, db: Session = Depend
     return t
 
 
-@router.delete("/work-order-types/{type_id}", status_code=204)
+@router.delete("/sop-types/{type_id}", status_code=204)
 def del_wo_type(type_id: int, db: Session = Depends(get_db)):
     t = db.get(WorkOrderTypeKB, type_id)
     if not t: raise HTTPException(404, "类型不存在")
@@ -542,3 +576,36 @@ def update_role_assignment(role_code: str, body: RoleAssignmentUpdate, db: Sessi
         user_id=r.user_id, user_name=user.name if user else None,
         sort_order=r.sort_order,
     )
+
+
+# ── 数据范围角色配置（谁能看哪些工单，后台可配） ──
+
+# 与 services/scope.py 的 SCOPE_OPTIONS 保持一致（self/region/all）
+VALID_ROLE_SCOPES = frozenset(("self", "region", "all"))
+
+
+@router.get("/role-scopes", response_model=list[RoleDataScopeOut])
+def list_role_scopes(db: Session = Depends(get_db)):
+    """列出数据范围角色及其可见范围勾选（admin 行 is_locked=True，后台不可改）。"""
+    return db.query(RoleDataScope).order_by(RoleDataScope.sort_order, RoleDataScope.id).all()
+
+
+@router.put("/role-scopes/{role_code}", response_model=RoleDataScopeOut)
+def update_role_scope(role_code: str, body: RoleDataScopeUpdate, db: Session = Depends(get_db),
+                      user: User = Depends(require_admin)):
+    """修改某角色的可见范围（仅管理员；admin 角色锁定不可改）。"""
+    r = db.query(RoleDataScope).filter(RoleDataScope.role_code == role_code).first()
+    if not r:
+        raise HTTPException(404, "数据范围角色不存在")
+    if r.is_locked:
+        raise HTTPException(400, "该角色数据范围已锁定，不可修改")
+    invalid = [s for s in body.scopes if s not in VALID_ROLE_SCOPES]
+    if invalid:
+        raise HTTPException(400, f"无效范围值: {', '.join(invalid)}")
+    r.scopes = list(body.scopes)
+    from app.services.audit import log_audit
+    log_audit(db, actor_id=user.id, action="update_role_scope", target_type="role_data_scope",
+              target_id=r.id, detail={"role_code": r.role_code, "scopes": r.scopes})
+    db.commit()
+    db.refresh(r)
+    return r

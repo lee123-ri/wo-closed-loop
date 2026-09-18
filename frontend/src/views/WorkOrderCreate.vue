@@ -20,11 +20,7 @@
         </div>
         <div class="form-group">
           <label><span class="req">*</span>工单类型</label>
-          <t-select v-model="form.type_id" placeholder="选择工单类型" :options="typeOptions" />
-        </div>
-        <div class="form-group">
-          <label><span class="req">*</span>来源</label>
-          <t-select v-model="form.source_code" placeholder="选择来源" :options="sourceOptions" />
+          <t-select v-model="form.source_code" placeholder="选择工单类型" :options="typeOptions" />
         </div>
         <div class="form-group">
           <label><span class="req">*</span>优先级</label>
@@ -33,6 +29,10 @@
         <div class="form-group form-full">
           <label><span class="req">*</span>标题</label>
           <t-input v-model="form.title" placeholder="一句话概括工单内容" maxlength="120" />
+        </div>
+        <div class="form-group">
+          <label>服务</label>
+          <t-input v-model="form.service" placeholder="填写对应服务" maxlength="128" />
         </div>
         <div class="form-group form-full">
           <label>触发原因</label>
@@ -123,7 +123,7 @@ import { toast } from "@/utils/feedback";
 import { computed, h, onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { createWorkOrder } from "@/api/workorders";
-import { getProjectsAll, getSources, getWoTypes, getUsersAll, getPersonProjectMap, type ConfigItem } from "@/api/config";
+import { getProjectsAll, getWoTypes, getUsersAll, getPersonProjectMap, type ConfigItem } from "@/api/config";
 import { importTablePreview, importTableConfirm, downloadTemplate, type ImportPreviewResult, type ImportPreviewRow } from "@/api/imports";
 import SearchableSelect from "@/components/SearchableSelect.vue";
 import PageError from "@/components/PageError.vue";
@@ -139,7 +139,6 @@ const configError = ref("");
 const tab = ref<"manual" | "excel">("manual");
 
 const projects = ref<any[]>([]);
-const sources = ref<ConfigItem[]>([]);
 const woTypes = ref<ConfigItem[]>([]);
 const allUsers = ref<any[]>([]);
 const personMap = ref<any[]>([]);
@@ -147,8 +146,7 @@ const personMap = ref<any[]>([]);
 const projectOptions = computed(() =>
   projects.value.map((p) => ({ value: p.id, label: `${p.code} · ${p.name}` }))
 );
-const typeOptions = computed(() => woTypes.value.map((t) => ({ value: t.id, label: t.name })));
-const sourceOptions = computed(() => sources.value.map((s) => ({ value: s.code, label: s.name })));
+const typeOptions = computed(() => woTypes.value.map((t: any) => ({ value: t.code, label: t.name })));
 const priorityOptions = [
   { value: "P1", label: "P1 紧急" },
   { value: "P2", label: "P2 普通" },
@@ -158,10 +156,9 @@ const regionOptions = REGIONS.map((r) => ({ value: r, label: r }));
 
 const form = reactive({
   project_id: undefined as number | undefined,
-  type_id: undefined as number | undefined,
-  source_code: "manual",
+  source_code: "" as string,
   priority: "P2",
-  title: "", reason: "", action: "",
+  title: "", service: "", reason: "", action: "",
   person_id: undefined as number | undefined,
   approver_id: undefined as number | undefined,
   planned_start_date: "",
@@ -191,8 +188,7 @@ async function submitManual() {
   if (submitting.value) return;
   const missing = [
     !form.project_id && "项目名称",
-    !form.type_id && "工单类型",
-    !form.source_code && "来源",
+    !form.source_code && "工单类型",
     !form.priority && "优先级",
     !form.title.trim() && "标题",
     !form.action.trim() && "行动要求",
@@ -204,8 +200,8 @@ async function submitManual() {
   submitting.value = true;
   try {
     await createWorkOrder({
-      title: form.title, reason: form.reason || undefined, action: form.action,
-      project_id: form.project_id, type_id: form.type_id, source_code: form.source_code,
+      title: form.title, service: form.service || undefined, reason: form.reason || undefined, action: form.action,
+      project_id: form.project_id, source_code: form.source_code,
       priority: form.priority, person_id: form.person_id, approver_id: form.approver_id,
       region: form.region || undefined,
       planned_start_date: form.planned_start_date || undefined,
@@ -220,10 +216,10 @@ async function loadConfig() {
   configLoading.value = true;
   configError.value = "";
   try {
-    const [p, s, t, u, pm] = await Promise.all([getProjectsAll(), getSources(), getWoTypes(), getUsersAll(), getPersonProjectMap()]);
+    const [p, t, u, pm] = await Promise.all([getProjectsAll(), getWoTypes(), getUsersAll(), getPersonProjectMap()]);
     // 编码数字序，避免下拉按拼音散乱；项目和类型由使用者明确选择。
     projects.value = [...p].sort((a, b) => String(a.code || "").localeCompare(String(b.code || ""), undefined, { numeric: true }));
-    sources.value = s; woTypes.value = t; allUsers.value = u; personMap.value = pm;
+    woTypes.value = t; allUsers.value = u; personMap.value = pm;
     autoDeadline();
   } catch (e: any) {
     configError.value = e.message || "请稍后重试";

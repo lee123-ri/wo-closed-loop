@@ -16,6 +16,7 @@ from app.core.database import get_db
 from app.core.security_middleware import limiter
 from app.models import Project, User, WorkOrder, WorkOrderTypeKB, StatusLog
 from app.services.priority_service import match_priority
+from app.services.maintenance import is_paused
 
 router = APIRouter(prefix="/bot", tags=["bot"])
 
@@ -55,6 +56,9 @@ async def bot_command(request: Request, db: Session = Depends(get_db)):
     text = body.get("text", {}).get("content", "") or body.get("content", "")
     sender_id = body.get("senderStaffId") or body.get("senderId") or ""
 
+    if is_paused(db):
+        return {"msgtype": "text", "text": {"content": "系统维护中：已暂停发单，暂不能创建工单，请稍后再试"}}
+
     parsed = _parse_create_command(text)
     if not parsed:
         return {
@@ -73,9 +77,11 @@ async def bot_command(request: Request, db: Session = Depends(get_db)):
 
     # 自动优先级
     priority = match_priority(db, title, "manual")
-    # 默认审批人：按类型知识库
-    default_type = db.query(WorkOrderTypeKB).filter(WorkOrderTypeKB.type_code == "other").first()
-    approver_id = default_type.default_approver_id if default_type else None
+    # 工单类型=关键会议工单（群内 @机器人交办）；审批人取该类型默认审批人
+    from app.models import ConfigDefinition
+    wo_type = db.query(ConfigDefinition).filter_by(category="work_order_type", code="meeting").first()
+    approver_name = ((wo_type.extra or {}).get("default_approver_name") or None) if wo_type else None
+    approver = db.query(User).filter(User.name == approver_name).first() if approver_name else None
 
     # 截止日期（简化：匹配到 SLA 天数）
     days = {"P1": 1, "P2": 3, "P3": 7}.get(priority, 7)
@@ -90,9 +96,8 @@ async def bot_command(request: Request, db: Session = Depends(get_db)):
         code=code, title=title, reason="群机器人@创建", action=title,
         project_id=proj.id if proj else None,
         person_id=person.id if person else None,
-        approver_id=approver_id,
-        type_id=default_type.id if default_type else None,
-        source_code="manual", status="pending", priority=priority,
+        approver_id=approver.id if approver else None,
+        source_code="meeting", status="pending", priority=priority,
         created_date=date.today(), deadline=deadline,
     )
     db.add(wo)

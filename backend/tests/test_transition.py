@@ -51,7 +51,7 @@ def test_invalid_transition_blocked(db):
 def test_oa_generated_on_dispatch(db):
     """P1 建单即 approving，派发生成 OA"""
     wo = create_work_order(WorkOrderCreate(
-        title="派发测试", action="做", reason="派发测试触发", source_code="alert", priority="P1",
+        title="派发测试", action="做", reason="派发测试触发", source_code="meeting", priority="P1",
         deadline=date.today(), project_id=1, person_id=1, approver_id=11,
         type_id=1, planned_start_date=date.today(),
     ), db)
@@ -66,7 +66,7 @@ def test_live_oa_blocks_manual_transition(db):
     from fastapi import HTTPException
 
     wo = create_work_order(WorkOrderCreate(
-        title="OA驱动测试", action="做", reason="人工流转应被拦截", source_code="manual",
+        title="OA驱动测试", action="做", reason="人工流转应被拦截", source_code="meeting",
         priority="P2", deadline=date.today(), project_id=1, person_id=1, approver_id=11,
         type_id=1, planned_start_date=date.today(),
     ), db)
