@@ -89,6 +89,9 @@ class Settings(BaseSettings):
     name_login_enabled: bool = False   # 姓名登录开关（无口令，默认关）
     dev_login_enabled: bool = False    # 开发登录开关（默认关，生产恒关）
 
+    # 上线默认只采集到数据池，由管理员逐条勾选后才生成工单；避免首次同步倒灌。
+    auto_workorder_import_enabled: bool = False
+
     # 对外开放 API（外部系统/Agent 经 X-API-Key 建单/查询工单；为空=禁用对外接口）
     external_api_key: str = ""
 

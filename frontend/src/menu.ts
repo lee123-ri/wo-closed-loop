@@ -36,7 +36,7 @@ export const MENU_GROUPS: MenuGroup[] = [
     items: [
       { path: "/projects", icon: "folder", title: "项目管理" },
       { path: "/users", icon: "usergroup", title: "用户管理" },
-      // 数据池是自动同步链路的内部暂存层，日常不开放人工入口；需要人工兜底时恢复本项。
+      // 数据池是历史自动同步链路的内部暂存层，正式上线不作为业务入口。
       // { path: "/pool", icon: "layers", title: "数据池" },
       { path: "/sop", icon: "book-open", title: "SOP知识库" },
     ],
@@ -47,7 +47,6 @@ export const MENU_GROUPS: MenuGroup[] = [
     items: [
       { path: "/config", icon: "setting", title: "规则配置" },
       { path: "/audit-log", icon: "system-log", title: "操作日志" },
-      { path: "/dingtalk", icon: "chat", title: "钉钉集成" },
     ],
   },
 ];

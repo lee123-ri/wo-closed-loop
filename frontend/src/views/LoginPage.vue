@@ -46,8 +46,9 @@ const route = useRoute();
 const store = useUserStore();
 const loading = ref(false);
 const devUser = ref<any>(null);
-// 开发登录入口：仅当 VITE_DEV_LOGIN=true 时显示（后端另有开关，双重保险）
-const devLoginEnabled = import.meta.env.VITE_DEV_LOGIN === "true";
+// 开发登录入口只允许在 Vite 开发模式出现；生产构建即使误注入 VITE_DEV_LOGIN 也绝不渲染。
+// 后端还会在 APP_ENV=production 时拒绝 /auth/dev-login，形成双重保护。
+const devLoginEnabled = import.meta.env.DEV && import.meta.env.VITE_DEV_LOGIN === "true";
 
 const devUsers = [
   { id: 14, name: "李沛东", role: "admin" },
