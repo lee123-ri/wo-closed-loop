@@ -9,7 +9,6 @@ from app.services.region_map import normalize_region
 
 class WorkOrderBase(BaseModel):
     title: str = Field(..., max_length=256)
-    service: str | None = Field(None, max_length=128)
     reason: str | None = None
     action: str | None = None
     project_id: int | None = None
@@ -42,7 +41,6 @@ class WorkOrderBasicUpdate(BaseModel):
     """
 
     title: str | None = None
-    service: str | None = Field(None, max_length=128)
     reason: str | None = None
     action: str | None = None
     conclusion: str | None = None
@@ -65,7 +63,6 @@ class WorkOrderBasicUpdate(BaseModel):
 
 class WorkOrderUpdate(BaseModel):
     title: str | None = None
-    service: str | None = Field(None, max_length=128)
     reason: str | None = None
     action: str | None = None
     status: str | None = None

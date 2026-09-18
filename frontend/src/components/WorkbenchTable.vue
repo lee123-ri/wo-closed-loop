@@ -3,8 +3,9 @@
     <div ref="topScroller" class="top-scroller" aria-label="工单表格横向滚动" @scroll="syncFromTop">
       <div class="top-scroll-content"></div>
     </div>
-    <div ref="tableViewport" class="table-viewport" @scroll="syncFromTable">
     <t-table
+      ref="tableRef"
+      class="table-viewport"
       :data="items"
       :columns="columns"
       row-key="id"
@@ -19,17 +20,19 @@
       :pagination="pagination"
       @page-change="onPageChange"
     >
-      <!-- 信息块：编号/来源/优先级/告警/标题/项目/区域 -->
+      <!-- 信息块：仅保留系统工单号，其余业务信息分行展示。 -->
       <template #info="{ row }">
         <div class="info">
-          <div class="info-tags">
-            <span class="info-code">{{ row.code }}</span>
-            <span v-if="row.source_code" class="tag" :class="sourceTagClass(row.source_code)">{{ sourceLabel(row.source_code) }}</span>
-            <span class="tag" :class="prioTagCls(row.priority)">{{ priorityLabel(row.priority) }}</span>
-            <span v-if="row.escalation_level > 0" class="tag" :class="row.escalation_level >= 3 ? 'tag-red' : 'tag-amber'">{{ escLabel[row.escalation_level] }}</span>
-          </div>
+          <div class="info-code">系统单号 {{ row.code }}</div>
           <div class="info-title" :title="row.title">{{ row.title }}</div>
-          <div class="info-sub">{{ row.project_name || "—" }}<template v-if="row.region"> · {{ row.region }}</template></div>
+          <div class="info-grid">
+            <span><b>项目</b>{{ row.project_name || "—" }}</span>
+            <span><b>区域</b>{{ row.region || "—" }}</span>
+            <span><b>类型</b>{{ sourceLabel(row.source_code) }}</span>
+            <span><b>优先级</b>{{ priorityLabel(row.priority) }}</span>
+            <span v-if="row.escalation_level > 0" class="info-alert"><b>预警</b>{{ escLabel[row.escalation_level] }}</span>
+          </div>
+          <div class="info-deliverable"><b>交付物</b><span :title="row.task_deliverable || ''">{{ row.task_deliverable || "—" }}</span></div>
         </div>
       </template>
 
@@ -39,10 +42,6 @@
           <div class="who-line"><span class="who-k">责任人</span><span class="who-v">{{ row.person_name || "—" }}</span></div>
           <div class="who-line"><span class="who-k">审批人</span><span class="who-v">{{ row.approver_name || "—" }}</span></div>
         </div>
-      </template>
-
-      <template #service="{ row }">
-        <span class="service" :title="row.service || ''">{{ row.service || "—" }}</span>
       </template>
 
       <!-- 时间列 -->
@@ -115,7 +114,6 @@
         </div>
       </template>
     </t-table>
-    </div>
 
     <!-- 抽屉：派发（发起OA审批） -->
     <t-drawer v-model:visible="dispatchDrawer.visible" header="发起审批 · 派发工单" size="420px" :footer="false">
@@ -186,13 +184,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
+import { computed, nextTick, onMounted, reactive, ref } from "vue";
 import { toast, confirmDialog } from "@/utils/feedback";
 import { getWoTypes } from "@/api/config";
 import { getWorkOrder, updateWorkOrder, transitionWorkOrder, type WorkOrder } from "@/api/workorders";
 import { backfillWO } from "@/api/pool";
 import {
-  sourceLabel, sourceTagClass, priorityLabel, priorityTheme,
+  sourceLabel, priorityLabel,
   escLabel, flowProgress, hasLiveOA, statusMap,
 } from "@/utils/wo-display";
 import SearchableSelect from "@/components/SearchableSelect.vue";
@@ -219,7 +217,16 @@ const emit = defineEmits<{
 const selKeys = computed(() => props.selectedRowKeys ?? []);
 const topScroller = ref<HTMLElement | null>(null);
 const tableViewport = ref<HTMLElement | null>(null);
+const tableRef = ref<{ $el?: HTMLElement } | null>(null);
 let syncingHorizontalScroll = false;
+
+onMounted(async () => {
+  await nextTick();
+  const viewport = tableRef.value?.$el?.querySelector<HTMLElement>(".t-table__content");
+  if (!viewport) return;
+  tableViewport.value = viewport;
+  viewport.addEventListener("scroll", syncFromTable, { passive: true });
+});
 
 function syncFromTop() {
   if (syncingHorizontalScroll || !topScroller.value || !tableViewport.value) return;
@@ -238,7 +245,6 @@ function syncFromTable() {
 /* ---------- 显示辅助 ---------- */
 const stepIcon = (s: string) => (s === "done" ? "✓" : s === "active" ? "●" : s === "warn" ? "⚠" : "○");
 const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
-const prioTagCls = (p: string) => (priorityTheme(p) === "danger" ? "tag-red" : priorityTheme(p) === "warning" ? "tag-amber" : "tag-blue");
 // 异常主单（非措施工单且带 metric_type）→ 五阶段；措施工单走普通三步
 const isAnomalyHost = (row: WorkOrder) => !!row.metric_type && !row.is_measure;
 
@@ -538,7 +544,6 @@ function onPageChange(p: { current: number; pageSize: number }) {
 const columns = [
   { colKey: "row-select", type: "multiple" as const, width: 44, fixed: "left" as const },
   { colKey: "info", title: "工单信息", width: 300 },
-  { colKey: "service", title: "服务", width: 150, ellipsis: true },
   { colKey: "who", title: "责任人 / 审批人", width: 120 },
   { colKey: "time", title: "时间", width: 120 },
   { colKey: "flow", title: "流程进度", width: 248 },
@@ -555,18 +560,22 @@ const columns = [
   --td-scrollbar-hover-color: rgba(0, 0, 0, 0.55);
 }
 .top-scroller { position: sticky; top: 0; z-index: 3; overflow-x: auto; overflow-y: hidden; height: 12px; margin: 0 0 8px; background: var(--card, #fff); }
-.top-scroll-content { width: 1px; min-width: 1602px; height: 1px; }
-.table-viewport { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
-.table-viewport::-webkit-scrollbar { display: none; }
-.table-viewport :deep(.t-table) { min-width: 1602px; }
+.top-scroll-content { width: 1px; min-width: 1452px; height: 1px; }
+.table-viewport { max-width: 100%; }
+.table-viewport :deep(.t-table__content) { overflow-x: auto; scrollbar-width: none; }
+.table-viewport :deep(.t-table__content::-webkit-scrollbar) { display: none; }
+.table-viewport :deep(.t-table__content > table) { min-width: 1452px; }
 .workbench :deep(.t-table__content) { scrollbar-width: none; }
 .workbench :deep(.t-table__content::-webkit-scrollbar) { display: none; }
-.service { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .workbench :deep(.t-table__row) { cursor: pointer; }
-.info-tags { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-bottom: 4px; }
-.info-code { font-family: monospace; font-size: 12px; color: var(--muted); }
+.info-code { font-family: monospace; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
 .info-title { font-weight: 600; font-size: 13px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.info-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; margin-top: 5px; font-size: 11px; color: #444; }
+.info-grid span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.info-grid b, .info-deliverable b { margin-right: 4px; color: var(--muted); font-weight: 500; }
+.info-alert { color: var(--red); }
+.info-deliverable { display: flex; gap: 2px; margin-top: 4px; font-size: 11px; color: #444; }
+.info-deliverable span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .who-line { font-size: 12px; line-height: 1.7; }
 .who-k { color: var(--muted); font-size: 11px; margin-right: 4px; }
 .who-v { color: #333; }

@@ -242,7 +242,7 @@ test("宽表顶部横向滚动条可在首屏驱动表格", async () => {
     await page.getByText("待回填", { exact: true }).waitFor();
     const moved = await page.evaluate(() => {
       const top = document.querySelector(".top-scroller");
-      const table = document.querySelector(".table-viewport");
+      const table = document.querySelector(".table-viewport .t-table__content");
       top.scrollLeft = 120;
       top.dispatchEvent(new Event("scroll"));
       return { top: top.scrollLeft, table: table.scrollLeft, max: top.scrollWidth - top.clientWidth };
