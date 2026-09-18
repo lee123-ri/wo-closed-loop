@@ -98,16 +98,16 @@ def seed_roles(db) -> None:
 
 
 def seed_role_scopes(db) -> None:
-    """灌入数据范围角色默认可见范围（后台可改，admin 行锁定）。
-
-    默认值对齐 scope.py 的旧硬编码口径，保证灌完种子前后行为一致：
-      admin=全部(锁) / 事业部PMO=全部 / 区域PMO=自己相关+区域 / 普通成员=自己相关
-    """
+    """灌入业务岗位的数据范围默认值，具体人员在用户管理中分配。"""
     defaults = [
-        ("admin", "系统管理员", ["all"], True, 0),
-        ("division_pmo", "事业部PMO", ["all"], False, 1),
-        ("region_pmo", "区域PMO", ["self", "region"], False, 2),
-        ("member", "普通成员", ["self"], False, 3),
+        ("site_member", "场站人员", ["self"], False, 100),
+        ("inspection_engineer", "运检工程师", ["self"], False, 101),
+        ("project_manager", "项目经理", ["self"], False, 102),
+        ("pmo", "PMO", ["all"], False, 103),
+        ("regional_pmo", "区域PMO", ["self", "region"], False, 104),
+        ("regional_gm", "区域总经理", ["self", "region"], False, 105),
+        ("regional_deputy_gm", "区域副总经理", ["self", "region"], False, 106),
+        ("headquarters_member", "总部人员", ["self"], False, 107),
     ]
     for code, name, scopes, locked, order in defaults:
         r = db.query(RoleDataScope).filter_by(role_code=code).first()
@@ -552,8 +552,8 @@ def run() -> None:
         print("→ 灌入角色→人员映射...")
         seed_roles(db)
         print("→ 灌入数据范围角色默认...")
-        seed_role_scopes(db)
         seed_business_roles(db)
+        seed_role_scopes(db)
         seed_permission_roles(db)
         print("→ 灌入配置（来源/状态/类型）...")
         seed_config(db)

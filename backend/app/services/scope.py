@@ -16,7 +16,7 @@ from __future__ import annotations
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.models import PermissionRole, RegionPMO, RoleAssignment, RoleDataScope, User, UserPermissionRole, WorkOrder
+from app.models import BusinessRole, BusinessRoleAssignment, RegionPMO, RoleAssignment, RoleDataScope, User, WorkOrder
 
 # 可行可见范围（三档，可多选）
 SCOPE_OPTIONS = ("self", "region", "all")
@@ -25,8 +25,15 @@ VALID_SCOPES = frozenset(SCOPE_OPTIONS)
 # 兜底默认：role_data_scopes 缺行时保持旧行为，避免灌种子前误放量/误收紧。
 DEFAULT_ROLE_SCOPES = {
     "admin": ["all"],
-    "division_pmo": ["all"],
+    "pmo": ["all"],
     "region_pmo": ["self", "region"],
+    "regional_pmo": ["self", "region"],
+    "regional_gm": ["self", "region"],
+    "regional_deputy_gm": ["self", "region"],
+    "site_member": ["self"],
+    "inspection_engineer": ["self"],
+    "project_manager": ["self"],
+    "headquarters_member": ["self"],
     "member": ["self"],
 }
 
@@ -41,38 +48,39 @@ def _scopes_for(db: Session, role_code: str) -> list[str]:
     return [s for s in scopes if s in VALID_SCOPES]
 
 
-def resolve_data_role(db: Session, user: User | None) -> tuple[str, list[str]]:
-    """把用户归到某个数据范围角色，返回 (role_code, regions)。
+def resolve_data_roles(db: Session, user: User | None) -> tuple[set[str], list[str]]:
+    """返回用户业务岗位对应的数据范围角色及其负责区域。
 
-    优先级：admin（users.role）→ 事业部级（role_assignments 的 division_head/pmo）
-    → 区域 PMO（region_pmos）→ 普通成员。regions 仅区域 PMO 有值。
+    用户管理里的业务岗位是唯一的人员归属来源。旧的角色人员映射仅继续为
+    既有审批流解析兜底，避免迁移时中断已配置的工单模板。
     """
     if user is None:
-        return ("member", [])
+        return ({"member"}, [])
     if user.role == "admin":
-        return ("admin", [])
-    ra_codes = {
-        r.role_code
-        for r in db.query(RoleAssignment).filter(RoleAssignment.user_id == user.id).all()
+        return ({"admin"}, [])
+    business_codes = {
+        role.code
+        for _, role in (
+            db.query(BusinessRoleAssignment, BusinessRole)
+            .join(BusinessRole, BusinessRole.id == BusinessRoleAssignment.business_role_id)
+            .filter(BusinessRoleAssignment.user_id == user.id, BusinessRole.is_active.is_(True))
+            .all()
+        )
     }
-    if ra_codes & {"division_head", "pmo"}:
-        return ("division_pmo", [])
     regions = [
         r.region
         for r in db.query(RegionPMO).filter(RegionPMO.user_id == user.id).all()
         if r.region
     ]
+    if business_codes:
+        return (business_codes, regions)
+    # 存量业务：尚未在用户列表分配业务岗位时，不改变已生效的数据范围。
+    legacy_codes = {r.role_code for r in db.query(RoleAssignment).filter(RoleAssignment.user_id == user.id).all()}
+    if legacy_codes & {"division_head", "pmo"}:
+        return ({"pmo"}, regions)
     if regions:
-        return ("region_pmo", regions)
-    return ("member", [])
-
-
-def permission_scopes_for(db: Session, user: User) -> set[str]:
-    """新权限角色的数据范围取并集；无分配时返回空以兼容旧角色迁移。"""
-    rows = db.query(PermissionRole).join(UserPermissionRole).filter(
-        UserPermissionRole.user_id == user.id, PermissionRole.is_active.is_(True)
-    ).all()
-    return {scope for row in rows for scope in (row.data_scopes or []) if scope in VALID_SCOPES}
+        return ({"regional_pmo"}, regions)
+    return ({"member"}, [])
 
 
 def apply_scope_to_query(q, db: Session, user: User | None):
@@ -87,12 +95,11 @@ def apply_scope_to_query(q, db: Session, user: User | None):
     """
     if user is None:
         return q
-    permission_scopes = permission_scopes_for(db, user)
-    if user.role == "admin" or "all" in permission_scopes:
+    if user.role == "admin":
         # 超管锁死全部：不读配置、不受后台改动影响。
         return q
-    role_code, regions = resolve_data_role(db, user)
-    scopes = permission_scopes or set(_scopes_for(db, role_code))
+    role_codes, regions = resolve_data_roles(db, user)
+    scopes = {scope for role_code in role_codes for scope in _scopes_for(db, role_code)}
     if "all" in scopes:
         return q
     conds = []

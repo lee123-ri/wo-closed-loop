@@ -12,7 +12,7 @@ from app.core.database import get_db
 from app.core.security import create_access_token, decode_token
 from app.core.security_middleware import limiter
 from app.core.config import get_settings
-from app.models import ConfigDefinition, PermissionRole, User, UserPermissionRole
+from app.models import BusinessRole, BusinessRoleAssignment, ConfigDefinition, User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
@@ -157,34 +157,23 @@ def require_auth(user: User | None = Depends(get_current_user)) -> User:
     return user
 
 
-def has_permission_role(db: Session, user: User, code: str) -> bool:
-    """兼容旧 users.role，同时让新权限角色成为真正的服务端鉴权依据。"""
-    if user.role == "admin":
-        return True
-    return db.query(UserPermissionRole).join(PermissionRole).filter(
-        UserPermissionRole.user_id == user.id,
-        PermissionRole.code == code,
-        PermissionRole.is_active.is_(True),
-    ).first() is not None
-
-
-def require_admin(user: User = Depends(require_auth), db: Session = Depends(get_db)) -> User:
+def require_admin(user: User = Depends(require_auth)) -> User:
     """管理员权限"""
-    if not has_permission_role(db, user, "admin"):
+    if user.role != "admin":
         raise HTTPException(403, "需要管理员权限")
     return user
 
 
-def require_approver(user: User = Depends(require_auth), db: Session = Depends(get_db)) -> User:
+def require_approver(user: User = Depends(require_auth)) -> User:
     """审批人及以上权限"""
-    if user.role not in ("admin", "approver") and not has_permission_role(db, user, "approver"):
+    if user.role not in ("admin", "approver"):
         raise HTTPException(403, "需要审批人及以上权限")
     return user
 
 
 # ── 开发环境登录（跳过钉钉 OAuth）─────────────────────
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 class DevLoginBody(BaseModel):
     user_id: int
@@ -265,7 +254,6 @@ DEFAULT_PERMISSIONS = {
         "基础数据": {
             "项目管理": {"roles": ["admin", "approver"]},
             "用户管理": {"roles": ["admin"]},
-            "用户与组织": {"roles": ["admin"]},
             "数据池": {"roles": ["admin", "approver"]},
             "SOP知识库": {"roles": ["admin", "approver", "executor"]},
         },
@@ -359,6 +347,42 @@ class UpdateRoleBody(BaseModel):
     role: str
 
 
+class UpdateUserProfileBody(BaseModel):
+    """管理员在本平台维护的组织资料；钉钉 ID 保持为外部同步事实。"""
+    department: str | None = Field(default=None, max_length=128)
+
+
+class UpdateBusinessRolesBody(BaseModel):
+    """整体覆盖用户的业务岗位，避免前端维护多条分配记录。"""
+    role_codes: list[str] = Field(default_factory=list, max_length=20)
+
+
+def _business_roles_for_users(db: Session, user_ids: list[int]) -> dict[int, list[dict]]:
+    """用户列表的内部实现：一次查询聚合业务岗位，调用方无需处理分配表。"""
+    result = {user_id: [] for user_id in user_ids}
+    if not user_ids:
+        return result
+    rows = (
+        db.query(BusinessRoleAssignment, BusinessRole)
+        .join(BusinessRole, BusinessRole.id == BusinessRoleAssignment.business_role_id)
+        .filter(BusinessRoleAssignment.user_id.in_(user_ids))
+        .order_by(BusinessRole.name)
+        .all()
+    )
+    for assignment, role in rows:
+        result[assignment.user_id].append({"code": role.code, "name": role.name})
+    return result
+
+
+def _user_out(user: User, business_roles: list[dict]) -> dict:
+    return {
+        "id": user.id, "name": user.name, "role": user.role, "phone": user.phone,
+        "dingtalk_id": user.dingtalk_id, "department": user.department,
+        "department_id": user.department_id, "is_active": user.is_active,
+        "business_roles": business_roles,
+    }
+
+
 @router.get("/users")
 def list_users(page: int = 1, page_size: int = 50, q: str | None = None,
                db: Session = Depends(get_db), _: User = Depends(require_auth)):
@@ -368,9 +392,9 @@ def list_users(page: int = 1, page_size: int = 50, q: str | None = None,
         query = query.filter(or_(User.name.ilike(like), User.dingtalk_id.ilike(like)))
     total = query.count()
     users = query.order_by(User.role, User.name).offset((page-1)*page_size).limit(page_size).all()
+    roles_by_user = _business_roles_for_users(db, [u.id for u in users])
     return {
-        "items": [{"id": u.id, "name": u.name, "role": u.role, "phone": u.phone,
-                    "dingtalk_id": u.dingtalk_id, "is_active": u.is_active} for u in users],
+        "items": [_user_out(u, roles_by_user[u.id]) for u in users],
         "total": total, "page": page, "page_size": page_size,
     }
 
@@ -389,6 +413,53 @@ def update_user_role(user_id: int, body: UpdateRoleBody, db: Session = Depends(g
               detail={"name": u.name, "from": old_role, "to": body.role})
     db.commit()
     return {"id": u.id, "name": u.name, "role": u.role}
+
+
+@router.patch("/users/{user_id}/profile")
+def update_user_profile(user_id: int, body: UpdateUserProfileBody, db: Session = Depends(get_db), actor: User = Depends(require_admin)):
+    """部门先由钉钉带入；管理员可根据实际组织归属修正显示和业务分配。"""
+    u = db.get(User, user_id)
+    if not u:
+        raise HTTPException(404, "用户不存在")
+    department = body.department.strip() if body.department else None
+    old_department = u.department
+    u.department = department
+    from app.services.audit import log_audit
+    log_audit(db, actor_id=actor.id, action="update_user_department", target_type="user", target_id=u.id,
+              detail={"name": u.name, "from": old_department, "to": department})
+    db.commit()
+    return _user_out(u, _business_roles_for_users(db, [u.id])[u.id])
+
+
+@router.get("/business-roles")
+def list_business_roles(db: Session = Depends(get_db), _: User = Depends(require_auth)):
+    """返回业务岗位选项；权限角色与菜单权限不在此处重复配置。"""
+    return [
+        {"code": row.code, "name": row.name, "is_active": row.is_active, "is_system": row.is_system}
+        for row in db.query(BusinessRole).order_by(BusinessRole.name).all()
+    ]
+
+
+@router.put("/users/{user_id}/business-roles")
+def replace_user_business_roles(user_id: int, body: UpdateBusinessRolesBody, db: Session = Depends(get_db), actor: User = Depends(require_admin)):
+    """以岗位编码数组整体覆盖，隐藏分配记录、项目群候选等历史复杂度。"""
+    u = db.get(User, user_id)
+    if not u:
+        raise HTTPException(404, "用户不存在")
+    role_codes = list(dict.fromkeys(body.role_codes))
+    roles = db.query(BusinessRole).filter(BusinessRole.code.in_(role_codes), BusinessRole.is_active.is_(True)).all() if role_codes else []
+    found = {role.code for role in roles}
+    missing = [code for code in role_codes if code not in found]
+    if missing:
+        raise HTTPException(400, f"业务岗位不存在或已停用：{', '.join(missing)}")
+    db.query(BusinessRoleAssignment).filter(BusinessRoleAssignment.user_id == u.id).delete(synchronize_session=False)
+    for role in roles:
+        db.add(BusinessRoleAssignment(user_id=u.id, business_role_id=role.id, scope_type="global", source="manual", is_confirmed=True))
+    from app.services.audit import log_audit
+    log_audit(db, actor_id=actor.id, action="replace_business_roles", target_type="user", target_id=u.id,
+              detail={"name": u.name, "role_codes": role_codes})
+    db.commit()
+    return _user_out(u, _business_roles_for_users(db, [u.id])[u.id])
 
 
 @router.patch("/users/{user_id}/toggle-active")

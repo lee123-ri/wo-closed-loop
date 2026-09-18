@@ -1,12 +1,10 @@
 <template>
   <div class="users-page">
     <div class="header">
-      <div><h1>用户管理</h1><div class="meta">角色分配 · 权限配置 · 菜单可见性</div></div>
+      <div><h1>用户管理</h1><div class="meta">钉钉部门带入 · 权限角色 · 业务岗位分配</div></div>
     </div>
 
-    <div class="grid2">
-      <!-- 用户列表 -->
-      <div class="card">
+    <div class="card">
         <div class="card-hd">
           <h3>用户列表</h3>
           <div class="hd-tools">
@@ -38,55 +36,40 @@
           <template #role="{ row }">
             <t-select v-model="row.role" :options="roleOptions" size="small" style="width:110px" @change="changeRole(row)" />
           </template>
+          <template #department="{ row }"><span>{{ row.department || '未同步' }}</span></template>
+          <template #business_roles="{ row }">
+            <div class="role-tags">
+              <t-tag v-for="role in row.business_roles" :key="role.code" size="small" theme="primary" variant="light">{{ role.name }}</t-tag>
+              <span v-if="!row.business_roles?.length" class="muted">未分配</span>
+            </div>
+          </template>
           <template #dingtalk_id="{ row }"><span class="muted">{{ row.dingtalk_id ? row.dingtalk_id.slice(0, 12) + '…' : '—' }}</span></template>
           <template #status="{ row }">
             <t-tag :theme="row.is_active ? 'success' : 'danger'" size="small" variant="light">{{ row.is_active ? '启用' : '禁用' }}</t-tag>
           </template>
           <template #action="{ row }">
-            <t-button size="small" variant="outline" @click="toggleActive(row)">{{ row.is_active ? '禁用' : '启用' }}</t-button>
+            <t-space :size="4"><t-button size="small" variant="outline" @click="openEdit(row)">编辑</t-button><t-button size="small" variant="outline" @click="toggleActive(row)">{{ row.is_active ? '禁用' : '启用' }}</t-button></t-space>
           </template>
         </t-table>
         </div>
       </div>
 
-      <!-- 权限配置 -->
-      <div class="card">
-        <div class="card-hd"><h3>菜单权限配置</h3><span class="count">按角色分配</span></div>
-        <div class="card-body perm-grid">
-          <div v-for="group in permissionConfig" :key="group.label" class="perm-group">
-            <div class="perm-group-label">{{ group.label }}</div>
-            <div v-for="item in group.items" :key="item.title" class="perm-row">
-              <span class="perm-title">{{ item.title }}</span>
-              <div class="perm-roles">
-                <label v-for="role in ['admin', 'approver', 'executor', 'readonly']" :key="role" class="perm-check">
-                  <input type="checkbox" :checked="hasPerm(item, role)" @change="togglePerm(item, role)" />
-                  {{ roleLabel(role) }}
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="form-actions">
-          <button class="btn btn-pri" @click="savePermissions" :disabled="saving">
-            {{ saving ? '保存中…' : '保存权限配置' }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <t-dialog v-model:visible="editDialog.open" :header="`编辑用户：${editDialog.name}`" width="480" :footer="false">
+      <div class="form-group"><label>钉钉部门</label><input v-model="editDialog.department" placeholder="钉钉同步后可按实际归属修正" /><div class="form-hint">默认取钉钉通讯录；修改只影响本平台资料，不会回写钉钉。</div></div>
+      <div class="form-group"><label>业务岗位</label><div class="business-role-list"><label v-for="role in businessRoleOptions.filter((item) => item.is_active)" :key="role.code" class="business-role-option"><input type="checkbox" :value="role.code" v-model="editDialog.roleCodes" />{{ role.name }}</label></div><div class="form-hint">岗位定义和数据权限在“规则配置”维护；此处仅分配给人员。</div></div>
+      <div class="modal-actions"><t-button variant="outline" @click="editDialog.open = false">取消</t-button><t-button theme="primary" :loading="savingProfile" @click="saveProfile">保存</t-button></div>
+    </t-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { toast } from "@/utils/feedback";
 import { onMounted, onUnmounted, reactive, ref } from "vue";
-import { useUserStore } from "@/stores/user";
 import http from "@/api/http";
-import { getPermissions, savePermissions as savePermissionsApi } from "@/api/auth";
 import PageError from "@/components/PageError.vue";
 
 defineOptions({ name: "UserManagement" });
 
-const store = useUserStore();
 const users = ref<any[]>([]);
 const total = ref(0);
 const searchText = ref("");
@@ -96,117 +79,24 @@ let loadSeq = 0;
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
 // 用户管理保持固定 14 行，避免分页尺寸切换导致左右面板高度跳变。
 const pagination = reactive({ current: 1, pageSize: 14, total: 0, showJumper: true, showPageSize: false });
-const saving = ref(false);
+const savingProfile = ref(false);
+const businessRoleOptions = ref<any[]>([]);
+const editDialog = reactive({ open: false, id: 0, name: "", department: "", roleCodes: [] as string[] });
 const roleOptions = [
   { label: "管理员", value: "admin" },
-  { label: "审批人", value: "approver" },
-  { label: "责任人", value: "executor" },
+  { label: "审批读写", value: "approver" },
+  { label: "执行读写", value: "executor" },
   { label: "只读", value: "readonly" },
 ];
 const columns: any[] = [
   { colKey: "name", title: "姓名", width: 100 },
-  { colKey: "role", title: "角色", width: 130 },
+  { colKey: "role", title: "权限角色", width: 130 },
+  { colKey: "department", title: "钉钉部门", width: 160, ellipsis: true },
+  { colKey: "business_roles", title: "业务岗位", minWidth: 180 },
   { colKey: "dingtalk_id", title: "钉钉ID", width: 130, ellipsis: true },
   { colKey: "status", title: "状态", width: 80 },
-  { colKey: "action", title: "操作", width: 90 },
+  { colKey: "action", title: "操作", width: 150 },
 ];
-
-interface PermItem {
-  title: string;
-  roles: string[];
-}
-interface PermGroup {
-  label: string;
-  items: PermItem[];
-}
-
-const permissionConfig = reactive<PermGroup[]>([
-  {
-    label: "工作台",
-    items: [
-      { title: "管理看板", roles: ["admin", "approver"] },
-      { title: "我的工单", roles: ["admin", "approver", "executor"] },
-    ],
-  },
-  {
-    label: "工单管理",
-    items: [
-      { title: "工单列表", roles: ["admin", "approver"] },
-      { title: "新建工单", roles: ["admin", "approver"] },
-      { title: "闭环记录", roles: ["admin", "approver", "executor"] },
-    ],
-  },
-  {
-    label: "基础数据",
-    items: [
-      { title: "项目管理", roles: ["admin", "approver"] },
-      { title: "用户管理", roles: ["admin"] },
-      // 数据池仍是自动同步的内部暂存层；日常不开放人工入口，需恢复时取消本行注释。
-      // { title: "数据池", roles: ["admin", "approver"] },
-      { title: "SOP知识库", roles: ["admin", "approver", "executor"] },
-    ],
-  },
-  {
-    label: "系统设置",
-    items: [
-      { title: "规则配置", roles: ["admin"] },
-      { title: "操作日志", roles: ["admin"] },
-      { title: "钉钉集成", roles: ["admin", "approver"] },
-    ],
-  },
-]);
-
-function roleLabel(r: string) {
-  return { admin: "管理员", approver: "审批人", executor: "责任人", readonly: "只读" }[r] || r;
-}
-
-function hasPerm(item: PermItem, role: string) {
-  return item.roles.includes(role);
-}
-
-function togglePerm(item: PermItem, role: string) {
-  if (item.roles.includes(role)) {
-    item.roles = item.roles.filter((r) => r !== role);
-  } else {
-    item.roles.push(role);
-  }
-}
-
-async function savePermissions() {
-  saving.value = true;
-  try {
-    // 构建权限配置（只提交菜单权限，actions 由后端保留既有值）
-    const menu_groups: Record<string, Record<string, { roles: string[] }>> = {};
-    for (const g of permissionConfig) {
-      menu_groups[g.label] = {};
-      for (const item of g.items) {
-        menu_groups[g.label][item.title] = { roles: [...item.roles] };
-      }
-    }
-    // 持久化到后端，并更新 store（全站菜单据此过滤）
-    const saved = await savePermissionsApi({ menu_groups });
-    store.permissions = saved;
-    toast.success("菜单权限已保存并全局生效");
-  } catch (e: any) {
-    toast.error("保存失败：" + e.message);
-  } finally {
-    saving.value = false;
-  }
-}
-
-// 打开页面时用已保存的权限回填复选框，避免展示默认值覆盖线上配置
-function syncPermissionConfig() {
-  const perms = store.permissions;
-  if (!perms?.menu_groups) return;
-  for (const g of permissionConfig) {
-    const saved = perms.menu_groups[g.label];
-    if (!saved) continue;
-    for (const item of g.items) {
-      const conf = saved[item.title];
-      if (conf && Array.isArray(conf.roles)) item.roles = [...conf.roles];
-    }
-  }
-}
 
 async function changeRole(u: any) {
   try {
@@ -223,6 +113,32 @@ async function toggleActive(u: any) {
     u.is_active = res.is_active;
   } catch (e: any) {
     toast.error("操作失败：" + e.message);
+  }
+}
+
+function openEdit(u: any) {
+  editDialog.id = u.id;
+  editDialog.name = u.name;
+  editDialog.department = u.department || "";
+  editDialog.roleCodes = (u.business_roles || []).map((role: any) => role.code);
+  editDialog.open = true;
+}
+
+async function saveProfile() {
+  savingProfile.value = true;
+  try {
+    const [profile, businessRoles] = await Promise.all([
+      http.patch<any, any>(`/auth/users/${editDialog.id}/profile`, { department: editDialog.department }),
+      http.put<any, any>(`/auth/users/${editDialog.id}/business-roles`, { role_codes: editDialog.roleCodes }),
+    ]);
+    const row = users.value.find((user) => user.id === editDialog.id);
+    if (row) Object.assign(row, profile, { business_roles: businessRoles.business_roles });
+    editDialog.open = false;
+    toast.success("用户资料和业务岗位已保存");
+  } catch (e: any) {
+    toast.error("保存失败：" + (e.message || "请稍后重试"));
+  } finally {
+    savingProfile.value = false;
   }
 }
 
@@ -260,14 +176,8 @@ function onPageChange(p: any) {
 
 onMounted(async () => {
   loadUsers();
-  if (!store.permissions) {
-    try {
-      store.permissions = await getPermissions();
-    } catch {
-      /* 权限加载失败不影响使用 */
-    }
-  }
-  syncPermissionConfig();
+  try { businessRoleOptions.value = await http.get("/auth/business-roles"); }
+  catch { toast.warning("业务岗位选项加载失败，请稍后重试"); }
 });
 onUnmounted(() => { if (searchTimer) clearTimeout(searchTimer); });
 </script>
@@ -277,7 +187,6 @@ onUnmounted(() => { if (searchTimer) clearTimeout(searchTimer); });
 .header h1 { font-size: var(--fs-h1); font-weight: 700; }
 .meta { font-size: 12px; color: var(--muted); }
 
-.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 440px); gap: 20px; align-items: start; }
 .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); display: flex; flex-direction: column; }
 .card-body { overflow-x: auto; }
 .card-hd { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border); flex: none; }
@@ -287,17 +196,13 @@ onUnmounted(() => { if (searchTimer) clearTimeout(searchTimer); });
 .count { font-size: 12px; color: var(--muted); }
 
 .muted { color: var(--muted); font-size: 12px; }
+.role-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.form-group input[type="text"], .form-group > input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+.form-hint { margin-top: 5px; color: var(--muted); font-size: 12px; }
+.business-role-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.business-role-option { display: flex !important; align-items: center; gap: 6px; padding: 7px 8px; margin: 0 !important; font-weight: 400 !important; background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 
-.perm-grid { padding: 16px 20px; }
-.perm-group { margin-bottom: 16px; }
-.perm-group-label { font-size: 13px; font-weight: 700; color: var(--brand); margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
-.perm-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; }
-.perm-title { font-size: 13px; }
-.perm-roles { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
-.perm-check { display: flex; align-items: center; gap: 3px; font-size: 11px; color: var(--muted); cursor: pointer; white-space: nowrap; }
-.perm-check input { margin: 0; }
-
-.form-actions { display: flex; justify-content: flex-end; padding: 16px 20px 17px; border-top: 1px solid var(--border); }
-
-@media (max-width: 1200px) { .grid2 { grid-template-columns: 1fr; } }
 </style>

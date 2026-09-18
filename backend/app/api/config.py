@@ -1,13 +1,13 @@
 """配置管理 API：来源/状态/类型/优先级规则/SLA/审批流/项目/人员"""
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.api.auth import require_admin, require_auth
 from app.models import (
     ApprovalFlow, ConfigDefinition, NotificationPolicy, ParsingRule, PriorityRule, Project, SLADefinition,
-    User, WorkOrderTypeKB, PersonProjectMap, RegionPMO, RoleAssignment, RoleDataScope,
+    BusinessRole, User, WorkOrderTypeKB, PersonProjectMap, RegionPMO, RoleAssignment, RoleDataScope,
 )
 from app.schemas.config import (
     ApprovalFlowOut, ConfigDefCreate, ConfigDefinitionOut, NotificationPolicyCreate,
@@ -19,6 +19,42 @@ from app.schemas.config import (
 )
 
 router = APIRouter(prefix="/config", tags=["config"])
+
+# 业务岗位是“人做什么”，数据范围是“能看什么”。二者在规则配置内维护，
+# 用户管理只负责把岗位分配给具体人员。
+BUSINESS_ROLE_SCOPE_DEFAULTS = {
+    "site_member": ["self"],
+    "inspection_engineer": ["self"],
+    "project_manager": ["self"],
+    "pmo": ["all"],
+    "regional_pmo": ["self", "region"],
+    "regional_gm": ["self", "region"],
+    "regional_deputy_gm": ["self", "region"],
+    "headquarters_member": ["self"],
+}
+
+
+class BusinessRoleConfigBody(BaseModel):
+    code: str = Field(pattern=r"^[a-z][a-z0-9_]{1,62}$")
+    name: str = Field(min_length=1, max_length=64)
+    is_active: bool = True
+
+
+def _ensure_business_role_scopes(db: Session) -> None:
+    """为存量库补齐岗位数据范围行，不依赖重新灌种子。"""
+    roles = db.query(BusinessRole).order_by(BusinessRole.name).all()
+    known = {row.role_code for row in db.query(RoleDataScope).all()}
+    for index, role in enumerate(roles, start=100):
+        if role.code not in known:
+            db.add(RoleDataScope(
+                role_code=role.code,
+                role_name=role.name,
+                scopes=list(BUSINESS_ROLE_SCOPE_DEFAULTS.get(role.code, ["self"])),
+                is_locked=False,
+                sort_order=index,
+            ))
+    if roles:
+        db.flush()
 
 
 # ── 暂停发单开关（仅管理员可切换） ─────────────────────
@@ -364,24 +400,24 @@ def update_approval_flow(flow_id: int, body: ApprovalFlowUpdate, db: Session = D
 # ====== 通知策略 CRUD ======
 @router.get("/notification-policies")
 def list_notification_policies(_: User = Depends(require_admin)):
-    """旧通知策略已退役，通知配置统一在 /organization/notification-rules。"""
-    raise HTTPException(410, "通知策略已迁移到用户与组织/机器人通知规则，仅支持机器人私聊和群聊")
+    """旧通知策略已退役；通知规则只保留机器人私聊和群聊通道。"""
+    raise HTTPException(410, "通知策略已迁移到机器人通知规则，仅支持机器人私聊和群聊")
 
 
 @router.post("/notification-policies")
 def add_notification_policy(_: NotificationPolicyCreate, user: User = Depends(require_admin)):
-    raise HTTPException(410, "通知策略已迁移到用户与组织/机器人通知规则")
+    raise HTTPException(410, "通知策略已迁移到机器人通知规则")
 
 
 @router.patch("/notification-policies/{policy_id}", response_model=NotificationPolicyOut)
 def update_notification_policy(policy_id: int, channels: list | None = None, enabled: bool | None = None,
                                _: User = Depends(require_admin)):
-    raise HTTPException(410, "通知策略已迁移到用户与组织/机器人通知规则")
+    raise HTTPException(410, "通知策略已迁移到机器人通知规则")
 
 
 @router.delete("/notification-policies/{policy_id}", status_code=204)
 def del_notification_policy(policy_id: int, _: User = Depends(require_admin)):
-    raise HTTPException(410, "通知策略已迁移到用户与组织/机器人通知规则")
+    raise HTTPException(410, "通知策略已迁移到机器人通知规则")
 
 
 # ── 项目管理 CRUD ─────────────────────────────────────
@@ -569,7 +605,7 @@ def update_role_assignment(role_code: str, body: RoleAssignmentUpdate, db: Sessi
     )
 
 
-# ── 数据范围角色配置（谁能看哪些工单，后台可配） ──
+# ── 业务岗位与数据权限（规则配置唯一入口） ──
 
 # 与 services/scope.py 的 SCOPE_OPTIONS 保持一致（self/region/all）
 VALID_ROLE_SCOPES = frozenset(("self", "region", "all"))
@@ -577,14 +613,70 @@ VALID_ROLE_SCOPES = frozenset(("self", "region", "all"))
 
 @router.get("/role-scopes", response_model=list[RoleDataScopeOut])
 def list_role_scopes(db: Session = Depends(get_db)):
-    """列出数据范围角色及其可见范围勾选（admin 行 is_locked=True，后台不可改）。"""
-    return db.query(RoleDataScope).order_by(RoleDataScope.sort_order, RoleDataScope.id).all()
+    """兼容旧链接：仅返回业务岗位对应的数据权限。"""
+    _ensure_business_role_scopes(db)
+    business_codes = {role.code for role in db.query(BusinessRole).all()}
+    return (
+        db.query(RoleDataScope)
+        .filter(RoleDataScope.role_code.in_(business_codes))
+        .order_by(RoleDataScope.sort_order, RoleDataScope.id)
+        .all()
+    )
+
+
+@router.get("/business-roles", response_model=list[RoleDataScopeOut])
+def list_business_roles_with_scopes(db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    """规则配置页使用的业务岗位及数据权限清单。"""
+    return list_role_scopes(db)
+
+
+@router.post("/business-roles", response_model=RoleDataScopeOut, status_code=201)
+def create_business_role(body: BusinessRoleConfigBody, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    if db.query(BusinessRole).filter(BusinessRole.code == body.code).first():
+        raise HTTPException(409, "业务岗位编码已存在")
+    role = BusinessRole(code=body.code, name=body.name, scope_type="global", is_active=body.is_active)
+    db.add(role)
+    db.flush()
+    scope = RoleDataScope(role_code=role.code, role_name=role.name, scopes=["self"], sort_order=1000)
+    db.add(scope)
+    from app.services.audit import log_audit
+    log_audit(db, actor_id=user.id, action="create_business_role", target_type="business_role", target_id=role.id,
+              detail={"code": role.code, "name": role.name})
+    db.commit()
+    db.refresh(scope)
+    return scope
+
+
+@router.patch("/business-roles/{role_code}", response_model=RoleDataScopeOut)
+def update_business_role(role_code: str, body: BusinessRoleConfigBody, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    role = db.query(BusinessRole).filter(BusinessRole.code == role_code).first()
+    if not role:
+        raise HTTPException(404, "业务岗位不存在")
+    if role.is_system and body.code != role.code:
+        raise HTTPException(400, "系统业务岗位编码不可修改")
+    if body.code != role.code and db.query(BusinessRole).filter(BusinessRole.code == body.code).first():
+        raise HTTPException(409, "业务岗位编码已存在")
+    scope = db.query(RoleDataScope).filter(RoleDataScope.role_code == role_code).first()
+    if scope is None:
+        _ensure_business_role_scopes(db)
+        scope = db.query(RoleDataScope).filter(RoleDataScope.role_code == role_code).first()
+    role.code, role.name, role.is_active = body.code, body.name, body.is_active
+    scope.role_code, scope.role_name = body.code, body.name
+    from app.services.audit import log_audit
+    log_audit(db, actor_id=user.id, action="update_business_role", target_type="business_role", target_id=role.id,
+              detail={"code": role.code, "name": role.name, "is_active": role.is_active})
+    db.commit()
+    db.refresh(scope)
+    return scope
 
 
 @router.put("/role-scopes/{role_code}", response_model=RoleDataScopeOut)
 def update_role_scope(role_code: str, body: RoleDataScopeUpdate, db: Session = Depends(get_db),
                       user: User = Depends(require_admin)):
-    """修改某角色的可见范围（仅管理员；admin 角色锁定不可改）。"""
+    """修改业务岗位的数据范围（仅管理员）。"""
+    _ensure_business_role_scopes(db)
+    if not db.query(BusinessRole).filter(BusinessRole.code == role_code).first():
+        raise HTTPException(404, "业务岗位不存在")
     r = db.query(RoleDataScope).filter(RoleDataScope.role_code == role_code).first()
     if not r:
         raise HTTPException(404, "数据范围角色不存在")
