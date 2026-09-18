@@ -33,4 +33,5 @@ backend/logs/
 backend/.env.bak
 backup_*.sql
 *.tar.gz
+outputs/
 .claude/
