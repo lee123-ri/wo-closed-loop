@@ -1,35 +1,45 @@
 """派发→钉钉提醒 通知链路测试。
 
-覆盖：通知策略解析、消息构造、工作通知(工作通知 asyncsend_v2) payload、
+覆盖：机器人通知规则、工作通知(工作通知 asyncsend_v2) payload、
 群机器人 webhook 加签、trigger_notify / _trigger_notify 事件映射、数据池派发触发。
 真实钉钉 HTTP 一律 mock（httpx.post），不打真网络。
 """
 from datetime import date
 
-from app.models import WorkOrder
+from app.models import NotificationRule, User, WorkOrder
 from app.services import notification_service as ns
+from app.services.notification_rules import preview
 from app.services import dingtalk as dt
 
 
-# ── 策略解析 / 消息构造（纯逻辑，走 db fixture，无需网络）──────────────
+# ── 机器人规则（纯逻辑，走 db fixture，无需网络）────────────────────
 
-def test_resolve_channels_dispatch(db):
-    channels = ns.resolve_channels(db, "P1", "dispatch")
-    assert "work_notify" in channels
-    assert "robot_mention" in channels
-
-
-def test_build_message_contains_fields(db):
-    wo = WorkOrder(
-        code="RW-2026-0001", title="测试工单标题", priority="P1",
-        deadline=date.today(), status="dispatched",
-        person_id=1, approver_id=11,
+def test_notification_rule_only_uses_robot_channels(db):
+    rule = NotificationRule(
+        name="派发跟催", event="dispatch", channels=["robot_private", "robot_group"],
+        recipients={"user_ids": [1]}, enabled=True,
     )
-    title, body = ns.build_message(wo, "dispatch", db)
-    assert "新工单待处理" in title
-    assert wo.code in title
-    assert wo.title in body
-    assert "责任人" in body and "审批人" in body
+    db.add(rule)
+    db.flush()
+    wo = WorkOrder(code="RW-2026-0001", title="测试工单标题", priority="P1", deadline=date.today(), status="dispatched")
+    plans = preview(db, wo, "dispatch")
+    plan = next(item for item in plans if item["rule_id"] == rule.id)
+    assert plan["channels"] == ["robot_private", "robot_group"]
+    assert plan["users"] == [{"id": 1, "name": db.get(User, 1).name}]
+
+
+def test_notification_preview_honors_direct_recipient_and_template(db):
+    rule = NotificationRule(
+        name="逾期跟催", event="sla_breach", channels=["robot_private"],
+        recipients={"user_ids": [1]}, template="工单 {code}：{title}", enabled=True,
+    )
+    db.add(rule)
+    db.flush()
+    wo = WorkOrder(code="RW-2026-0002", title="测试工单标题", priority="P1", deadline=date.today(), status="overdue")
+    plans = preview(db, wo, "sla_breach")
+    plan = next(item for item in plans if item["rule_id"] == rule.id)
+    assert plan["users"][0]["id"] == 1
+    assert rule.template == "工单 {code}：{title}"
 
 
 # ── 工作通知（asyncsend_v2 payload，mock httpx）──────────────

@@ -17,6 +17,6 @@ class User(TimestampMixin, Base):
     email: Mapped[str | None] = mapped_column(String(128))
     department: Mapped[str | None] = mapped_column(String(128), comment="部门名称")
     department_id: Mapped[str | None] = mapped_column(String(32), comment="钉钉部门ID")
-    role: Mapped[str] = mapped_column(String(32), default="executor", comment="admin|approver|executor|readonly")
+    role: Mapped[str] = mapped_column(String(32), default="executor", comment="admin|approver|executor；只读/读写由菜单权限决定")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     password_hash: Mapped[str | None] = mapped_column(String(256), comment="本地登录密码（钉钉登录可空）")

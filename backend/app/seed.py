@@ -7,9 +7,9 @@ from datetime import date, timedelta
 from app.core.database import Base, SessionLocal, engine
 from app.core.config import load_system_yaml
 from app.models import (
-    ApprovalFlow, ConfigDefinition, NotificationPolicy, ParsingRule,
+    ApprovalFlow, ConfigDefinition, ParsingRule,
     PriorityRule, Project, SLADefinition, User, WorkOrder, WorkOrderTypeKB,
-    PersonProjectMap, RoleAssignment, RoleDataScope,
+    PersonProjectMap, RoleDataScope, BusinessRole, PermissionRole,
 )
 
 
@@ -75,39 +75,15 @@ def seed_projects(db, user_ids) -> dict:
     return ids
 
 
-def seed_roles(db) -> None:
-    """灌入组织角色 → 人员映射（审批流用角色编码，具体人名可在后台配置）。
-
-    角色编码对应指引里的角色层级：
-      division_head=事业部负责人, pmo=事业部PMO/经营分析, delivery_pmo=交付/专项PMO
-    """
-    people = {u.name: u.id for u in db.query(User).all()}
-    roles = [
-        ("division_head", "事业部负责人", "贾兴威"),
-        ("pmo", "事业部PMO/经营分析", "金惠良"),
-        ("delivery_pmo", "交付/专项PMO", "陈亮"),
-    ]
-    for i, (code, name, person) in enumerate(roles):
-        ra = db.query(RoleAssignment).filter_by(role_code=code).first()
-        if not ra:
-            ra = RoleAssignment(role_code=code, sort_order=i)
-            db.add(ra)
-        ra.role_name = name
-        ra.user_id = people.get(person)
-    db.commit()
-
-
 def seed_role_scopes(db) -> None:
-    """灌入数据范围角色默认可见范围（后台可改，admin 行锁定）。
-
-    默认值对齐 scope.py 的旧硬编码口径，保证灌完种子前后行为一致：
-      admin=全部(锁) / 事业部PMO=全部 / 区域PMO=自己相关+区域 / 普通成员=自己相关
-    """
+    """灌入业务岗位的数据范围默认值，具体人员在用户管理中分配。"""
     defaults = [
-        ("admin", "系统管理员", ["all"], True, 0),
-        ("division_pmo", "事业部PMO", ["all"], False, 1),
-        ("region_pmo", "区域PMO", ["self", "region"], False, 2),
-        ("member", "普通成员", ["self"], False, 3),
+        ("project_member", "项目人员", ["self"], False, 99),
+        ("pmo", "事业部PMO", ["all"], False, 100),
+        ("regional_pmo", "区域PMO", ["self", "region"], False, 101),
+        ("regional_gm", "区域总经理", ["self", "region"], False, 102),
+        ("regional_deputy_gm", "区域副总经理", ["self", "region"], False, 103),
+        ("headquarters_member", "总部人员", ["self"], False, 104),
     ]
     for code, name, scopes, locked, order in defaults:
         r = db.query(RoleDataScope).filter_by(role_code=code).first()
@@ -118,6 +94,30 @@ def seed_role_scopes(db) -> None:
         r.scopes = list(scopes)
         r.is_locked = locked
         r.sort_order = order
+    db.commit()
+
+
+def seed_business_roles(db) -> None:
+    for code, name, scope in [
+        ("project_member", "项目人员", "global"), ("pmo", "事业部PMO", "global"),
+        ("regional_pmo", "区域PMO", "region"), ("regional_gm", "区域总经理", "region"),
+        ("regional_deputy_gm", "区域副总经理", "region"), ("headquarters_member", "总部人员", "global"),
+    ]:
+        if not db.query(BusinessRole).filter_by(code=code).first(): db.add(BusinessRole(code=code,name=name,scope_type=scope,is_system=True))
+    db.commit()
+
+
+def seed_permission_roles(db) -> None:
+    """历史权限角色表不再参与运行；系统身份与菜单读写权限见 auth 配置。"""
+    defaults = [
+        ("admin", "系统管理员", ["all"], ["*"], ["*"]),
+        ("approver", "审批管理员", ["all"], ["工作台", "工单管理"], ["create_wo", "close_wo"]),
+        ("executor", "责任人", ["self"], ["工作台", "工单管理"], ["backfill_wo"]),
+    ]
+    for code, name, data_scopes, menus, actions in defaults:
+        if not db.query(PermissionRole).filter_by(code=code).first():
+            db.add(PermissionRole(code=code, name=name, data_scopes=data_scopes,
+                menu_permissions=menus, action_permissions=actions, is_system=True))
     db.commit()
 
 
@@ -341,8 +341,13 @@ def seed_config(db) -> None:
          [],
         ),
     ]
-    # 审批人：按角色（role_assignments）解析，具体人名可在后台配置
-    role_to_user = {ra.role_code: ra.user_id for ra in db.query(RoleAssignment).all()}
+    # 仅作为初始演示值；管理员在“工单类型”中可直接配置审批人。
+    users_by_name = {user.name: user.id for user in db.query(User).all()}
+    role_to_user = {
+        "division_head": users_by_name.get("贾兴威"),
+        "pmo": users_by_name.get("金惠良"),
+        "delivery_pmo": users_by_name.get("陈亮"),
+    }
     for i, item in enumerate(types):
         code, name, desc, approver_role, pri = item[:5]
         guidance_ref = item[5] if len(item) > 5 else None
@@ -358,7 +363,6 @@ def seed_config(db) -> None:
             db.add(WorkOrderTypeKB(
                 type_code=code, name=name, desc=desc,
                 default_approver_id=role_to_user.get(approver_role),
-                default_approver_role=approver_role,
                 default_priority=pri, sort_order=i,
                 guidance_ref=guidance_ref,
                 sop_purpose=sop_purpose,
@@ -370,7 +374,7 @@ def seed_config(db) -> None:
                 sop_related_guidance=sop_related,
             ))
         else:
-            # 更新已有记录的 SOP 字段 + 审批人角色
+            # 更新已有记录的 SOP 字段；不覆盖管理员已配置的审批人。
             existing.guidance_ref = guidance_ref
             existing.sop_purpose = sop_purpose
             existing.sop_scope = sop_scope
@@ -379,8 +383,8 @@ def seed_config(db) -> None:
             existing.sop_backfill_required = sop_backfill
             existing.sop_escalation = sop_escalation
             existing.sop_related_guidance = sop_related
-            existing.default_approver_role = approver_role
-            existing.default_approver_id = role_to_user.get(approver_role)
+            if existing.default_approver_id is None:
+                existing.default_approver_id = role_to_user.get(approver_role)
     db.commit()
 
 
@@ -421,11 +425,7 @@ def seed_sla(db) -> None:
 
 
 def seed_approval_flows(db) -> None:
-    """审批流节点用角色编码引用审批人（人名由 role_assignments 在后台配置）。
-
-    特殊 tokens：creator=提交人, executor=责任人, approver=工单审批人（按工单解析）。
-    组织角色：pmo=事业部PMO, division_head=事业部负责人（按 role_assignments 解析）。
-    """
+    """审批流节点展示实际流转；工单默认审批人由管理员直接配置。"""
     if db.query(ApprovalFlow).count() == 0:
         p1 = ApprovalFlow(priority="P1", name="P1 紧急审批流", enabled=True,
             nodes=[
@@ -455,20 +455,6 @@ def seed_approval_flows(db) -> None:
             ],
             escalation={"action": "升级至事业部负责人", "target": "division_head"})
         db.add_all([p1, p2, p3])
-    db.commit()
-
-
-def seed_notification_policies(db) -> None:
-    if db.query(NotificationPolicy).count() == 0:
-        matrix = [
-            ("P1", "phone_ding", "work_notify", "robot_mention"),
-            ("P2", "app_ding", "work_notify", "robot_mention"),
-            ("P3", "work_notify", "robot_mention"),
-        ]
-        events = ["dispatch", "unread", "sla_warn", "sla_breach", "sla_breach_72h"]
-        for pri, *ch in matrix:
-            for ev in events:
-                db.add(NotificationPolicy(priority=pri, event=ev, channels=list(ch), enabled=True))
     db.commit()
 
 
@@ -523,10 +509,10 @@ def run() -> None:
         u = seed_users(db)
         print("→ 灌入项目...")
         p = seed_projects(db, u)
-        print("→ 灌入角色→人员映射...")
-        seed_roles(db)
         print("→ 灌入数据范围角色默认...")
+        seed_business_roles(db)
         seed_role_scopes(db)
+        seed_permission_roles(db)
         print("→ 灌入配置（来源/状态/类型）...")
         seed_config(db)
         print("→ 灌入规则...")
@@ -535,8 +521,6 @@ def run() -> None:
         seed_sla(db)
         print("→ 灌入审批流...")
         seed_approval_flows(db)
-        print("→ 灌入通知策略...")
-        seed_notification_policies(db)
         print("→ 灌入示例工单...")
         seed_workorders(db, u, p)
         print("✓ 种子数据完成")

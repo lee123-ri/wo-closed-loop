@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.api.workorders import create_work_order
-from app.models import RegionPMO, User, WorkOrder
+from app.models import BusinessRole, BusinessRoleAssignment, User, WorkOrder
 from app.schemas.workorder import WorkOrderCreate
 
 
@@ -41,6 +41,13 @@ def _client_with(db, user):
 
 def _codes(r):
     return {w["code"] for w in r.json()["items"]}
+
+
+def _assign_regional_pmo(db, user, department="华东区域"):
+    user.department = department
+    role = db.query(BusinessRole).filter(BusinessRole.code == "regional_pmo").first()
+    db.add(BusinessRoleAssignment(user_id=user.id, business_role_id=role.id, scope_type="global", source="manual"))
+    db.flush()
 
 
 def test_admin_scope_mine_sees_all(client_auth):
@@ -72,8 +79,7 @@ def test_region_pmo_scope_mine_only_region(db):
     pmo = db.query(User).filter(User.role == "executor").first()
     other = db.query(User).filter(User.role == "executor", User.id != pmo.id).first()
 
-    db.add(RegionPMO(region="华东", user_id=pmo.id))
-    db.flush()
+    _assign_regional_pmo(db, pmo)
 
     in_region = _mk(db, "r-区内", person_id=other.id, approver_id=other.id, region="华东")
     out_region = _mk(db, "r-区外", person_id=other.id, approver_id=other.id, region="华北")
@@ -90,8 +96,7 @@ def test_region_pmo_also_sees_own_cross_region(db):
     pmo = db.query(User).filter(User.role == "executor").first()
     other = db.query(User).filter(User.role == "executor", User.id != pmo.id).first()
 
-    db.add(RegionPMO(region="华东", user_id=pmo.id))
-    db.flush()
+    _assign_regional_pmo(db, pmo)
 
     own_cross = _mk(db, "r-本人跨区", person_id=pmo.id, approver_id=other.id, region="华北")
 
@@ -136,8 +141,7 @@ def test_my_dashboard_mine_stats_scope_personal(db):
 def test_my_dashboard_mine_stats_scope_region_pmo_still_personal(db):
     """区域 PMO 的“我的工单”也不能扩展到区域范围。"""
     pmo = db.query(User).filter(User.role == "executor").first()
-    db.add(RegionPMO(region="华东", user_id=pmo.id))
-    db.flush()
+    _assign_regional_pmo(db, pmo)
 
     r = _client_with(db, pmo).get("/api/dashboard/mine")
     assert r.status_code == 200
@@ -149,8 +153,7 @@ def test_personal_scope_never_expands_for_admin_or_region_pmo(db):
     admin = db.query(User).filter(User.role == "admin").first()
     pmo = db.query(User).filter(User.role == "executor").first()
     other = db.query(User).filter(User.role == "executor", User.id != pmo.id).first()
-    db.add(RegionPMO(region="华东", user_id=pmo.id))
-    db.flush()
+    _assign_regional_pmo(db, pmo)
 
     admin_related = _mk(db, "personal-admin-related", person_id=admin.id, approver_id=other.id)
     admin_unrelated = _mk(db, "personal-admin-unrelated", person_id=other.id, approver_id=other.id)

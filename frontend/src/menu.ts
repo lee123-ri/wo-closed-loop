@@ -36,7 +36,8 @@ export const MENU_GROUPS: MenuGroup[] = [
     items: [
       { path: "/projects", icon: "folder", title: "项目管理" },
       { path: "/users", icon: "usergroup", title: "用户管理" },
-      { path: "/pool", icon: "layers", title: "数据池" },
+      // 数据池是自动同步链路的内部暂存层，日常不开放人工入口；需要人工兜底时恢复本项。
+      // { path: "/pool", icon: "layers", title: "数据池" },
       { path: "/sop", icon: "book-open", title: "SOP知识库" },
     ],
   },

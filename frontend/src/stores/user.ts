@@ -11,7 +11,7 @@ export interface UserInfo {
 
 export interface Permissions {
   roles: string[];
-  menu_groups: Record<string, Record<string, { roles: string[] }>>;
+  menu_groups: Record<string, Record<string, { access: Record<string, "none" | "read" | "write"> }>>;
   actions: Record<string, { roles: string[] }>;
 }
 
@@ -45,7 +45,13 @@ export const useUserStore = defineStore("user", () => {
     if (!g) return false;
     const it = g[item];
     if (!it) return false;
-    return it.roles.includes(user.value?.role || "");
+    return (it.access?.[user.value?.role || ""] || "none") !== "none";
+  }
+
+  function canWriteMenu(group: string, item: string): boolean {
+    if (user.value?.role === "admin") return true;
+    if (!permissions.value) return true;
+    return permissions.value.menu_groups[group]?.[item]?.access?.[user.value?.role || ""] === "write";
   }
 
   function canDo(action: string): boolean {
@@ -56,5 +62,5 @@ export const useUserStore = defineStore("user", () => {
     return act.roles.includes(user.value?.role || "");
   }
 
-  return { user, token, permissions, isLoggedIn, isAdmin, isApprover, role, setAuth, logout, canAccessMenu, canDo };
+  return { user, token, permissions, isLoggedIn, isAdmin, isApprover, role, setAuth, logout, canAccessMenu, canWriteMenu, canDo };
 });

@@ -15,7 +15,7 @@
         <div class="sop-section" v-if="sop.sop_steps?.length"><label>标准步骤</label>
           <div class="sop-steps"><div v-for="s in sop.sop_steps" :key="s.step" class="sop-step">
             <span class="step-num">{{ s.step }}</span>
-            <div><div class="step-action">{{ s.action }}</div><div class="step-standard">标准：{{ s.standard }}</div><div class="step-role">执行人：{{ s.role }}</div></div>
+            <div><div class="step-action">{{ s.action }}</div><div class="step-standard">标准：{{ s.standard }}</div><div class="step-role">责任人：{{ s.role }}</div></div>
           </div></div>
         </div>
         <div class="sop-section" v-if="sop.sop_acceptance"><label>验收标准</label><div class="sop-text">{{ sop.sop_acceptance }}</div></div>

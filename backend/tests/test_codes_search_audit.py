@@ -59,7 +59,7 @@ def test_plan_code_normalization_only_touches_bad_codes():
 
 def test_user_search_filters_by_name(client_auth, db):
     """q 参数按姓名模糊过滤，total 同步为过滤后总数；不传 q 返回全量。"""
-    db.add(User(name="回归搜索张三", role="readonly", is_active=True))
+    db.add(User(name="回归搜索张三", role="executor", is_active=True))
     db.commit()
     body = client_auth.get("/api/auth/users", params={"q": "回归搜索"}).json()
     assert body["total"] == 1, body

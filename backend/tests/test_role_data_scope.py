@@ -1,16 +1,11 @@
-"""数据范围角色可配置性回归：admin 锁定、事业部 PMO、区域 PMO、普通成员，以及范围改动生效。
-
-背景（2026-09-17）：数据范围从 scope.py 硬编码改为 role_data_scopes 后台可配，
-admin 锁死「全部」，事业部 PMO 默认「全部」（可改），区域 PMO 默认「自己相关+区域」（可改），
-普通成员默认「自己相关」（可改）；多选取并集。
-"""
+"""业务岗位的数据范围可配置性回归。"""
 from datetime import date
 
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.api.workorders import create_work_order
-from app.models import RegionPMO, RoleAssignment, RoleDataScope, User
+from app.models import BusinessRole, BusinessRoleAssignment, RoleDataScope, User
 from app.schemas.workorder import WorkOrderCreate
 
 
@@ -43,26 +38,32 @@ def _role_row(db, role_code):
     return db.query(RoleDataScope).filter(RoleDataScope.role_code == role_code).first()
 
 
-# ── admin 锁定 ──────────────────────────────────────────
+def _assign_business_role(db, user, role_code):
+    role = db.query(BusinessRole).filter(BusinessRole.code == role_code).first()
+    db.add(BusinessRoleAssignment(user_id=user.id, business_role_id=role.id, scope_type="global", source="manual"))
+    db.flush()
 
-def test_admin_role_scope_is_locked(client_auth):
+
+# ── 业务岗位配置 ────────────────────────────────────────
+
+def test_business_role_scopes_are_exposed(client_auth):
     rows = client_auth.get("/api/config/role-scopes").json()
-    admin = next(r for r in rows if r["role_code"] == "admin")
-    assert admin["is_locked"] is True
-    assert admin["scopes"] == ["all"]
+    pmo = next(r for r in rows if r["role_code"] == "pmo")
+    assert pmo["is_locked"] is False
+    assert pmo["scopes"] == ["all"]
 
 
-def test_admin_role_scope_cannot_be_updated(client_auth):
+def test_system_role_is_not_a_business_scope(client_auth):
     r = client_auth.put("/api/config/role-scopes/admin", json={"scopes": ["self"]})
-    assert r.status_code == 400
+    assert r.status_code == 404
 
 
 # ── 事业部 PMO 看全部 ───────────────────────────────────
 
-def test_division_pmo_scope_mine_sees_all(db):
-    """事业部 PMO（role_assignments.pmo）默认看全部，不因非本人/非区域被收窄。"""
-    ra = db.query(RoleAssignment).filter(RoleAssignment.role_code == "pmo").first()
-    pmo = db.get(User, ra.user_id)
+def test_pmo_business_role_scope_mine_sees_all(db):
+    """用户分配 PMO 业务岗位后，数据范围直接由该岗位配置决定。"""
+    pmo = db.query(User).filter(User.role == "executor").first()
+    _assign_business_role(db, pmo, "pmo")
     other = db.query(User).filter(User.role == "executor").first()
     wo = _mk(db, "d-事业部他人工单", person_id=other.id, approver_id=other.id, region="华南")
 
@@ -77,8 +78,9 @@ def test_region_pmo_drop_self_scope(db):
     """区域 PMO 去掉「自己相关」后，本人跨区工单不再出现（self 不再是隐式下限）。"""
     pmo = db.query(User).filter(User.role == "executor").first()
     other = db.query(User).filter(User.role == "executor", User.id != pmo.id).first()
-    db.add(RegionPMO(region="华东", user_id=pmo.id))
-    _role_row(db, "region_pmo").scopes = ["region"]
+    _assign_business_role(db, pmo, "regional_pmo")
+    pmo.department = "华东区域"
+    _role_row(db, "regional_pmo").scopes = ["region"]
     db.flush()
 
     in_region = _mk(db, "rs-区内他人", person_id=other.id, approver_id=other.id, region="华东")
@@ -90,11 +92,12 @@ def test_region_pmo_drop_self_scope(db):
     assert own_cross.code not in codes   # self 被去掉后不再兜底本人
 
 
-def test_member_can_be_granted_all(db):
-    """普通成员配置为 all 后能看全部。"""
+def test_business_role_can_be_granted_all(db):
+    """项目人员岗位配置为 all 后能看全部。"""
     me = db.query(User).filter(User.role == "executor").first()
     other = db.query(User).filter(User.role == "executor", User.id != me.id).first()
-    _role_row(db, "member").scopes = ["all"]
+    _assign_business_role(db, me, "project_member")
+    _role_row(db, "project_member").scopes = ["all"]
     db.flush()
 
     other_wo = _mk(db, "m-他人", person_id=other.id, approver_id=other.id)
@@ -106,7 +109,8 @@ def test_empty_scopes_means_nothing(db):
     """勾选为空集时显式无范围，不误放量成「全部」。"""
     me = db.query(User).filter(User.role == "executor").first()
     other = db.query(User).filter(User.role == "executor", User.id != me.id).first()
-    _role_row(db, "member").scopes = []
+    _assign_business_role(db, me, "project_member")
+    _role_row(db, "project_member").scopes = []
     db.flush()
 
     mine_wo = _mk(db, "e-本人", person_id=me.id, approver_id=other.id)
@@ -117,12 +121,12 @@ def test_empty_scopes_means_nothing(db):
 # ── API 校验 ───────────────────────────────────────────
 
 def test_role_scope_update_validates_values(client_auth):
-    r = client_auth.put("/api/config/role-scopes/member", json={"scopes": ["self", "bogus"]})
+    r = client_auth.put("/api/config/role-scopes/project_member", json={"scopes": ["self", "bogus"]})
     assert r.status_code == 400
 
 
 def test_role_scope_update_ok(client_auth):
-    r = client_auth.put("/api/config/role-scopes/member", json={"scopes": ["self", "region"]})
+    r = client_auth.put("/api/config/role-scopes/project_member", json={"scopes": ["self", "region"]})
     assert r.status_code == 200
     assert set(r.json()["scopes"]) == {"self", "region"}
 

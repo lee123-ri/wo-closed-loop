@@ -68,30 +68,12 @@ class ApprovalFlowOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class NotificationPolicyOut(BaseModel):
-    id: int
-    priority: str
-    event: str
-    channels: list
-    template: str | None = None
-    enabled: bool
-    model_config = {"from_attributes": True}
-
-
-class NotificationPolicyCreate(BaseModel):
-    priority: str
-    event: str
-    channels: list[str]
-    template: str | None = None
-
-
 class WorkOrderTypeOut(BaseModel):
     id: int
     type_code: str
     name: str
     desc: str | None = None
     default_approver_id: int | None = None
-    default_approver_role: str | None = None
     default_priority: str
     sort_order: int
     # SOP 字段
@@ -111,7 +93,6 @@ class WorkOrderTypeCreate(BaseModel):
     name: str
     desc: str | None = None
     default_approver_id: int | None = None
-    default_approver_role: str | None = None
     default_priority: str = "P2"
     # SOP 字段
     guidance_ref: str | None = None
@@ -130,7 +111,6 @@ class WorkOrderTypeUpdate(BaseModel):
     name: str | None = None
     desc: str | None = None
     default_approver_id: int | None = None
-    default_approver_role: str | None = None
     default_priority: str | None = None
     guidance_ref: str | None = None
     sop_purpose: str | None = None
@@ -181,33 +161,6 @@ class UserOut(BaseModel):
     role: str
     department: str | None = None
     model_config = {"from_attributes": True}
-
-
-class RegionPMOOut(BaseModel):
-    id: int
-    region: str
-    user_id: int
-    user_name: str | None = None
-    model_config = {"from_attributes": True}
-
-
-class RegionPMOCreate(BaseModel):
-    region: str
-    user_id: int
-
-
-class RoleAssignmentOut(BaseModel):
-    id: int
-    role_code: str
-    role_name: str
-    user_id: int | None = None
-    user_name: str | None = None
-    sort_order: int
-    model_config = {"from_attributes": True}
-
-
-class RoleAssignmentUpdate(BaseModel):
-    user_id: int | None = None
 
 
 class RoleDataScopeOut(BaseModel):

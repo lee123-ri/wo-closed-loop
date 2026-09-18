@@ -9,9 +9,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
-from app.models import ConfigDefinition, DataPoolItem, Project, RegionPMO, User, WorkOrder, WorkOrderTypeKB, StatusLog, WorkOrderMeasureLink, AnomalyOccurrence
+from app.models import ConfigDefinition, DataPoolItem, Project, User, WorkOrder, WorkOrderTypeKB, StatusLog, WorkOrderMeasureLink, AnomalyOccurrence
 from app.services.priority_service import normalize_priority
-from app.services.roles import resolve_role_user_id
 from app.services.maintenance import ensure_open
 
 
@@ -182,12 +181,6 @@ def generate_from_pool(db: Session, pool_ids: list[int]) -> dict:
     # 预加载映射
     projects = {p.name: p for p in db.query(Project).all()}
     users = {u.name: u for u in db.query(User).all()}
-    # 区域 → PMO 映射（用于异常指标默认责任人兜底）
-    region_pmo_map: dict[str, User] = {}
-    for rpmo in db.query(RegionPMO).all():
-        user = db.get(User, rpmo.user_id)
-        if user:
-            region_pmo_map[rpmo.region] = user
     # 工单类型统一配置（category=work_order_type）：默认责任人（仅异常类）+ 默认审批人（每类都配）
     metric_default_person: dict[str, str] = {}
     type_approver_name: dict[str, str] = {}
@@ -205,15 +198,13 @@ def generate_from_pool(db: Session, pool_ids: list[int]) -> dict:
 
             # 匹配责任人
             # 异常指标类：优先按「异常大类默认责任人」（规则配置），
-            # 大类未配置再按项目区域 PMO 兜底，最后按异常表整改人姓名匹配
+            # 大类未配置时按异常表中的责任人姓名匹配。
             person = None
             if item.pool_type == "anomaly":
                 default_name = metric_default_person.get(item.metric_type)
                 if default_name:
                     person = _match_person(default_name, users)
-                if not person and project and project.region:
-                    person = region_pmo_map.get(project.region)
-            # 如果区域PMO不存在，或非异常类：按姓名匹配
+            # 非异常类也按姓名匹配。
             if not person and item.person_name:
                 person = _match_person(item.person_name, users)
 
