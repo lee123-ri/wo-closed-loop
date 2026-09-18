@@ -1,6 +1,6 @@
 <template>
   <div class="my-page">
-    <div class="header">
+    <div class="header page-header">
       <div><h1>{{ pageTitle }}</h1><div class="meta">{{ scopeLabel }}</div></div>
     </div>
 
@@ -264,25 +264,27 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.my-page .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 16px; flex-wrap: wrap; }
-.header h1 { font-size: var(--fs-h1); font-weight: 700; }
+.my-page .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 16px; flex-wrap: wrap; }
+.header h1 { font-size: var(--fs-h1); font-weight: 700; line-height: 1.35; }
 .meta { font-size: 12px; color: var(--muted); }
 
-.stats-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 16px; }
-.stat-card { background: var(--card); border-radius: var(--radius); padding: 16px; width: 100%; text-align: center; box-shadow: var(--shadow); cursor: pointer; border: 1px solid transparent; font: inherit; color: inherit; transition: transform .15s, box-shadow .15s; }
-.stat-card:hover { transform: translateY(-1px); }
-.stat-card.on { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-light); }
-.stat-card:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
-.stat-card .num { font-size: 28px; font-weight: 700; }
-.stat-card .lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.stats-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0; margin-bottom: 16px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.stat-card { position: relative; background: transparent; padding: 14px 10px; width: 100%; min-height: 76px; text-align: left; cursor: pointer; border: 0; border-right: 1px solid var(--border); font: inherit; color: inherit; transition: background .15s; }
+.stat-card:last-child { border-right: 0; }
+.stat-card:hover { background: #f8fafc; }
+.stat-card.on { background: #f0f5ff; }
+.stat-card.on::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--brand); }
+.stat-card:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.stat-card .num { font-size: var(--fs-display); font-weight: 700; line-height: 1.1; }
+.stat-card .lbl { font-size: var(--fs-meta); color: var(--muted); margin-top: 5px; }
 .stat-card.warn .num { color: var(--red); }
 .stat-card.primary .num { color: var(--brand); }
 .stat-card.amber .num { color: var(--amber); }
 .stat-card.blue .num { color: #2563eb; }
-@media (max-width: 1200px) { .stats-row { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 800px) { .stats-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 1200px) { .stats-row { grid-template-columns: repeat(3, minmax(0, 1fr)); } .stat-card:nth-child(3) { border-right: 0; } .stat-card:nth-child(-n+3) { border-bottom: 1px solid var(--border); } }
+@media (max-width: 800px) { .stats-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } .stat-card { border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); } .stat-card:nth-child(even) { border-right: 0; } .stat-card:nth-last-child(-n+2) { border-bottom: 0; } }
 
-.card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 16px; overflow: auto; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 16px; overflow: auto; }
 .card-hd { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border); }
 .card-hd h3 { font-size: 15px; font-weight: 700; }
 .count { font-size: 12px; color: var(--muted); }
@@ -314,9 +316,9 @@ onMounted(async () => {
 .cal-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 角色口径切换 */
-.role-tabs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
-.role-tabs-label { font-size: 12px; color: var(--muted); margin-right: 2px; }
-.role-tab { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); font: inherit; font-size: 12px; cursor: pointer; color: #4b5563; transition: all .15s; }
+.role-tabs { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; padding: 9px 12px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+.role-tabs-label { font-size: var(--fs-meta); color: var(--muted); margin-right: 4px; }
+.role-tab { padding: 4px 10px; border-radius: 4px; border: 1px solid transparent; background: transparent; font: inherit; font-size: var(--fs-meta); cursor: pointer; color: #4b5563; transition: all .15s; }
 .role-tab:hover { border-color: var(--brand); color: var(--brand); }
 .role-tab.on { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 600; }
 .role-tab:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }

@@ -303,13 +303,14 @@ onUnmounted(() => { window.removeEventListener("resize", resizeCharts); disposeC
 
 <style scoped>
 .dashboard { display: flex; flex-direction: column; gap: 16px; }
-.filter-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--card); border-radius: var(--radius); padding: 12px 16px; box-shadow: var(--shadow); }
+.filter-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; box-shadow: var(--shadow); }
 .filter-hint { font-size: 12px; color: var(--muted); margin-left: auto; }
 .filter-empty { text-align: center; padding: 48px 16px; color: var(--muted); font-size: 14px; background: var(--card); border-radius: var(--radius); }
-.management-lead { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.management-lead h2 { font-size: var(--fs-h1); margin: 0; }
+.management-lead { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 4px; }
+.management-lead h2 { font-size: var(--fs-h1); line-height: 1.35; margin: 0; }
 .management-lead p { color: var(--muted); font-size: var(--fs-meta); margin: 4px 0 0; }
-.section-kicker { color: var(--muted); font-size: var(--fs-meta); font-weight: 700; letter-spacing: .04em; margin-bottom: -8px; }
+.section-kicker { display: flex; align-items: center; gap: 8px; color: #4b5563; font-size: var(--fs-h2); font-weight: 700; margin: 4px 0 -8px; }
+.section-kicker::before { content: ""; display: block; width: 3px; height: 14px; background: var(--brand); }
 
 .empty-card .empty-banner { text-align: center; padding: 32px 20px; }
 .empty-icon { font-size: 48px; }
@@ -318,11 +319,14 @@ onUnmounted(() => { window.removeEventListener("resize", resizeCharts); disposeC
 .empty-desc code { background: #f0f4ff; padding: 2px 6px; border-radius: 3px; }
 
 /* ── 等宽卡片行（flexbox，自动平分） ── */
-.card-row { display: flex; gap: 16px; }
+.card-row { display: flex; gap: 0; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
 .card-row > * { flex: 1; min-width: 0; }
+.card-row :deep(.t-card) { border: 0; border-radius: 0; box-shadow: none; }
+.card-row > * + * { border-left: 1px solid var(--border); }
 
 /* 统计卡片 */
-.stat-card { text-align: center; border-left: 3px solid var(--border); transition: all .15s; }
+.stat-card { text-align: left; border-left: 3px solid var(--border); transition: background .15s; }
+.stat-card:hover { background: #f8fafc; }
 .stat-card.amber { border-left-color: var(--amber); }
 .stat-card.red { border-left-color: var(--red); }
 .stat-card.green { border-left-color: var(--green); }
@@ -331,11 +335,11 @@ onUnmounted(() => { window.removeEventListener("resize", resizeCharts); disposeC
 .stat-lbl { font-size: var(--fs-meta); color: var(--muted); margin-top: 6px; }
 
 /* KPI 卡片 */
-.kpi-card { text-align: center; }
+.kpi-card { text-align: left; }
 .kpi-sub { font-size: var(--fs-meta); margin-top: 4px; }
 
 /* 告警条 */
-.alert-card { background: linear-gradient(90deg, #fbe5e3, #fff); border: 1px solid #f5b3b0; }
+.alert-card { background: #fff8f7; border: 1px solid #f0c5c2; box-shadow: none; }
 .alert-inner { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .alert-icon { font-size: 20px; }
 .alert-text { font-size: var(--fs-body); font-weight: 600; color: #a82820; }
@@ -343,6 +347,7 @@ onUnmounted(() => { window.removeEventListener("resize", resizeCharts); disposeC
 
 /* ── 双列布局（待办+来源 / 趋势+类型） ── */
 .two-col { display: flex; gap: 16px; }
+.two-col :deep(.t-card) { border: 1px solid var(--border); box-shadow: var(--shadow); }
 .two-col > *:first-child { flex: var(--left, 3); min-width: 0; }
 .two-col > *:last-child { flex: var(--right, 2); min-width: 0; }
 
