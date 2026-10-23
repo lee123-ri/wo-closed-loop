@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, text
 from app.core.config import get_settings
 from app.core.database import SessionLocal, engine
-from app.models import ConfigDefinition, Project, User, WorkOrder, NotificationLog
+from app.models import ConfigDefinition, Project, User, WorkOrder, NotificationLog, SLADefinition
 try:
     from app.models import WorkOrderFollowupEvent
 except ImportError:
@@ -25,6 +25,48 @@ REGIONS = {"华北", "华中", "华东", "华南", "西北", "西南", "东北"}
 
 class QueryBlocked(Exception):
     pass
+
+
+def sla_policy(db) -> dict:
+    """Read current configuration only; never invoke a scanner or notifier."""
+    now = datetime.now(ZoneInfo("Asia/Shanghai"))
+    base = get_settings().frontend_base_url.rstrip("/")
+    rows = db.query(SLADefinition).order_by(SLADefinition.priority).all()
+    lines = ["工单处理时限、预警与升级机制（当前配置）："]
+    policies = []
+    if not rows:
+        lines.append("未找到SLA配置，无法确认处理时限或提醒规则；不能补用默认节点。")
+    for row in rows:
+        lines.append(f"\n{row.priority}：默认截止{row.deadline_days}天（仅用于未填截止日的新工单；已有工单以自身截止日为准）。")
+        nodes = row.followup_nodes if isinstance(row.followup_nodes, list) else []
+        enabled = [n for n in nodes if isinstance(n, dict) and n.get("enabled", True) is True]
+        valid = [n for n in enabled if type(n.get("offset_days")) is int and type(n.get("level", 0)) is int]
+        complete = len(valid) == len(enabled) and (row.followup_nodes is None or isinstance(row.followup_nodes, list)) and all(isinstance(n, dict) for n in nodes)
+        sanitized = []
+        for n in sorted(valid, key=lambda n: n["offset_days"]):
+            days = n["offset_days"]
+            when = f"截止前{abs(days)}天" if days < 0 else (f"逾期后{days}天" if days > 0 else "截止当天")
+            recipients = n.get("recipients") or {}
+            channels = n.get("channels") or ["robot_private"]
+            targets = []
+            if "robot_group" in channels:
+                targets.append("指定群" if recipients.get("group_id") else "群聊（缺少目标群配置）")
+            if "robot_private" in channels:
+                roles = [label for key, label in (("responsible", "责任人"), ("approver", "审批人"), ("user_ids", "指定人员")) if recipients.get(key)]
+                targets.append("私聊：" + ("、".join(roles) if roles else "缺少接收人配置"))
+            mode = "汇总卡片" if n.get("delivery_mode") == "deadline_card_batch" else "节点通知"
+            lines.append(f"• {when}；{mode}；等级{n.get('level', 0)}；{'、'.join(targets) or '渠道待核对'}。")
+            sanitized.append({"offset_days": days, "level": n.get("level", 0), "delivery_mode": n.get("delivery_mode"), "targets": targets})
+        if not enabled and complete:
+            lines.append("未配置启用的跟催节点，不自动补出提醒或升级规则。")
+        elif not complete:
+            lines.append("存在无法解析的配置，本次规则不完整，请管理员核对。")
+        elif not any(n["offset_days"] > 0 or n.get("level", 0) > 0 for n in valid):
+            lines.append("未配置逾期或更高等级的升级通知节点。")
+        policies.append({"priority": row.priority, "deadline_days": row.deadline_days, "nodes": sanitized, "complete": complete})
+    lines.append("\n平台还存在逾期等级记账逻辑；等级记录不等于已经通知上级。通知按具体来源、状态、节点和运行任务执行。本次仅核对配置，未核验任务执行或实际送达；需查某张工单的跟催记录，请提供完整工单编号。")
+    lines.append(f"\n查询时点：{now:%Y-%m-%d %H:%M:%S}（北京时间）；依据：[平台SLA配置]({base}/config)。")
+    return {"answer": "\n".join(lines), "source": "platform_sla_configuration", "policies": policies, "query_time": now.isoformat()}
 
 
 def query(plan: dict, event: dict, group_projects: dict) -> dict:
@@ -52,6 +94,10 @@ def query_session(db, plan: dict, event: dict, group_projects: dict) -> dict:
         if not projects or not all(isinstance(i, int) and not isinstance(i, bool) and i > 0 for i in projects):
             raise QueryBlocked("本群尚未配置可查询的项目范围。可以在群里询问平台操作；具体工单数据请私聊查询，或由管理员配置本群项目范围。")
         q = q.filter(WorkOrder.project_id.in_(projects))
+    if plan["intent"] == "sla_policy":
+        if any(plan.get(k) for k in ("region", "status", "project_code", "work_order_code")):
+            raise QueryBlocked("整体SLA配置按优先级定义；特定工单的实际升级请提供完整编号单独查询。")
+        return sla_policy(db)
     if plan.get("region"):
         if plan["region"] not in REGIONS:
             raise QueryBlocked("区域未能匹配平台七大区，请补充明确区域。")

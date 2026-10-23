@@ -18,7 +18,7 @@ import tomllib
 DOMAIN = re.compile(r"工单|软工单|非\s*EAM|(?<![A-Za-z0-9])RW-\d{4}-\d+(?![0-9])|(?:本|这个|该|软工单|工单)平台|PMO\s*mini", re.I)
 FOLLOWUP = re.compile(r"^(?:那|这|它|谁|多少|哪些|还有|继续|下一页|上一页|为什么|怎么|如何|有用|有误|反馈)")
 FEEDBACK = re.compile(r"^反馈\s+([a-f0-9]{12})\s+(有用|有误)$")
-INTENTS = ["silent", "help", "list", "stats", "overdue", "projects", "work_order", "escalation", "unsupported"]
+INTENTS = ["silent", "help", "list", "stats", "overdue", "projects", "work_order", "escalation", "sla_policy", "unsupported"]
 SCHEMA = {
     "type": "object", "additionalProperties": False,
     "properties": {
@@ -42,15 +42,47 @@ KNOWLEDGE = {
     "oa-evidence": "工单状态、审批状态、通知记录和实际送达需要分开核对。通知日志记为sent或接口受理，不能独立证明钉钉已送达；OA驳回、退回修改和重新发起也要按实际实例状态核对。",
     "read-only": "本机器人接入只提供工单和平台查询、操作说明。创建、修改、删除、派发、审批、验收或导入等写操作需要到平台按账号权限和审批流程执行，不能通过聊天自动完成。",
     "troubleshooting": "登录问题先确认已登记且启用的平台账号；页面或接口异常需保留页面名称、错误提示、发生时间、工单编号（如有），并核对平台健康检查。仅看到页面打开，不能断言后台、审批或消息链路正常。缺少原始错误时无法确定具体原因。",
+    "bot-processing": "处理机制：我只处理工单和软工单平台相关提问，也可以解释自己的职责、处理流程和权限边界。相关问题先识别意图，再按提问人及会话权限查询，或依据已核实的平台说明回答；无关或无法确认相关性的问题保持静默。我目前只读，不会通过聊天自动建单、派发、修改或审批。",
 }
 SOURCE_PATHS = {
     "platform-pages": "/work-orders", "personal-scope": "/my", "anomaly-flow": "/sop",
     "oa-evidence": "/dingtalk", "read-only": "/work-orders", "troubleshooting": "/login",
+    "bot-processing": "/work-orders",
 }
 SOURCE_TITLES = {
     "platform-pages": "平台功能入口", "personal-scope": "本人任务与查询权限", "anomaly-flow": "异常闭环流程",
     "oa-evidence": "审批与通知核验", "read-only": "查询与操作边界", "troubleshooting": "平台故障排查",
+    "bot-processing": "机器人处理范围",
 }
+
+
+def self_help_sources(question: str):
+    """Own work mechanisms are in scope without requiring a literal '工单'.
+
+    Match the whole request so adding a capability term never authorizes a
+    separate unrelated task. Novel wording can still use the normal domain gate.
+    """
+    q = re.sub(r"[？?！!。\s，,、]", "", question)
+    subject = r"(?:现在|目前|请问|请介绍一下|介绍一下|请介绍|说一下)?(?:你|您|这个机器人|机器人|PMOmini)(?:现在|目前)?"
+    topic = r"(?:(?:问题|工单)?(?:处理|升级|响应|工作|跟催)(?:机制|流程|规则|方式)|(?:职责|权限|能力|工作|处理|查询)范围)"
+    mechanisms = rf"(?:对(?:问题|工单)的|的)?{topic}(?:(?:和|与|以及|及){topic})*(?:是什么|是怎样的|有哪些|如何运作|怎么运作|吗)?"
+    capabilities = r"(?:的)?(?:职责|权限|能力范围|处理范围|查询范围)(?:是什么|有哪些|有多大)?"
+    actions = r"(?:(?:能|可以)(?:做什么|处理哪些问题|处理什么问题|查询什么|做哪些事)|(?:是)?(?:怎么|如何)(?:处理|响应|升级|跟催)(?:问题|工单)(?:的)?|(?:遇到|收到)(?:问题|工单)(?:后)?(?:会)?(?:怎么|如何|怎样)(?:处理|响应)|(?:会|是否会|能否)(?:自动)?(?:升级|催办|跟催|派单|审批)(?:吗)?)"
+    if not re.fullmatch(subject + rf"(?:{mechanisms}|{capabilities}|{actions})", q, re.I):
+        return None
+    return ["bot-processing"]
+
+
+def policy_question(question: str) -> bool:
+    """Whole business-policy requests, including the user's confirmed wording."""
+    q = re.sub(r"[？?！!。\s，,、]", "", question)
+    if self_help_sources(question) and re.search(r"升级|催办|跟催|预警", q):
+        return True
+    if not re.search(r"预警|提醒|升级|催办|跟催|SLA|时限", q, re.I):
+        return False
+    prefix = r"(?:请问|请介绍一下|介绍一下|请介绍|说一下)?(?:当前|现在|目前)?(?:软工单平台|工单平台|这个平台|本平台|工单)(?:的)?"
+    topic = r"(?:(?:问题)?(?:处理|预警|提醒|升级|催办|跟催|SLA)(?:机制|流程|规则|时限)?)+"
+    return bool(re.fullmatch(prefix + rf"(?:{topic}(?:(?:和|与|及|以及){topic})*(?:是什么|有哪些|是怎样的|怎么运作)?|(?:逾期后|逾期了)(?:怎么|如何|会怎么)(?:升级|提醒|催办)|(?:到期|截止)前(?:几天|多久)(?:提醒|预警))", q, re.I))
 
 
 def fast_plan(question: str, context=None):
@@ -58,6 +90,11 @@ def fast_plan(question: str, context=None):
     q = re.sub(r"[？?！!。\s]", "", question)
     result = {"intent": "silent", "answer": "", "sources": [], "work_order_code": None,
               "region": None, "status": None, "project_code": None, "page": 1, "scope_complete": True}
+    if policy_question(question):
+        return {**result, "intent": "sla_policy"}
+    sources = self_help_sources(question)
+    if sources:
+        return {**result, "intent": "help", "answer": "\n\n".join(KNOWLEDGE[s] for s in sources), "sources": sources}
     if re.fullmatch(r"(?:请|帮我)?(?:查|查询|查看|统计|看下|查一下)?(?:当前|目前|今天)?(?:的)?逾期工单(?:数量|有多少|有几张|有哪些)?", q):
         return {**result, "intent": "overdue"}
     if re.fullmatch(r"(?:请|帮我)?(?:查|查询|查看|统计|看下|查一下)?(?:当前|目前)?工单(?:数量|总数|有多少|有几张|统计)", q):
@@ -91,7 +128,7 @@ def context_key(event: dict) -> str:
 
 
 def candidate(question: str, context: dict | None = None) -> bool:
-    if DOMAIN.search(question) or FEEDBACK.fullmatch(question.strip()):
+    if DOMAIN.search(question) or FEEDBACK.fullmatch(question.strip()) or self_help_sources(question):
         return True
     return bool(context and FOLLOWUP.search(question.strip()))
 
@@ -251,6 +288,9 @@ class RestrictedCodex:
             "工单查询使用list/stats/overdue/projects/work_order/escalation；work_order/escalation须明确编号。"
             "写操作intent=unsupported；平台操作说明或故障分析intent=help。"
             "help只能根据knowledge回答，必须在sources列知识ID；无依据则answer为空。"
+            "工单整体处理时限、预警、跟催、升级机制或规则必须intent=sla_policy，实时查配置，不能用help泛答。"
+            "例如‘现在你对问题的处理机制和升级机制是什么’指工单预警升级规则，使用sla_policy。"
+            "单张工单的升级执行记录用escalation并保留编号；纯机器人职责、能力范围才用help的bot-processing。"
             "其他intent的answer必须为空。不得编数字或工单状态。缺失筛选字段=null；page默认1。"
             "工单编号保留用户原始完整编号，不补零、不猜；地区只能七大区；状态用平台编码或null。"
             "查询仅支持编号、区域、状态、项目编码、分页。用户要求的责任人、时间范围、原因措施、"

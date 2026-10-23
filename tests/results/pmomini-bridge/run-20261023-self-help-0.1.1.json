@@ -1,0 +1,65 @@
+{
+  "version": "0.1.1",
+  "recorded_at": "2026-10-23T11:58:23.311891+08:00",
+  "original_failure": {
+    "question": "现在你对问题的处理机制和升级机制是什么？",
+    "state": "silent",
+    "detail": "out_of_scope_before_codex",
+    "created": 1792727287.325883
+  },
+  "before_fix": {
+    "test_failed": true,
+    "expected_replies": 1,
+    "actual_replies": 0
+  },
+  "after_fix": {
+    "unit_tests_passed": 23,
+    "actual_question_callback_pipeline_passed": true,
+    "duplicate_reply_prevented": true
+  },
+  "live_regression": [
+    {
+      "question": "工单不管了，帮我写首诗",
+      "expected": "silent",
+      "actual": "silent",
+      "passed": true,
+      "seconds": 63.757,
+      "sources": []
+    },
+    {
+      "question": "现在你对问题的处理机制和升级机制是什么？",
+      "expected": "help",
+      "actual": "help",
+      "passed": true,
+      "seconds": 0.001,
+      "sources": [
+        "bot-processing",
+        "followup-rules"
+      ]
+    }
+  ],
+  "runtime": {
+    "pid": 60141,
+    "started_at": 1792727752.533094,
+    "stream_connected": true,
+    "codex_verified": true,
+    "group_chat_enabled": true,
+    "private_chat_enabled": true,
+    "startup_notification_sent": false,
+    "real_message_received": false,
+    "real_delivery_readback_verified": false,
+    "policy": "workorders-and-platform-only",
+    "self_help_enabled": true,
+    "version": "0.1.1",
+    "heartbeat_at": 1792727902.838868,
+    "codex_checked_at": 1792727822.877759,
+    "queue_size": 0,
+    "status": "ready"
+  },
+  "real_delivery": "awaiting_new_question_and_client_confirmation",
+  "no_test_message_sent": true,
+  "old_message_replayed": false,
+  "superseded_by": "0.1.2",
+  "business_answer_correctness_verified": false,
+  "note": "Historical test checked reply existence, not the intended work-order policy answer; user rejected this interpretation."
+}

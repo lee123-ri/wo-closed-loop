@@ -7,6 +7,7 @@ import tempfile
 import time
 import types
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 from pmomini_bridge.core import (Ledger, RestrictedCodex, candidate, context_key, eligible, SCHEMA)
@@ -48,6 +49,7 @@ class GateTests(unittest.TestCase):
         self.assertEqual(fast_plan("工单RW-2026-00650谁负责")["work_order_code"],"RW-2026-00650")
         self.assertIsNone(fast_plan("查询逾期工单数量，然后写首诗"))
         self.assertIsNone(fast_plan("查询上个月逾期工单数量"))
+        self.assertIsNone(fast_plan("工单处理流程是什么？"))
 
     def test_same_corp_private_and_mentioned_group(self):
         self.assertTrue(eligible(event(), "test-robot", "test-corp"))
@@ -76,6 +78,38 @@ class GateTests(unittest.TestCase):
         self.assertNotEqual(context_key(a), context_key(event(senderStaffId="other")))
         self.assertNotEqual(context_key(a), context_key(event(conversationId="other")))
 
+    def test_work_mechanisms_and_capabilities_do_not_require_domain_keywords(self):
+        for question in (
+            "现在你对问题的处理机制和升级机制是什么？",
+            "你是如何升级问题的？", "工单预警升级机制是什么？",
+            "工单逾期后怎么升级？", "工单到期前几天提醒？",
+        ):
+            with self.subTest(question=question):
+                self.assertTrue(candidate(question))
+                self.assertEqual(fast_plan(question)["intent"], "sla_policy")
+        for question in (
+            "你的工作流程是怎样的？", "你可以处理哪些问题？",
+            "你现在是怎么处理问题的？",
+            "你会自动派单吗？",
+        ):
+            with self.subTest(question=question):
+                self.assertTrue(candidate(question))
+                result = fast_plan(question)
+                self.assertIsNotNone(result)
+                self.assertEqual(result["intent"], "help")
+                self.assertIn("bot-processing", result["sources"])
+
+    def test_work_mechanism_words_do_not_allow_unrelated_tasks(self):
+        for question in (
+            "你的升级机制是什么，顺便查询天气", "你怎么处理问题并帮我写首诗",
+            "你可以处理哪些娱乐问题", "公司干部晋升的升级机制是什么",
+            "现在你对问题的处理机制和升级机制是什么？另外讲个笑话",
+            "你会升级到最新版系统吗？",
+        ):
+            with self.subTest(question=question):
+                self.assertFalse(candidate(question))
+                self.assertIsNone(fast_plan(question))
+
     def test_cli_has_no_inherited_tools_and_no_bypass(self):
         args = RestrictedCodex().command("/tmp", "/tmp/schema.json")
         self.assertIn("--ignore-user-config", args)
@@ -96,10 +130,42 @@ class PipelineTests(unittest.IsolatedAsyncioTestCase):
 
     def query(self, p, e, groups):
         self.queries += 1
+        if p["intent"] == "sla_policy":
+            return {"answer": "工单处理与预警升级机制：P1默认截止2天；截止前3天、前1天和当天群提醒；未配置逾期升级通知节点。", "source": "platform_sla_configuration"}
         return {"answer":"真实查询示例：2张。", "total":2, "source":"test"}
 
     def pipeline(self, model):
         return Pipeline(self.ledger, model, self.query, "http://localhost:5173")
+
+    async def test_actual_private_question_about_handling_and_escalation_gets_reply(self):
+        question = "现在你对问题的处理机制和升级机制是什么？"
+        e = event(text={"content": question})
+        q = asyncio.Queue(maxsize=2)
+        receiver = Receiver(self.ledger, q, "test-robot", "test-corp", {}, time.time()-1)
+        replies = []
+        async def sender(incoming, answer):
+            replies.append(answer)
+            return {"accepted": True, "errcode": 0}
+        model = RestrictedCodex()
+        with patch.object(model, "command", side_effect=AssertionError("Known self-help must not call a subprocess")):
+            task = asyncio.create_task(consume(q, self.pipeline(model), {}, sender=sender))
+            try:
+                await receiver.process(types.SimpleNamespace(data=e))
+                await asyncio.wait_for(q.join(), 2)
+                await receiver.process(types.SimpleNamespace(data=e))
+                self.assertEqual(len(replies), 1, "The actual private question must produce one reply")
+                self.assertIn("处理", replies[0])
+                self.assertIn("升级", replies[0])
+                self.assertIn("P1默认截止2天", replies[0])
+                self.assertIn("未配置逾期升级通知节点", replies[0])
+                self.assertNotIn("我只处理", replies[0])
+                self.assertIn("反馈", replies[0])
+                self.assertEqual(self.queries, 1)
+                self.assertTrue(q.empty(), "Duplicate callback must not produce another reply")
+            finally:
+                task.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await task
 
     async def test_unrelated_message_never_calls_model_query_or_sender(self):
         model = FakeModel()

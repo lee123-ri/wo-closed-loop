@@ -12,6 +12,8 @@ import time
 from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "backend"))
+from pmomini_bridge import __version__
 RUNTIME = Path.home() / "Library/Application Support/xh-wo-closed-loop/pmomini"
 LOGS = Path.home() / "Library/Logs/xh-wo-closed-loop"
 LABEL = "com.xh.wo-closed-loop.pmomini"
@@ -22,7 +24,7 @@ def status():
     try:
         with urlopen("http://127.0.0.1:8768/health", timeout=2) as response:
             value = json.load(response)
-        return value if value.get("version") == "0.1.0" and value.get("policy") == "workorders-and-platform-only" else None
+        return value if value.get("version") == __version__ and value.get("policy") == "workorders-and-platform-only" else None
     except Exception:
         return None
 

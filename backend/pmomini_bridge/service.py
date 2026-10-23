@@ -20,6 +20,7 @@ from dotenv import dotenv_values
 import dingtalk_stream
 from dingtalk_stream import AckMessage, ChatbotMessage
 from app.core.config import get_settings
+from . import __version__
 from .core import Ledger, RestrictedCodex, FEEDBACK, KNOWLEDGE, SOURCE_PATHS, SOURCE_TITLES, candidate, context_key, eligible
 
 RUNTIME = Path.home() / "Library/Application Support/xh-wo-closed-loop/pmomini"
@@ -207,7 +208,7 @@ async def run(runtime=RUNTIME):
               "codex_verified": False, "group_chat_enabled": True, "private_chat_enabled": True,
               "startup_notification_sent": False, "real_message_received": False,
               "real_delivery_readback_verified": False,
-              "policy": "workorders-and-platform-only", "version": "0.1.0"}
+              "policy": "workorders-and-platform-only", "self_help_enabled": True, "sla_policy_enabled": True, "version": __version__}
     model = RestrictedCodex()
     from .data import query
     pipeline = Pipeline(ledger, model, query, settings.frontend_base_url, policy.get("group_projects", {}))
@@ -222,7 +223,7 @@ async def run(runtime=RUNTIME):
                     "clientId": self.credential.client_id,
                     "clientSecret": self.credential.client_secret,
                     "subscriptions": [{"type": "CALLBACK", "topic": ChatbotMessage.TOPIC}],
-                    "ua": "pmomini-codex/0.1.0", "localIp": self.get_host_ip(),
+                    "ua": f"pmomini-codex/{__version__}", "localIp": self.get_host_ip(),
                 }, timeout=10)
                 response.raise_for_status()
                 data = response.json()

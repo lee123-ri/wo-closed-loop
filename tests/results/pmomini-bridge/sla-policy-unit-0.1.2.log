@@ -1,0 +1,6 @@
+...................Executing <Task finished name='Task-53' coro=<PipelineTests.test_unhandled_filter_never_queries_broader_scope() done, defined at /Users/lee/Documents/work/wo-closed-loop/tests/test_pmomini_bridge.py:206> result=None created at /opt/homebrew/Cellar/python@3.13/3.13.14_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py:101> took 0.111 seconds
+....
+----------------------------------------------------------------------
+Ran 23 tests in 0.153s
+
+OK

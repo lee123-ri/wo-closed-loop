@@ -1,0 +1,71 @@
+FFFEEE
+======================================================================
+ERROR: test_work_mechanisms_and_capabilities_do_not_require_domain_keywords (__main__.GateTests.test_work_mechanisms_and_capabilities_do_not_require_domain_keywords) (question='工单预警升级机制是什么？')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/lee/Documents/work/wo-closed-loop/tests/test_pmomini_bridge.py", line 88, in test_work_mechanisms_and_capabilities_do_not_require_domain_keywords
+    self.assertEqual(fast_plan(question)["intent"], "sla_policy")
+                     ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+TypeError: 'NoneType' object is not subscriptable
+
+======================================================================
+ERROR: test_work_mechanisms_and_capabilities_do_not_require_domain_keywords (__main__.GateTests.test_work_mechanisms_and_capabilities_do_not_require_domain_keywords) (question='工单逾期后怎么升级？')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/lee/Documents/work/wo-closed-loop/tests/test_pmomini_bridge.py", line 88, in test_work_mechanisms_and_capabilities_do_not_require_domain_keywords
+    self.assertEqual(fast_plan(question)["intent"], "sla_policy")
+                     ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+TypeError: 'NoneType' object is not subscriptable
+
+======================================================================
+ERROR: test_work_mechanisms_and_capabilities_do_not_require_domain_keywords (__main__.GateTests.test_work_mechanisms_and_capabilities_do_not_require_domain_keywords) (question='工单到期前几天提醒？')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/lee/Documents/work/wo-closed-loop/tests/test_pmomini_bridge.py", line 88, in test_work_mechanisms_and_capabilities_do_not_require_domain_keywords
+    self.assertEqual(fast_plan(question)["intent"], "sla_policy")
+                     ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+TypeError: 'NoneType' object is not subscriptable
+
+======================================================================
+FAIL: test_actual_private_question_about_handling_and_escalation_gets_reply (__main__.PipelineTests.test_actual_private_question_about_handling_and_escalation_gets_reply)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.13/3.13.14_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/runners.py", line 119, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/opt/homebrew/Cellar/python@3.13/3.13.14_1/Frameworks/Python.framework/Versions/3.13/lib/python3.13/asyncio/base_events.py", line 725, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/Users/lee/Documents/work/wo-closed-loop/tests/test_pmomini_bridge.py", line 158, in test_actual_private_question_about_handling_and_escalation_gets_reply
+    self.assertIn("P1默认截止2天", replies[0])
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'P1默认截止2天' not found in '处理机制：我只处理工单和软工单平台相关提问，也可以解释自己的职责、处理流程和权限边界。相关问题先识别意图，再按提问人及会话权限查询，或依据已核实的平台说明回答；无关或无法确认相关性的问题保持静默。我目前只读，不会通过聊天自动建单、派发、修改或审批。\n\n升级机制：工单催办和升级沿用平台现有规则，相关扫描按工单优先级、截止日和启用的跟催节点判断，不同来源可能有专用任务。聊天本身不会新增提醒、扩大权限或自动派单。具体节点、接收人员和时点应核对当前配置；配置存在或通知记录为sent，都不能单独证明已经送达。\n\n依据：[机器人处理范围](http://localhost:5173/work-orders)、[工单跟催与升级规则](http://localhost:5173/config)\n\n反馈：回复“反馈 055fe7e18ce9 有用”或“反馈 055fe7e18ce9 有误”。'
+
+======================================================================
+FAIL: test_work_mechanisms_and_capabilities_do_not_require_domain_keywords (__main__.GateTests.test_work_mechanisms_and_capabilities_do_not_require_domain_keywords) (question='现在你对问题的处理机制和升级机制是什么？')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/lee/Documents/work/wo-closed-loop/tests/test_pmomini_bridge.py", line 88, in test_work_mechanisms_and_capabilities_do_not_require_domain_keywords
+    self.assertEqual(fast_plan(question)["intent"], "sla_policy")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'help' != 'sla_policy'
+- help
++ sla_policy
+
+
+======================================================================
+FAIL: test_work_mechanisms_and_capabilities_do_not_require_domain_keywords (__main__.GateTests.test_work_mechanisms_and_capabilities_do_not_require_domain_keywords) (question='你是如何升级问题的？')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/lee/Documents/work/wo-closed-loop/tests/test_pmomini_bridge.py", line 88, in test_work_mechanisms_and_capabilities_do_not_require_domain_keywords
+    self.assertEqual(fast_plan(question)["intent"], "sla_policy")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'help' != 'sla_policy'
+- help
++ sla_policy
+
+
+----------------------------------------------------------------------
+Ran 2 tests in 0.008s
+
+FAILED (failures=3, errors=3)

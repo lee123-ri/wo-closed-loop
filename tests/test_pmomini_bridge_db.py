@@ -29,7 +29,7 @@ os.environ["DATABASE_URL"] = source.set(database=test_name).render_as_string(hid
 get_settings.cache_clear()
 
 from app.core.database import Base, engine, SessionLocal
-from app.models import ConfigDefinition, Project, User, WorkOrder
+from app.models import ConfigDefinition, Project, User, WorkOrder, SLADefinition
 from pmomini_bridge.data import query_session, QueryBlocked, query
 from test_pmomini_bridge import event, plan
 from sqlalchemy.exc import DBAPIError
@@ -94,6 +94,51 @@ class DatabaseIntegration(unittest.TestCase):
     def test_duplicate_staff_mapping_blocks(self):
         self.db.add(User(name="重名映射",dingtalk_id="test-user",role="executor",is_active=True));self.db.flush()
         with self.assertRaises(QueryBlocked): query_session(self.db,plan(),event(),{})
+
+    def test_sla_policy_reads_config_and_distinguishes_notifications(self):
+        self.db.add(SLADefinition(priority="P2", deadline_days=11, warn_before_hours=99, escalate_hours=99,
+            followup_nodes=[
+                {"code":"before", "enabled":True, "offset_days":-4, "level":0,
+                 "channels":["robot_group"], "recipients":{"group_id":"private-group-id"}},
+                {"code":"after", "enabled":False, "offset_days":2, "level":1}]))
+        self.db.flush()
+        result = query_session(self.db, plan("sla_policy"), event(), {})
+        self.assertIn("默认截止11天", result["answer"])
+        self.assertIn("截止前4天", result["answer"])
+        self.assertIn("未配置逾期或更高等级", result["answer"])
+        self.assertIn("未核验任务执行或实际送达", result["answer"])
+        self.assertNotIn("private-group-id", str(result))
+        row = self.db.query(SLADefinition).filter_by(priority="P2").one()
+        row.followup_nodes = [{"code":"after", "offset_days":5, "level":2,
+                              "channels":["robot_private"], "recipients":{"responsible":True}}]
+        self.db.flush()
+        changed = query_session(self.db, plan("sla_policy"), event(), {})
+        self.assertIn("逾期后5天", changed["answer"])
+        self.assertIn("私聊：责任人", changed["answer"])
+        self.assertNotIn("未配置逾期或更高等级", changed["answer"])
+
+    def test_sla_policy_empty_nodes_never_uses_legacy_defaults(self):
+        self.db.add(SLADefinition(priority="P1", deadline_days=2, warn_before_hours=99,
+                                  escalate_hours=99, followup_nodes=[]))
+        self.db.flush()
+        answer = query_session(self.db, plan("sla_policy"), event(), {})["answer"]
+        self.assertIn("未配置启用的跟催节点", answer)
+        self.assertNotIn("99", answer)
+        with self.assertRaises(QueryBlocked):
+            query_session(self.db, plan("sla_policy"), event(conversationType="2"), {})
+        with self.assertRaises(QueryBlocked):
+            query_session(self.db, plan("sla_policy"), event(senderStaffId="unknown"), {})
+        with self.assertRaises(QueryBlocked):
+            query_session(self.db, plan("sla_policy", region="华北"), event(), {})
+
+    def test_sla_invalid_node_does_not_claim_complete_policy(self):
+        self.db.add(SLADefinition(priority="P3", deadline_days=7, warn_before_hours=1,
+            escalate_hours=1, followup_nodes=[{"code":"bad", "offset_days":"later", "level":1}]))
+        self.db.flush()
+        result = query_session(self.db, plan("sla_policy"), event(), {})
+        self.assertFalse(result["policies"][0]["complete"])
+        self.assertIn("本次规则不完整", result["answer"])
+        self.assertNotIn("未配置逾期或更高等级", result["answer"])
 
     def test_postgresql_readonly_transaction_denies_writes(self):
         with engine.connect() as conn:

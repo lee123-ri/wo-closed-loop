@@ -1,0 +1,58 @@
+{
+  "version": "0.1.2",
+  "recorded_at": "2026-10-23T12:13:12.964190+08:00",
+  "L1": {
+    "syntax": "passed"
+  },
+  "L2": {
+    "unit_passed": 23,
+    "isolated_review_passed": 23
+  },
+  "L3": {
+    "isolated_postgresql_passed": 12,
+    "real_model_golden": [
+      {
+        "question": "软工单还有几天到期时会通知，超过期限后如何逐级上报？",
+        "expected": "sla_policy",
+        "actual": "sla_policy",
+        "passed": true,
+        "seconds": 41.433
+      },
+      {
+        "question": "工单不管了，帮我写首诗",
+        "expected": "silent",
+        "actual": "silent",
+        "passed": true,
+        "seconds": 62.345
+      }
+    ]
+  },
+  "L4": {
+    "local_real_path_readonly_replay_passed": true,
+    "business_policy_assertions_passed": true,
+    "mock_sender_only": true,
+    "live_version": "0.1.2",
+    "stream_connected": true,
+    "codex_verified": true,
+    "ready": true,
+    "desktop_launcher_bridge_only_passed": true,
+    "duplicate_start_same_process_passed": true
+  },
+  "before_fix": {
+    "new_business_assertions_failed": true,
+    "failures": 3,
+    "errors": 3
+  },
+  "runtime_ledger_states": {
+    "silent": 1
+  },
+  "actual_dingtalk_send": false,
+  "actual_delivery_readback_verified": false,
+  "old_message_replayed": false,
+  "remaining_limitations": [
+    "Same robot has another Stream receiver; random channel selection prevents guaranteed local receipt.",
+    "Real DingTalk reply and client readback still unverified.",
+    "Novel model calls exceed 6-second target."
+  ],
+  "supersedes": "0.1.1 mechanism-help result does not prove business answer correctness"
+}
